@@ -26,7 +26,9 @@
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
     body { background: var(--stage); color: var(--text); font-family: var(--ui); -webkit-font-smoothing: antialiased; }
     button, input { font: inherit; color: inherit; }
-    .stage { width: 100%; height: 100%; padding: 24px; display: grid; place-items: center; }
+    button:disabled { cursor: not-allowed !important; opacity: .48; }
+    .stage { width: 100%; height: 100%; padding: 24px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; place-items: stretch center; }
+    .stage.note-hidden { grid-template-rows: minmax(0, 1fr); }
     .window {
       width: min(1050px, 100%);
       height: min(720px, 100%);
@@ -83,6 +85,7 @@
     .badge.open { border-color: #aaa3b2; color: var(--accent); }
     .recent-row.missing .folder-mark { color: var(--danger); }
     .recent-row.missing .recent-name { color: #6f5555; }
+    .empty-state { display: grid; place-items: center; min-height: 160px; color: var(--muted); font-size: 12px; text-align: center; }
     .statusbar { display: flex; align-items: center; gap: 13px; padding: 0 10px; border-top: 1px solid var(--line); background: var(--chrome-strong); color: var(--quiet); font-size: 10.5px; }
     .statusbar span:last-child { margin-left: auto; }
     .modal-backdrop { position: fixed; inset: 0; z-index: 20; display: none; place-items: center; background: rgba(35,35,39,.28); padding: 22px; }
@@ -99,6 +102,9 @@
     .button.primary { border-color: var(--accent); background: var(--accent); color: white; }
     .toast { position: fixed; left: 50%; bottom: 34px; z-index: 40; transform: translate(-50%, 10px); padding: 9px 13px; border-radius: 6px; background: #34343a; color: white; font-size: 12px; opacity: 0; transition: .16s ease; pointer-events: none; }
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .prototype-note { z-index: 50; justify-self: end; width: min(620px, 100%); padding: 9px 11px; border: 1px dashed #8e869a; border-radius: 7px; background: #fbfaf6; color: #55515d; box-shadow: 0 5px 14px rgba(35,35,39,.09); font-size: 11px; line-height: 1.45; }
+    .prototype-note strong { display: block; margin-bottom: 4px; color: #3f3948; }
+    .prototype-note button { margin-top: 8px; padding: 3px 8px; border: 1px solid #aaa3b2; border-radius: 4px; background: transparent; color: #514a5c; cursor: pointer; }
     @media (max-width: 760px) {
       .stage { padding: 0; }
       .window { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; }
@@ -113,9 +119,14 @@
 </head>
 <body>
   <div class="stage">
+    <aside class="prototype-note" id="prototypeNote" aria-label="原型说明">
+      <strong>原型说明</strong>
+      HTML 原型不能调用系统窗口控制和文件选择器，因此窗口控制与“已在其他窗口打开”的记录已禁用；打开和重新授权使用固定路径模拟应用内状态。加载完成后会自动进入工作台，不设置推进演示的正式按钮。
+      <button id="hidePrototypeNote" type="button">隐藏说明</button>
+    </aside>
     <section class="window" aria-label="Plainroot 启动窗口">
       <header class="titlebar">
-        <div class="traffic" aria-label="macOS 窗口控制"><button class="close" aria-label="关闭"></button><button class="min" aria-label="最小化"></button><button class="max" aria-label="最大化"></button></div>
+        <div class="traffic" aria-label="macOS 窗口控制"><button class="close" aria-label="关闭（原型不可用）" title="原型中不可调用系统窗口" disabled></button><button class="min" aria-label="最小化（原型不可用）" title="原型中不可调用系统窗口" disabled></button><button class="max" aria-label="最大化（原型不可用）" title="原型中不可调用系统窗口" disabled></button></div>
         <div class="title">Plainroot</div>
         <div class="title-actions">
           <button class="icon-button" id="settings" type="button" aria-label="设置" title="设置">
@@ -149,7 +160,7 @@
             </label>
           </div>
           <div class="recent-list" id="recentList">
-            <button class="recent-row" data-name="Plainroot 项目" data-open="true" type="button">
+            <button class="recent-row" data-name="Plainroot 项目" data-open="true" type="button" title="HTML 原型不能聚焦另一个系统窗口" disabled>
               <span class="folder-mark"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"></path></svg></span>
               <span><span class="recent-name">Plainroot 项目 <span class="badge open">已在窗口中打开</span></span><span class="recent-path">~/Projects/markdown-editor</span></span>
               <span class="recent-time">刚刚</span>
@@ -170,6 +181,7 @@
               <span class="recent-time">6 月 28 日</span>
             </button>
           </div>
+          <div class="empty-state" id="recentEmpty" hidden>没有匹配的最近工作区。<br>清除筛选或打开新的本地目录。</div>
         </section>
       </main>
 
@@ -180,7 +192,7 @@
   <div class="modal-backdrop" id="loadingDialog">
     <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="loadingTitle">
       <div class="dialog-body"><h2 id="loadingTitle">打开工作区</h2><p id="loadingText">正在请求目录访问权限并恢复上次页签。</p><div class="path-preview" id="loadingPath">~/Documents/research-notes</div><div class="progress"><span id="progressBar"></span></div></div>
-      <div class="dialog-footer"><button class="button" id="cancelLoading" type="button">取消</button><button class="button primary" id="continueOpen" type="button">进入工作台</button></div>
+      <div class="dialog-footer"><button class="button" id="cancelLoading" type="button">取消打开</button></div>
     </section>
   </div>
 
@@ -198,32 +210,46 @@
       const $ = selector => document.querySelector(selector);
       const $$ = selector => [...document.querySelectorAll(selector)];
       let timer;
+      let loadingTimer;
       const toast = message => { clearTimeout(timer); $("#toast").textContent = message; $("#toast").classList.add("show"); timer = setTimeout(() => $("#toast").classList.remove("show"), 1900); };
       const openDialog = id => $("#" + id).classList.add("open");
       const closeDialog = id => $("#" + id).classList.remove("open");
 
       const showLoading = (name, path) => {
         $("#loadingTitle").textContent = `打开“${name}”`;
+        $("#loadingText").textContent = "正在请求目录访问权限并恢复上次页签。";
         $("#loadingPath").textContent = path;
         $("#progressBar").style.width = "0";
         openDialog("loadingDialog");
         requestAnimationFrame(() => $("#progressBar").style.width = "72%");
+        clearTimeout(loadingTimer);
+        loadingTimer = setTimeout(() => {
+          $("#progressBar").style.width = "100%";
+          $("#loadingText").textContent = "授权与会话校验完成，正在进入工作台。";
+          loadingTimer = setTimeout(() => window.location.href = "markdown-workbench.html", 280);
+        }, 720);
       };
 
       $("#openFolder").addEventListener("click", () => showLoading("研究笔记", "~/Documents/research-notes"));
       $("#openFile").addEventListener("click", () => showLoading("notes.md", "~/Documents/notes.md"));
-      $("#cancelLoading").addEventListener("click", () => closeDialog("loadingDialog"));
-      $("#continueOpen").addEventListener("click", () => { $("#progressBar").style.width = "100%"; setTimeout(() => window.location.href = "markdown-workbench.html", 250); });
+      $("#cancelLoading").addEventListener("click", () => { clearTimeout(loadingTimer); closeDialog("loadingDialog"); });
       $("#settings").addEventListener("click", () => window.location.href = "theme-preset-studio.html");
 
       $$(".recent-row").forEach(row => row.addEventListener("click", () => {
         if (row.dataset.missing) return openDialog("missingDialog");
-        if (row.dataset.open) return toast("“Plainroot 项目”已打开，正在聚焦原窗口");
         showLoading(row.dataset.name, row.querySelector(".recent-path").textContent);
       }));
 
       $("#closeMissing").addEventListener("click", () => closeDialog("missingDialog"));
-      $("#reauthorize").addEventListener("click", () => { closeDialog("missingDialog"); toast("桌面版将打开系统目录选择器"); });
+      $("#reauthorize").addEventListener("click", () => {
+        const row = $(".recent-row.missing");
+        row.classList.remove("missing");
+        delete row.dataset.missing;
+        row.querySelector(".recent-path").textContent = "~/Documents/archive/blog";
+        row.querySelector(".badge").textContent = "已重新授权";
+        closeDialog("missingDialog");
+        toast("“旧博客”已重新授权，可正常打开");
+      });
       $("#removeRecent").addEventListener("click", () => {
         const row = $(".recent-row.missing");
         if (row) row.remove();
@@ -235,9 +261,17 @@
       $("#search").addEventListener("input", event => {
         const query = event.target.value.trim().toLowerCase();
         $$(".recent-row").forEach(row => row.hidden = !row.textContent.toLowerCase().includes(query));
+        const visible = $$(".recent-row").filter(row => !row.hidden).length;
+        $("#recentEmpty").hidden = visible > 0;
+        $("#recentList").hidden = visible === 0;
       });
 
-      $$(".modal-backdrop").forEach(backdrop => backdrop.addEventListener("click", event => { if (event.target === backdrop) backdrop.classList.remove("open"); }));
+      $$(".modal-backdrop").forEach(backdrop => backdrop.addEventListener("click", event => {
+        if (event.target !== backdrop) return;
+        if (backdrop.id === "loadingDialog") clearTimeout(loadingTimer);
+        backdrop.classList.remove("open");
+      }));
+      $("#hidePrototypeNote").addEventListener("click", () => { $(".stage").classList.add("note-hidden"); $("#prototypeNote").remove(); });
     })();
   </script>
 </body>

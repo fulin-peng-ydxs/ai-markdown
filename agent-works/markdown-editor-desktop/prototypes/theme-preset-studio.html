@@ -29,7 +29,9 @@
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
     body { background: var(--stage); color: var(--text); font-family: var(--ui); -webkit-font-smoothing: antialiased; }
     button, input { font: inherit; color: inherit; }
-    .stage { width: 100%; height: 100%; padding: 18px; display: grid; place-items: center; }
+    button:disabled { cursor: not-allowed !important; opacity: .44; }
+    .stage { width: 100%; height: 100%; padding: 18px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; place-items: stretch center; }
+    .stage.note-hidden { grid-template-rows: minmax(0, 1fr); }
     .window {
       width: min(1540px, 100%);
       height: min(970px, 100%);
@@ -60,7 +62,9 @@
     .nav-label { padding: 0 9px 7px; color: var(--quiet); font-size: 10px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
     .nav-item { width: 100%; min-height: 31px; padding: 0 10px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-size: 12px; text-align: left; cursor: pointer; }
     .nav-item:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+    .nav-item:disabled:hover { background: transparent; }
     .nav-item.active { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--heading); font-weight: 600; }
+    .nav-item.active:disabled { opacity: 1; }
 
     .preset-panel { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto 1fr auto; border-right: 1px solid var(--line); background: var(--chrome); }
     .section-head { min-height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 13px; border-bottom: 1px solid var(--line); }
@@ -130,7 +134,7 @@
     .preview-doc .lede { margin: 0 0 20px; color: var(--text); font-size: 11px; line-height: 1.68; }
     .preview-doc h2 { margin: 25px 0 9px; padding-bottom: 6px; border-bottom: 1px solid var(--line); color: var(--heading); font-size: 14px; }
     .preview-doc p { margin: 0 0 10px; color: var(--text); font-size: 9.5px; line-height: 1.75; }
-    .preview-doc a { color: var(--accent); text-decoration: none; }
+    .preview-link { color: var(--accent); }
     .preview-callout { margin: 14px 0; padding: 10px 11px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 4px; background: var(--paper-deep); }
     .preview-callout strong { display: block; margin-bottom: 3px; color: var(--heading); font-size: 9px; }
     .preview-callout p { margin: 0; color: var(--muted); font-size: 8.5px; }
@@ -159,7 +163,12 @@
     .dialog-body { padding: 23px 24px 19px; }
     .dialog h2 { margin: 0 0 8px; color: var(--heading); font-size: 17px; }
     .dialog p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .dialog label { display: grid; gap: 6px; margin-top: 15px; color: var(--heading); font-size: 11px; font-weight: 600; }
+    .dialog select { width: 100%; height: 34px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--paper); color: var(--text); }
     .dialog-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 15px; border-top: 1px solid var(--line); background: var(--chrome); }
+    .prototype-note { z-index: 60; justify-self: end; width: min(660px, 100%); padding: 9px 11px; border: 1px dashed #8e869a; border-radius: 7px; background: #fbfaf6; color: #55515d; box-shadow: 0 5px 14px rgba(35,35,39,.09); font-size: 11px; line-height: 1.45; }
+    .prototype-note strong { display: block; margin-bottom: 4px; color: #3f3948; }
+    .prototype-note button { margin-top: 8px; padding: 3px 8px; border: 1px solid #aaa3b2; border-radius: 4px; background: transparent; color: #514a5c; cursor: pointer; }
     @media (max-width: 1180px) {
       .main { grid-template-columns: 0 205px 365px minmax(340px,1fr); }
       .settings-nav { display: none; }
@@ -176,9 +185,14 @@
 </head>
 <body>
   <div class="stage">
+    <aside class="prototype-note" id="prototypeNote" aria-label="原型说明">
+      <strong>原型说明</strong>
+      HTML 原型不能调用系统窗口控制，也不模拟跨窗口广播或磁盘持久化，因此系统控制和未建模设置分类已禁用；预设库在本页内存中验证“草稿隔离 → 校验 → 保存”闭环。保存成功反馈只描述当前原型库已更新。
+      <button id="hidePrototypeNote" type="button">隐藏说明</button>
+    </aside>
     <section class="window" id="themeWindow" aria-label="Plainroot 颜色主题预设工作室">
       <header class="titlebar">
-        <div class="traffic" aria-label="macOS 窗口控制"><button class="close" id="windowClose" aria-label="关闭"></button><button class="min" aria-label="最小化"></button><button class="max" aria-label="最大化"></button></div>
+        <div class="traffic" aria-label="macOS 窗口控制"><button class="close" aria-label="关闭（原型不可用）" title="原型中不可调用系统窗口" disabled></button><button class="min" aria-label="最小化（原型不可用）" title="原型中不可调用系统窗口" disabled></button><button class="max" aria-label="最大化（原型不可用）" title="原型中不可调用系统窗口" disabled></button></div>
         <div class="window-title">设置 — 外观 — 颜色预设</div>
         <div class="title-actions">
           <button class="icon-button" id="backWorkbench" type="button" aria-label="返回工作台" title="返回工作台">
@@ -190,12 +204,12 @@
       <main class="main">
         <nav class="settings-nav" aria-label="设置分类">
           <div class="nav-label">设置</div>
-          <button class="nav-item" type="button">常规</button>
-          <button class="nav-item" type="button">编辑器</button>
-          <button class="nav-item active" type="button">外观</button>
-          <button class="nav-item" type="button">文件与链接</button>
-          <button class="nav-item" type="button">快捷键</button>
-          <button class="nav-item" type="button">高级</button>
+          <button class="nav-item" type="button" title="本原型未建模" disabled>常规</button>
+          <button class="nav-item" type="button" title="本原型未建模" disabled>编辑器</button>
+          <button class="nav-item active" type="button" aria-current="page" disabled>外观</button>
+          <button class="nav-item" type="button" title="本原型未建模" disabled>文件与链接</button>
+          <button class="nav-item" type="button" title="本原型未建模" disabled>快捷键</button>
+          <button class="nav-item" type="button" title="本原型未建模" disabled>高级</button>
         </nav>
 
         <section class="preset-panel" aria-label="颜色预设库">
@@ -218,8 +232,8 @@
             <p class="helper" id="presetHelper">复制内置预设后即可编辑。字体和正文宽度在“编辑器”中单独设置。</p>
           </header>
           <div class="palette-tabs" role="tablist" aria-label="明暗调色板">
-            <button class="active" data-palette="light" type="button">明亮</button>
-            <button data-palette="dark" type="button">暗色</button>
+            <button class="active" data-palette="light" type="button" aria-selected="true">明亮</button>
+            <button data-palette="dark" type="button" aria-selected="false">暗色</button>
             <span>跟随系统会自动使用对应调色板</span>
           </div>
           <div class="token-list" id="tokenList"></div>
@@ -239,7 +253,7 @@
                   <h1>安静，但不虚弱</h1>
                   <p class="lede">正文保持稳定墨色，界面退后一步。颜色只帮助识别选中、链接、焦点和真实状态。</p>
                   <h2>长期阅读</h2>
-                  <p>Plainroot 不使用纯白纸面，也不会为了柔和而把正文整体做淡。用户仍能清楚地辨认标题、正文和<a href="#">当前链接</a>。</p>
+                  <p>Plainroot 不使用纯白纸面，也不会为了柔和而把正文整体做淡。用户仍能清楚地辨认标题、正文和<span class="preview-link">当前链接</span>。</p>
                   <div class="preview-callout"><strong>实时预览不会修改文档</strong><p>颜色草稿只作用于这个设置窗口；保存后才更新预设库。</p></div>
                   <h2>状态语义</h2>
                   <p>成功、警告和危险只在相应状态中出现，并同时使用文字说明。</p>
@@ -264,7 +278,7 @@
 
   <div class="modal-backdrop" id="deleteDialog">
     <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
-      <div class="dialog-body"><h2 id="deleteTitle">删除这个颜色预设？</h2><p>使用该预设的工作区将回退到 Plainroot Neutral。此操作不会修改任何 Markdown 文件。</p></div>
+      <div class="dialog-body"><h2 id="deleteTitle">删除这个颜色预设？</h2><p>先选择使用该预设的工作区要回退到哪套已保存预设。此操作不会修改任何 Markdown 文件。</p><label>回退预设<select id="fallbackPreset" aria-label="选择删除后的回退预设"></select></label></div>
       <div class="dialog-footer"><button class="button" data-close="deleteDialog" type="button">取消</button><button class="button danger" id="confirmDelete" type="button">删除并回退</button></div>
     </section>
   </div>
@@ -273,6 +287,13 @@
     <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="discardTitle">
       <div class="dialog-body"><h2 id="discardTitle">放弃颜色草稿？</h2><p>当前窗口将恢复进入主题工作室前的颜色，其他窗口始终没有受到草稿影响。</p></div>
       <div class="dialog-footer"><button class="button" data-close="discardDialog" type="button">继续编辑</button><button class="button danger" id="confirmDiscard" type="button">放弃并返回</button></div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="switchDialog">
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="switchTitle">
+      <div class="dialog-body"><h2 id="switchTitle">放弃草稿并切换预设？</h2><p>未保存的名称和颜色会被丢弃，当前窗口将预览所选的已保存预设。</p></div>
+      <div class="dialog-footer"><button class="button" data-close="switchDialog" type="button">继续编辑</button><button class="button danger" id="confirmSwitch" type="button">放弃草稿并切换</button></div>
     </section>
   </div>
 
@@ -304,6 +325,8 @@
         { id: "moss", name: "Quiet Moss", builtIn: false, light: { ...neutralLight, accent: "#5F7466" }, dark: { ...neutralDark, accent: "#879B8D" } }
       ];
       let selectedId = "neutral";
+      let draftId = null;
+      let pendingSelectionId = null;
       let palette = "light";
       let draft = clone(presets[0]);
       let dirty = false;
@@ -312,6 +335,7 @@
       const $ = (selector, root = document) => root.querySelector(selector);
       const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
       const selected = () => presets.find(item => item.id === selectedId);
+      const currentId = () => draftId || selectedId;
       const isHex = value => /^#[0-9a-f]{6}$/i.test(value);
 
       function hexToRgb(hex) {
@@ -345,6 +369,7 @@
         root.innerHTML = "";
         [true, false].forEach(builtIn => {
           const items = presets.filter(item => item.builtIn === builtIn);
+          if (!builtIn && draftId) items.push(draft);
           if (!items.length) return;
           const label = document.createElement("div");
           label.className = "preset-group";
@@ -352,15 +377,15 @@
           root.append(label);
           items.forEach(item => {
             const row = document.createElement("button");
-            row.className = `preset-row${item.id === selectedId ? " active" : ""}`;
+            row.className = `preset-row${item.id === currentId() ? " active" : ""}`;
             row.type = "button";
             row.innerHTML = `<span class="preset-swatch"><i></i><i></i></span><span><span class="preset-name"></span><span class="preset-meta"></span></span><span class="lock"></span>`;
             $(".preset-swatch i:first-child", row).style.background = item.light.paper;
             $(".preset-swatch i:last-child", row).style.background = item.light.accent;
             $(".preset-name", row).textContent = item.name;
-            $(".preset-meta", row).textContent = item.builtIn ? "安全回退预设" : "全局自定义";
+            $(".preset-meta", row).textContent = item.builtIn ? "安全回退预设" : item.id === draftId ? "未保存草稿" : "全局自定义";
             $(".lock", row).textContent = item.builtIn ? "⌁" : "";
-            row.addEventListener("click", () => selectPreset(item.id));
+            row.addEventListener("click", () => { if (item.id !== draftId) selectPreset(item.id); });
             root.append(row);
           });
         });
@@ -392,8 +417,7 @@
             hexInput.addEventListener("input", event => {
               const value = event.target.value.toUpperCase();
               event.target.classList.toggle("invalid", !isHex(value));
-              if (isHex(value)) updateToken(key, value, false);
-              else validate();
+              updateToken(key, value, false);
             });
             root.append(row);
           });
@@ -420,15 +444,21 @@
       }
 
       function validate() {
-        const colors = draft[palette];
-        const textRatio = contrast(colors.text, colors.paper);
-        const headingRatio = contrast(colors.heading, colors.paper);
-        const validHex = Object.values(colors).every(isHex);
-        const valid = validHex && textRatio >= 4.5 && headingRatio >= 3;
+        const measure = colors => {
+          const textRatio = contrast(colors.text, colors.paper);
+          const headingRatio = contrast(colors.heading, colors.paper);
+          const validHex = Object.values(colors).every(isHex);
+          return { textRatio, headingRatio, validHex, valid: validHex && textRatio >= 4.5 && headingRatio >= 3 };
+        };
+        const results = { light: measure(draft.light), dark: measure(draft.dark) };
+        const current = results[palette];
+        const otherPalette = palette === "light" ? "dark" : "light";
+        const otherLabel = otherPalette === "light" ? "明亮" : "暗色";
+        const valid = results.light.valid && results.dark.valid;
         const box = $("#validation");
         box.classList.toggle("error", !valid);
-        $("#validationTitle").textContent = valid ? "对比度通过" : !validHex ? "存在无效颜色值" : "对比度不足，暂不能保存";
-        $("#validationText").textContent = `正文 ${textRatio.toFixed(1)}:1 · 标题 ${headingRatio.toFixed(1)}:1${valid ? "" : " · 正文需 ≥ 4.5:1，标题需 ≥ 3:1"}`;
+        $("#validationTitle").textContent = valid ? "明亮与暗色对比度均通过" : !results.light.validHex || !results.dark.validHex ? "存在无效颜色值" : "对比度不足，暂不能保存";
+        $("#validationText").textContent = `当前：正文 ${current.textRatio.toFixed(1)}:1 · 标题 ${current.headingRatio.toFixed(1)}:1${results[otherPalette].valid ? "" : ` · ${otherLabel}调色板也需修复`} · 正文需 ≥ 4.5:1，标题需 ≥ 3:1`;
         $("#savePreset").disabled = draft.builtIn || !dirty || !valid;
         return valid;
       }
@@ -438,17 +468,27 @@
         $("#presetName").disabled = draft.builtIn;
         $("#readonlyBadge").hidden = !draft.builtIn;
         $("#presetHelper").textContent = draft.builtIn ? "复制内置预设后即可编辑。字体和正文宽度在“编辑器”中单独设置。" : "修改会实时预览当前窗口；保存后才同步使用该预设的其他窗口。";
-        $("#deletePreset").disabled = draft.builtIn;
+        $("#deletePreset").disabled = draft.builtIn || Boolean(draftId);
       }
 
       function updateFooter() {
         $("#footerStatus").textContent = `${draft.name} · ${dirty ? "有未保存的颜色草稿" : "无未保存修改"}`;
+        $("#resetDraft").disabled = !dirty;
       }
 
       function selectPreset(id) {
-        if (id === selectedId) return;
-        if (dirty && !confirm("切换预设会放弃当前颜色草稿。继续吗？")) return;
+        if (id === currentId()) return;
+        if (dirty) {
+          pendingSelectionId = id;
+          $("#switchDialog").classList.add("open");
+          return;
+        }
+        loadPreset(id);
+      }
+
+      function loadPreset(id) {
         selectedId = id;
+        draftId = null;
         draft = clone(selected());
         dirty = false;
         renderAll();
@@ -468,8 +508,7 @@
         copy.id = `preset-${Date.now()}`;
         copy.name = `${draft.name} Copy`;
         copy.builtIn = false;
-        presets.push(copy);
-        selectedId = copy.id;
+        draftId = copy.id;
         draft = clone(copy);
         dirty = true;
         renderAll();
@@ -486,48 +525,71 @@
       });
       $("#duplicatePreset").addEventListener("click", duplicateCurrent);
       $("#newPreset").addEventListener("click", () => {
-        selectedId = `preset-${Date.now()}`;
-        draft = { id: selectedId, name: "Untitled preset", builtIn: false, light: clone(neutralLight), dark: clone(neutralDark) };
-        presets.push(clone(draft));
+        if (dirty) {
+          showToast("请先保存或放弃当前草稿");
+          return;
+        }
+        draftId = `preset-${Date.now()}`;
+        draft = { id: draftId, name: "Untitled preset", builtIn: false, light: clone(neutralLight), dark: clone(neutralDark) };
         dirty = true;
         renderAll();
         $("#presetName").focus();
         $("#presetName").select();
       });
-      $("#deletePreset").addEventListener("click", () => { if (!draft.builtIn) $("#deleteDialog").classList.add("open"); });
+      $("#deletePreset").addEventListener("click", () => {
+        if (draft.builtIn || draftId) return;
+        const fallback = $("#fallbackPreset");
+        fallback.innerHTML = "";
+        presets.filter(item => item.id !== selectedId).forEach(item => {
+          const option = document.createElement("option");
+          option.value = item.id;
+          option.textContent = item.name;
+          fallback.append(option);
+        });
+        fallback.value = "neutral";
+        $("#deleteDialog").classList.add("open");
+      });
       $("#confirmDelete").addEventListener("click", () => {
+        const fallbackId = $("#fallbackPreset").value;
+        const fallbackName = presets.find(item => item.id === fallbackId)?.name || "Plainroot Neutral";
         presets = presets.filter(item => item.id !== selectedId);
-        selectedId = "neutral";
-        draft = clone(selected());
-        dirty = false;
         $("#deleteDialog").classList.remove("open");
-        renderAll();
-        showToast("已删除预设并回退 Plainroot Neutral");
+        loadPreset(fallbackId || "neutral");
+        showToast(`已删除预设并回退 ${fallbackName}`);
+      });
+
+      $("#confirmSwitch").addEventListener("click", () => {
+        $("#switchDialog").classList.remove("open");
+        const target = pendingSelectionId;
+        pendingSelectionId = null;
+        loadPreset(target);
       });
 
       $$(".palette-tabs button").forEach(button => button.addEventListener("click", () => {
         palette = button.dataset.palette;
-        $$(".palette-tabs button").forEach(item => item.classList.toggle("active", item === button));
+        $$(".palette-tabs button").forEach(item => {
+          item.classList.toggle("active", item === button);
+          item.setAttribute("aria-selected", String(item === button));
+        });
         renderTokens();
         applyTheme();
         validate();
       }));
 
       $("#resetDraft").addEventListener("click", () => {
-        draft = clone(selected());
-        dirty = false;
-        renderAll();
+        loadPreset(selectedId);
         showToast("已恢复到上次保存的颜色");
       });
       $("#cancelChanges").addEventListener("click", () => {
         if (!dirty) return window.location.href = "markdown-workbench.html";
         $("#discardDialog").classList.add("open");
       });
-      $("#windowClose").addEventListener("click", () => {
-        if (dirty) $("#discardDialog").classList.add("open");
-        else showToast("桌面版将关闭设置窗口");
+      $("#confirmDiscard").addEventListener("click", () => {
+        draftId = null;
+        draft = clone(selected());
+        dirty = false;
+        window.location.href = "markdown-workbench.html";
       });
-      $("#confirmDiscard").addEventListener("click", () => window.location.href = "markdown-workbench.html");
       $("#backWorkbench").addEventListener("click", () => {
         if (dirty) $("#discardDialog").classList.add("open");
         else window.location.href = "markdown-workbench.html";
@@ -537,17 +599,31 @@
         if (!validate()) return;
         const normalized = draft.name.trim();
         if (!normalized) return showToast("预设名称不能为空");
-        if (presets.some(item => item.id !== selectedId && item.name.toLowerCase() === normalized.toLowerCase())) return showToast("预设名称已存在");
+        const editingId = draftId ? null : selectedId;
+        if (presets.some(item => item.id !== editingId && item.name.toLowerCase() === normalized.toLowerCase())) return showToast("预设名称已存在");
         draft.name = normalized;
-        const index = presets.findIndex(item => item.id === selectedId);
-        presets[index] = clone(draft);
+        if (draftId) {
+          presets.push(clone(draft));
+          selectedId = draft.id;
+          draftId = null;
+        } else {
+          const index = presets.findIndex(item => item.id === selectedId);
+          presets[index] = clone(draft);
+        }
         dirty = false;
         renderAll();
-        showToast("预设已保存，并同步到使用它的窗口");
+        showToast("预设已保存到当前原型库");
       });
 
       $$('[data-close]').forEach(button => button.addEventListener("click", () => $("#" + button.dataset.close).classList.remove("open")));
       $$(".modal-backdrop").forEach(backdrop => backdrop.addEventListener("click", event => { if (event.target === backdrop) backdrop.classList.remove("open"); }));
+      document.addEventListener("keydown", event => {
+        if (event.key !== "Escape" || $(".modal-backdrop.open")) return;
+        event.preventDefault();
+        if (dirty) $("#discardDialog").classList.add("open");
+        else window.location.href = "markdown-workbench.html";
+      });
+      $("#hidePrototypeNote").addEventListener("click", () => { $(".stage").classList.add("note-hidden"); $("#prototypeNote").remove(); });
 
       renderAll();
     })();
