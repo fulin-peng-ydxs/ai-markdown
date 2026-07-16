@@ -85,7 +85,10 @@
     .badge.open { border-color: #aaa3b2; color: var(--accent); }
     .recent-row.missing .folder-mark { color: var(--danger); }
     .recent-row.missing .recent-name { color: #6f5555; }
-    .empty-state { display: grid; place-items: center; min-height: 160px; color: var(--muted); font-size: 12px; text-align: center; }
+    .empty-state { min-height: 160px; display: grid; place-content: center; justify-items: center; gap: 10px; color: var(--muted); font-size: 12px; text-align: center; }
+    .empty-state p { margin: 0; line-height: 1.55; }
+    .empty-action { min-height: 30px; padding: 0 11px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--paper); color: var(--accent); font-size: 11.5px; cursor: pointer; }
+    .empty-action:hover { background: #e9e9ea; }
     .statusbar { display: flex; align-items: center; gap: 13px; padding: 0 10px; border-top: 1px solid var(--line); background: var(--chrome-strong); color: var(--quiet); font-size: 10.5px; }
     .statusbar span:last-child { margin-left: auto; }
     .modal-backdrop { position: fixed; inset: 0; z-index: 20; display: none; place-items: center; background: rgba(35,35,39,.28); padding: 22px; }
@@ -192,7 +195,7 @@
               <span class="recent-time">6 月 28 日</span>
             </button>
           </div>
-          <div class="empty-state" id="recentEmpty" hidden>没有匹配的最近工作区。<br>清除筛选或打开新的本地目录。</div>
+          <div class="empty-state" id="recentEmpty" hidden><p>没有匹配的最近工作区。<br>可以清除筛选或打开新的本地目录。</p><button class="empty-action" id="clearRecentFilter" type="button">清除筛选</button></div>
         </section>
       </main>
 
@@ -314,8 +317,8 @@
         }
       });
 
-      $("#search").addEventListener("input", event => {
-        const query = event.target.value.trim().toLowerCase();
+      const applyRecentFilter = rawQuery => {
+        const query = rawQuery.trim().toLowerCase();
         $$(".recent-row").forEach(row => {
           const searchable = `${row.dataset.name} ${row.querySelector(".recent-path").textContent}`.toLowerCase();
           row.hidden = !searchable.includes(query);
@@ -323,6 +326,12 @@
         const visible = $$(".recent-row").filter(row => !row.hidden).length;
         $("#recentEmpty").hidden = visible > 0;
         $("#recentList").hidden = visible === 0;
+      };
+      $("#search").addEventListener("input", event => applyRecentFilter(event.target.value));
+      $("#clearRecentFilter").addEventListener("click", () => {
+        $("#search").value = "";
+        applyRecentFilter("");
+        $("#search").focus();
       });
 
       $("#reauthorizeRestore").addEventListener("click", () => {

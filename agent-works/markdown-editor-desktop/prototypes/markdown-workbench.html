@@ -208,6 +208,7 @@
       display: grid;
       grid-template-columns: var(--left) 5px minmax(420px, 1fr) 5px var(--right);
       overflow: hidden;
+      position: relative;
     }
 
     .panel { min-width: 0; min-height: 0; overflow: hidden; background: var(--chrome); }
@@ -246,8 +247,14 @@
     .outline-list::before { content: ""; position: absolute; left: 12px; top: 14px; bottom: 20px; width: 1px; background: var(--line); }
     .outline-row { min-height: 27px; padding: 0 7px 0 12px; position: relative; }
     .outline-row.level-2 { padding-left: 25px; color: var(--muted); }
+    .outline-row.level-3 { padding-left: 38px; color: var(--muted); }
+    .outline-row.level-4 { padding-left: 51px; color: var(--muted); }
     .outline-row.active { color: var(--heading); font-weight: 600; }
     .outline-row.active::before { content: ""; position: absolute; left: -6px; top: 5px; bottom: 5px; width: 2px; border-radius: 1px; background: var(--accent); }
+    .outline-empty { min-height: 150px; display: grid; place-content: center; justify-items: center; gap: 9px; padding: 16px; text-align: center; }
+    .outline-empty p { margin: 0; color: var(--quiet); font-size: 11px; line-height: 1.5; }
+    .outline-action { min-height: 29px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--paper); color: var(--accent); font-size: 11px; cursor: pointer; }
+    .outline-action:hover { background: var(--paper-deep); }
 
     .resizer { width: 5px; cursor: col-resize; background: var(--chrome); position: relative; z-index: 3; }
     .resizer::after { content: ""; position: absolute; inset: 0 2px; background: transparent; }
@@ -402,6 +409,7 @@
     @media (max-width: 1050px) {
       :root { --right: 0px; }
       .outline-panel, #rightResizer, .toolbar-right { display: none; }
+      .app-window.outline-drawer-open .outline-panel { width: min(320px, calc(100% - 60px)); display: block; position: absolute; z-index: 12; top: 0; right: 0; bottom: 0; border-left: 1px solid var(--line-strong); box-shadow: -14px 0 30px rgba(35,35,39,.16); }
       .workspace { grid-template-columns: var(--left) 5px minmax(420px,1fr); }
       .document-toolbar { grid-template-columns: var(--left) minmax(0,1fr); }
       .app-menu .menu-button:nth-last-child(-n+2) { display: none; }
@@ -426,7 +434,7 @@
   <div class="prototype-stage">
     <aside class="prototype-note" id="prototypeNote" aria-label="原型说明">
       <strong>原型说明</strong>
-      <span class="note-copy">HTML 原型不能调用操作系统窗口控制；“打开文件…”系统选择器、“编辑 / 显示 / 窗口 / 帮助”完整菜单与命令面板尚未建模，因此保持禁用。目录入口使用固定路径演示应用内“当前 / 新窗口”决策；源码与排版的完整无损转换留给正式编辑器实现，本原型分别保留两种模式的页签草稿。其余可见正式控件均应产生可观察的界面状态变化。</span>
+      <span class="note-copy">HTML 原型不能调用操作系统窗口控制；“打开文件…”系统选择器、“编辑 / 显示 / 窗口 / 帮助”完整菜单与命令面板尚未建模，因此保持禁用。目录入口使用固定路径演示应用内“当前 / 新窗口”决策；源码与排版的完整无损转换留给正式编辑器实现，本原型分别保留两种模式的页签草稿。页签拖动排序、“关闭其他 / 关闭右侧”菜单及源码模式按语法位置跟随大纲尚未建模，以 R13、R30 和 7.1.6 为开发事实源。其余可见正式控件均应产生可观察的界面状态变化。</span>
       <button id="hidePrototypeNote" type="button">隐藏说明</button>
     </aside>
     <section class="app-window" id="appWindow" aria-label="Plainroot 桌面窗口原型">
@@ -746,6 +754,71 @@
         if (mode !== "reading") tab.scrollTop = $("#canvas").scrollTop;
       };
 
+      const getOutlineHeadings = () => [...documentEl.querySelectorAll("h1, h2, h3, h4, h5, h6")];
+
+      const setActiveOutline = anchor => {
+        $$("#outlinePanel .outline-row").forEach(row => row.classList.toggle("active", row.dataset.anchor === anchor));
+      };
+
+      const updateOutlineFromViewport = () => {
+        const headings = getOutlineHeadings();
+        if (!headings.length || mode === "source") return;
+        let current = headings[0];
+        if (mode === "reading") {
+          headings.forEach(heading => {
+            if (Number(heading.dataset.readPage || 0) <= readingPage) current = heading;
+          });
+        } else {
+          const threshold = $("#canvas").scrollTop + Math.min(120, $("#canvas").clientHeight * .22);
+          headings.forEach(heading => { if (heading.offsetTop <= threshold) current = heading; });
+        }
+        setActiveOutline(current.id);
+      };
+
+      const updateOutlineFromSelection = () => {
+        if (mode !== "visual") return;
+        const selection = window.getSelection();
+        const node = selection?.anchorNode;
+        const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+        if (!element || !documentEl.contains(element)) return;
+        let current = null;
+        for (const heading of getOutlineHeadings()) {
+          if (heading === element || heading.contains(element) || (heading.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING)) current = heading;
+          else break;
+        }
+        if (current) setActiveOutline(current.id);
+      };
+
+      const insertFirstHeading = () => {
+        const tab = activeTab();
+        if (!tab) return;
+        if (mode === "source") {
+          sourceEditor.value = `# 新标题\n\n${sourceEditor.value}`;
+          if (docs[tab.name]) docs[tab.name].source = sourceEditor.value;
+          markDirty();
+          updateDocumentMetrics();
+          sourceEditor.focus();
+          sourceEditor.setSelectionRange(2, 5);
+          return;
+        }
+        if (mode === "reading") setMode("visual");
+        const heading = document.createElement("h1");
+        heading.id = `section-title-${Date.now()}`;
+        heading.textContent = "新标题";
+        documentEl.insertBefore(heading, documentEl.firstChild);
+        if (docs[tab.name]) docs[tab.name].html = documentEl.innerHTML;
+        markDirty();
+        paginateDocument();
+        renderOutline();
+        updateDocumentMetrics();
+        const range = document.createRange();
+        range.selectNodeContents(heading);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        documentEl.focus();
+      };
+
       const updateReadingPage = next => {
         readingPage = Math.max(0, Math.min(readingPages - 1, next));
         [...documentEl.children].forEach(child => child.classList.toggle("read-visible", Number(child.dataset.readPage) === readingPage));
@@ -755,6 +828,7 @@
         $("#nextPage").disabled = readingPage === readingPages - 1;
         const tab = activeTab();
         if (tab) tab.readingPage = readingPage;
+        updateOutlineFromViewport();
       };
 
       const paginateDocument = () => {
@@ -793,24 +867,32 @@
       const renderOutline = () => {
         const root = $("#outlinePanel .outline-list");
         root.innerHTML = "";
-        const headings = [...documentEl.querySelectorAll("h2, h3")];
+        const headings = getOutlineHeadings();
         if (!headings.length) {
-          root.innerHTML = `<p class="tree-label">添加标题后将在这里生成大纲</p>`;
+          const empty = document.createElement("div");
+          empty.className = "outline-empty";
+          empty.innerHTML = `<p>添加标题后将在这里生成大纲</p><button class="outline-action" type="button">插入一级标题</button>`;
+          $(".outline-action", empty).addEventListener("click", insertFirstHeading);
+          root.append(empty);
           return;
         }
+        const baseLevel = Math.min(...headings.map(heading => Number(heading.tagName.slice(1))));
         headings.forEach((heading, index) => {
           if (!heading.id) heading.id = `section-${index + 1}`;
+          const depth = Number(heading.tagName.slice(1)) - baseLevel;
           const row = document.createElement("button");
           row.type = "button";
-          row.className = `outline-row${heading.tagName === "H3" ? " level-2" : ""}${index === 0 ? " active" : ""}`;
+          row.className = `outline-row${depth > 0 ? ` level-${Math.min(depth + 1, 4)}` : ""}`;
+          row.dataset.anchor = heading.id;
           row.textContent = heading.textContent;
           row.addEventListener("click", () => {
             if (mode === "reading") updateReadingPage(Number(heading.dataset.readPage || 0));
             else heading.scrollIntoView({ behavior: "smooth", block: "start" });
-            $$(".outline-row").forEach(item => item.classList.toggle("active", item === row));
+            setActiveOutline(heading.id);
           });
           root.append(row);
         });
+        updateOutlineFromViewport();
       };
 
       const renderTabs = () => {
@@ -997,9 +1079,17 @@
         markDirty();
         updateDocumentMetrics();
       });
+      document.addEventListener("selectionchange", updateOutlineFromSelection);
+      documentEl.addEventListener("click", event => {
+        const heading = event.target.closest("h1, h2, h3, h4, h5, h6");
+        if (heading) requestAnimationFrame(() => setActiveOutline(heading.id));
+      });
+      documentEl.addEventListener("mouseup", () => requestAnimationFrame(updateOutlineFromSelection));
+      documentEl.addEventListener("keyup", () => requestAnimationFrame(updateOutlineFromSelection));
       $("#canvas").addEventListener("scroll", () => {
         const tab = activeTab();
         if (tab && mode !== "reading") tab.scrollTop = $("#canvas").scrollTop;
+        updateOutlineFromViewport();
       }, { passive: true });
       $("#newTabButton").addEventListener("click", newDoc);
       $("#newFileButton").addEventListener("click", newDoc);
@@ -1135,9 +1225,17 @@
         showToast(visible ? "文件目录已显示" : "文件目录已隐藏");
       });
       $("#toggleOutline").addEventListener("click", () => {
-        appWindow.classList.toggle("outline-hidden");
-        const visible = !appWindow.classList.contains("outline-hidden");
-        $("#toggleOutline").setAttribute("aria-pressed", String(!visible));
+        const narrow = window.matchMedia("(max-width: 1050px)").matches;
+        let visible;
+        if (narrow) {
+          appWindow.classList.remove("outline-hidden");
+          visible = appWindow.classList.toggle("outline-drawer-open");
+        } else {
+          appWindow.classList.remove("outline-drawer-open");
+          appWindow.classList.toggle("outline-hidden");
+          visible = !appWindow.classList.contains("outline-hidden");
+        }
+        $("#toggleOutline").setAttribute("aria-pressed", String(visible));
         showToast(visible ? "文档大纲已显示" : "文档大纲已隐藏");
       });
 
@@ -1220,7 +1318,10 @@
 
       bindResizer($("#leftResizer"), "left");
       bindResizer($("#rightResizer"), "right");
-      window.addEventListener("resize", schedulePagination);
+      window.addEventListener("resize", () => {
+        schedulePagination();
+        if (!window.matchMedia("(max-width: 1050px)").matches) appWindow.classList.remove("outline-drawer-open");
+      });
       renderTabs();
       renderDocument();
     })();
