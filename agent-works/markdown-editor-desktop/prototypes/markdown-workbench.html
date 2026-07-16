@@ -290,6 +290,8 @@
     .editor-region.reading .document { height: 100%; min-height: 0; padding: 42px 0 78px; overflow: hidden; }
     .editor-region.reading .document > * { display: none; }
     .editor-region.reading .document > .read-visible { display: block; }
+    .editor-region.reading.is-paginating .document > * { display: block; visibility: hidden; }
+    .editor-region.reading .document > .read-visible.read-oversize { max-height: calc(100% - 12px); overflow: auto; overscroll-behavior: contain; }
     .page-nav { position: absolute; right: 18px; bottom: 15px; z-index: 6; display: none; align-items: center; gap: 7px; padding: 4px; border: 1px solid var(--line); border-radius: 6px; background: color-mix(in srgb, var(--paper) 92%, transparent); box-shadow: 0 4px 12px rgba(40,40,44,.09); }
     .editor-region.reading .page-nav { display: flex; }
     .page-nav button { width: 27px; height: 25px; border: 0; border-radius: 4px; background: transparent; cursor: pointer; }
@@ -369,6 +371,9 @@
     .prototype-note { z-index: 100; justify-self: end; width: min(620px, 100%); padding: 9px 11px; border: 1px dashed #8e869a; border-radius: 7px; background: #fbfaf6; color: #55515d; box-shadow: 0 5px 14px rgba(35,35,39,.09); font-size: 11px; line-height: 1.45; }
     .prototype-note strong { display: block; margin-bottom: 4px; color: #3f3948; }
     .prototype-note button { margin-top: 8px; padding: 3px 8px; border: 1px solid #aaa3b2; border-radius: 4px; background: transparent; color: #514a5c; cursor: pointer; }
+    .prototype-note.collapsed { width: auto; padding: 7px 9px; }
+    .prototype-note.collapsed strong, .prototype-note.collapsed .note-copy { display: none; }
+    .prototype-note.collapsed button { margin-top: 0; }
 
     .search-field { width: 100%; height: 34px; margin-top: 14px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 5px; outline: none; background: var(--paper); color: var(--text); }
     .search-field:focus { border-color: var(--accent); box-shadow: var(--focus); }
@@ -421,7 +426,7 @@
   <div class="prototype-stage">
     <aside class="prototype-note" id="prototypeNote" aria-label="原型说明">
       <strong>原型说明</strong>
-      HTML 原型不能调用操作系统窗口控制；“打开文件…”系统选择器、“编辑 / 显示 / 窗口 / 帮助”完整菜单与命令面板尚未建模，因此保持禁用。目录入口使用固定路径演示应用内“当前 / 新窗口”决策；源码与排版的完整无损转换留给正式编辑器实现，本原型分别保留两种模式的页签草稿。其余可见正式控件均应产生可观察的界面状态变化。
+      <span class="note-copy">HTML 原型不能调用操作系统窗口控制；“打开文件…”系统选择器、“编辑 / 显示 / 窗口 / 帮助”完整菜单与命令面板尚未建模，因此保持禁用。目录入口使用固定路径演示应用内“当前 / 新窗口”决策；源码与排版的完整无损转换留给正式编辑器实现，本原型分别保留两种模式的页签草稿。其余可见正式控件均应产生可观察的界面状态变化。</span>
       <button id="hidePrototypeNote" type="button">隐藏说明</button>
     </aside>
     <section class="app-window" id="appWindow" aria-label="Plainroot 桌面窗口原型">
@@ -559,7 +564,7 @@
       <footer class="statusbar">
         <span id="statusMode">排版编辑</span>
         <span>Markdown</span>
-        <span id="statusWords">1,286 字</span>
+        <span id="statusWords">0 字</span>
         <span id="statusPage" hidden>第 1 / 1 页</span>
         <span class="status-spacer"></span>
         <span id="statusPath">产品构想/Markdown 编辑器.md</span>
@@ -619,7 +624,7 @@
     <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="workspaceSaveTitle">
       <div class="dialog-body">
         <h2 id="workspaceSaveTitle">先处理未保存页签</h2>
-        <p>在当前窗口替换目录前，必须保存所有已修改页签。本原型检测到以下阻塞项：</p>
+        <p>在当前窗口替换目录前，必须保存所有已修改页签。当前窗口存在以下未保存页签：</p>
         <div class="target-path" id="workspaceDirtyList">主题与色彩.md · 未保存</div>
       </div>
       <div class="dialog-footer">
@@ -660,36 +665,40 @@
         "README.md": {
           path: "README.md",
           source: "# Plainroot\n\nA calm, local-first Markdown editor.\n\n## Start here\n\nOpen a local folder, then write in real Markdown files. Your documents remain yours.",
-          html: `<p class="kicker">README.md</p><h1>Plainroot</h1><p class="lede">A calm, local-first Markdown editor.</p><h2 id="core">Start here</h2><p>Open a local folder, then write in real Markdown files. Your documents remain yours.</p><blockquote>Write clearly. Keep it yours.</blockquote>`
+          html: `<p class="kicker">README.md</p><h1>Plainroot</h1><p class="lede">A calm, local-first Markdown editor.</p><h2 id="readme-start">Start here</h2><p>Open a local folder, then write in real Markdown files. Your documents remain yours.</p><blockquote>Write clearly. Keep it yours.</blockquote>`
         },
         "Markdown 编辑器.md": {
           path: "产品构想 / Markdown 编辑器.md",
           source: `# Plainroot 桌面编辑器\n\nPlainroot 是一款本地优先的 Markdown 查看与编辑工具。\n\n## 核心目标\n\n一个目录对应一个原生窗口，一个窗口用多个真实文档页签承载并行编辑。\n\n## 真实文档页签\n\n点击目录中的文件会打开页签，再次打开同一路径只聚焦原页签。\n\n### 独立状态\n\n每个页签独立保留模式、光标、滚动位置、撤销栈和保存状态。\n\n## 目录与窗口\n\n打开其他目录时选择当前窗口、新窗口或取消。\n\n### 恢复边界\n\n关闭页签、替换目录和退出前都必须完成保存检查。\n\n## 视觉基线\n\n默认使用 Plainroot Neutral，并允许复制为自定义颜色预设。`,
-          html: `<p class="kicker">产品构想 / Markdown 编辑器.md</p><h1>Plainroot 桌面编辑器</h1><p class="lede">一个安静的、本地优先的 Markdown 工作台。真实文件、真实页签和清楚的窗口边界构成它的基础。</p><div class="callout"><strong>桌面模型已经确认</strong><p>一个目录对应一个原生窗口；一个窗口通过多个页签并行处理文档。</p></div><h2 id="core">核心目标</h2><p>打开本地目录，选择 Markdown 文档，然后直接查看或编辑。正文始终保存到真实的 <code>.md</code> 文件中，应用只负责体验。</p><h2 id="tabs">真实文档页签</h2><p>点击目录文件或搜索结果会打开页签。再次打开同一路径时只聚焦原页签，不会创建两个互相竞争的编辑会话。</p><h3 id="state">独立状态</h3><ul><li>每个页签独立保存排版、源码或阅读模式。</li><li>光标、滚动位置、撤销栈和保存状态不会在切换时丢失。</li><li>保存失败或冲突会阻止静默关闭。</li></ul><h2 id="windows">目录与窗口</h2><p>打开其他目录时可以选择在当前窗口替换，或创建一个新窗口继续并行工作。当前窗口替换前会检查全部页签。</p><h3 id="restore">恢复边界</h3><blockquote>关闭一个窗口只结束该目录的会话；退出 Plainroot 才处理全部窗口。</blockquote><h2 id="visual">视觉基线</h2><p>默认 <code>Plainroot Neutral</code> 使用中性纸面和稳定墨色。用户可以复制它并创建自己的颜色皮肤，实时预览不会写入 Markdown。</p>`
+          html: `<p class="kicker">产品构想 / Markdown 编辑器.md</p><h1>Plainroot 桌面编辑器</h1><p class="lede">一个安静的、本地优先的 Markdown 工作台。真实文件、真实页签和清楚的窗口边界构成它的基础。</p><div class="callout"><strong>桌面模型已经确认</strong><p>一个目录对应一个原生窗口；一个窗口通过多个页签并行处理文档。</p></div><h2 id="editor-core">核心目标</h2><p>打开本地目录，选择 Markdown 文档，然后直接查看或编辑。正文始终保存到真实的 <code>.md</code> 文件中，应用只负责体验。</p><h2 id="editor-tabs">真实文档页签</h2><p>点击目录文件或搜索结果会打开页签。再次打开同一路径时只聚焦原页签，不会创建两个互相竞争的编辑会话。</p><h3 id="editor-state">独立状态</h3><ul><li>每个页签独立保存排版、源码或阅读模式。</li><li>光标、滚动位置、撤销栈和保存状态不会在切换时丢失。</li><li>保存失败或冲突会阻止静默关闭。</li></ul><h2 id="editor-windows">目录与窗口</h2><p>打开其他目录时可以选择在当前窗口替换，或创建一个新窗口继续并行工作。当前窗口替换前会检查全部页签。</p><h3 id="editor-restore">恢复边界</h3><blockquote>关闭一个窗口只结束该目录的会话；退出 Plainroot 才处理全部窗口。</blockquote><h2 id="editor-visual">视觉基线</h2><p>默认 <code>Plainroot Neutral</code> 使用中性纸面和稳定墨色。用户可以复制它并创建自己的颜色皮肤，实时预览不会写入 Markdown。</p>`
         },
         "主题与色彩.md": {
           path: "产品构想 / 主题与色彩.md",
           source: "# 主题与色彩\n\n默认正文保持中性。\n\n## Plainroot Neutral\n\n- Chrome: #ECECED\n- Paper: #F3F3F2\n- Text: #28282C\n- Accent: #70677F",
-          html: `<p class="kicker">产品构想 / 主题与色彩.md</p><h1>主题与色彩</h1><p class="lede">颜色服务于阅读层级与状态，不承担装饰任务。</p><h2 id="core">Plainroot Neutral</h2><p>默认预设只读，始终作为安全回退。正文使用稳定墨色，纸面不使用纯白。</p><pre>--chrome: #ECECED;\n--paper: #F3F3F2;\n--text: #28282C;\n--accent: #70677F;</pre><h2 id="tabs">自定义预设</h2><p>复制默认预设后，可以调整明亮与暗色语义令牌，并在当前窗口实时预览。</p>`
+          html: `<p class="kicker">产品构想 / 主题与色彩.md</p><h1>主题与色彩</h1><p class="lede">颜色服务于阅读层级与状态，不承担装饰任务。</p><h2 id="theme-core">Plainroot Neutral</h2><p>默认预设只读，始终作为安全回退。正文使用稳定墨色，纸面不使用纯白。</p><pre>--chrome: #ECECED;\n--paper: #F3F3F2;\n--text: #28282C;\n--accent: #70677F;</pre><h2 id="theme-custom">自定义预设</h2><p>复制默认预设后，可以调整明亮与暗色语义令牌，并在当前窗口实时预览。</p>`
         },
         "桌面窗口模型.md": {
           path: "技术研究 / 桌面窗口模型.md",
           source: "# 桌面窗口模型\n\n一个目录对应一个窗口。\n\n## 打开目录\n\n当前窗口、新窗口或取消。",
-          html: `<p class="kicker">技术研究 / 桌面窗口模型.md</p><h1>桌面窗口模型</h1><p class="lede">窗口不是网页容器，而是工作区生命周期的边界。</p><h2 id="core">一个目录，一个窗口</h2><p>文件树、搜索、页签、布局和恢复会话都绑定到同一个根目录。</p><h2 id="windows">打开其他目录</h2><p>用户明确选择当前窗口、新窗口或取消；同一目录已打开时聚焦原窗口。</p>`
+          html: `<p class="kicker">技术研究 / 桌面窗口模型.md</p><h1>桌面窗口模型</h1><p class="lede">窗口不是网页容器，而是工作区生命周期的边界。</p><h2 id="window-scope">一个目录，一个窗口</h2><p>文件树、搜索、页签、布局和恢复会话都绑定到同一个根目录。</p><h2 id="window-open">打开其他目录</h2><p>用户明确选择当前窗口、新窗口或取消；同一目录已打开时聚焦原窗口。</p>`
         }
       };
 
       let tabs = [
-        { id: "readme", name: "README.md", dirty: false },
-        { id: "editor", name: "Markdown 编辑器.md", dirty: false },
-        { id: "theme", name: "主题与色彩.md", dirty: true }
+        { id: "readme", name: "README.md", dirty: false, mode: "visual", readingPage: 0, scrollTop: 0 },
+        { id: "editor", name: "Markdown 编辑器.md", dirty: false, mode: "visual", readingPage: 0, scrollTop: 0 },
+        { id: "theme", name: "主题与色彩.md", dirty: true, mode: "visual", readingPage: 0, scrollTop: 0 }
       ];
       let activeId = "editor";
+      let workspaceName = "Plainroot 项目";
+      let workspaceFiles = new Set(Object.keys(docs));
       let mode = "visual";
       let readingPage = 0;
       let readingPages = 1;
       let pendingCloseId = null;
       let toastTimer;
+      let paginationTimer;
+      let lastWheelAt = 0;
 
       const $ = (selector, root = document) => root.querySelector(selector);
       const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -709,6 +718,34 @@
 
       const activeTab = () => tabs.find(tab => tab.id === activeId);
 
+      const updateDocumentMetrics = () => {
+        const text = mode === "source" ? sourceEditor.value : documentEl.textContent;
+        const count = [...text].filter(character => !/\s/.test(character)).length;
+        $("#statusWords").textContent = `${count.toLocaleString("zh-CN")} 字`;
+      };
+
+      const syncTreeDirtyState = () => {
+        $$(".tree-row[data-file]").forEach(row => {
+          const dirty = Boolean(tabs.find(tab => tab.name === row.dataset.file)?.dirty);
+          let dot = $(".tree-dirty", row);
+          if (dirty && !dot) {
+            dot = document.createElement("span");
+            dot.className = "tree-dirty";
+            dot.setAttribute("aria-label", "有未保存修改");
+            row.append(dot);
+          }
+          if (!dirty && dot) dot.remove();
+        });
+      };
+
+      const saveActiveViewState = () => {
+        const tab = activeTab();
+        if (!tab) return;
+        tab.mode = mode;
+        tab.readingPage = readingPage;
+        if (mode !== "reading") tab.scrollTop = $("#canvas").scrollTop;
+      };
+
       const updateReadingPage = next => {
         readingPage = Math.max(0, Math.min(readingPages - 1, next));
         [...documentEl.children].forEach(child => child.classList.toggle("read-visible", Number(child.dataset.readPage) === readingPage));
@@ -716,16 +753,41 @@
         $("#statusPage").textContent = `第 ${readingPage + 1} / ${readingPages} 页`;
         $("#previousPage").disabled = readingPage === 0;
         $("#nextPage").disabled = readingPage === readingPages - 1;
+        const tab = activeTab();
+        if (tab) tab.readingPage = readingPage;
       };
 
       const paginateDocument = () => {
+        const children = [...documentEl.children];
+        if (!children.length) {
+          readingPages = 1;
+          return updateReadingPage(0);
+        }
+        editorRegion.classList.add("is-paginating");
+        children.forEach(child => child.classList.remove("read-visible", "read-oversize"));
+        const documentStyle = getComputedStyle(documentEl);
+        const available = Math.max(220, $("#canvas").clientHeight - parseFloat(documentStyle.paddingTop) - parseFloat(documentStyle.paddingBottom));
         let page = 0;
-        [...documentEl.children].forEach((child, index) => {
-          if (child.matches("h2") && index > 0) page += 1;
+        let used = 0;
+        children.forEach(child => {
+          const style = getComputedStyle(child);
+          const height = child.getBoundingClientRect().height + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+          if (used > 0 && used + height > available) {
+            page += 1;
+            used = 0;
+          }
           child.dataset.readPage = String(page);
+          if (height > available) child.classList.add("read-oversize");
+          used += Math.min(height, available);
         });
+        editorRegion.classList.remove("is-paginating");
         readingPages = Math.max(1, page + 1);
         updateReadingPage(readingPage);
+      };
+
+      const schedulePagination = () => {
+        clearTimeout(paginationTimer);
+        paginationTimer = setTimeout(() => paginateDocument(), 90);
       };
 
       const renderOutline = () => {
@@ -776,26 +838,35 @@
           documentEl.innerHTML = `<h1>没有打开的文档</h1><p>从左侧目录选择文件，或按 ⌘O 打开 Markdown 文档。</p>`;
           sourceEditor.value = "";
           renderOutline();
-          $("#windowTitle").textContent = "Plainroot 项目 — Plainroot";
+          $("#windowTitle").textContent = `${workspaceName} — Plainroot`;
           $("#toolbarPath").textContent = "没有打开的文档";
           $("#statusPath").textContent = "—";
+          mode = "visual";
+          applyMode("visual", false);
+          updateDocumentMetrics();
           updateSaveState();
           return;
         }
         const doc = docs[tab.name];
         documentEl.innerHTML = doc?.html || `<p class="kicker">未保存文档</p><h1>${tab.name}</h1><p>开始输入 Markdown 内容。</p>`;
-        readingPage = 0;
+        sourceEditor.value = doc?.source || `# ${tab.name.replace(/\.md$/, "")}\n\n`;
+        mode = tab.mode || "visual";
+        readingPage = tab.readingPage || 0;
+        applyMode(mode, false);
         paginateDocument();
         renderOutline();
-        sourceEditor.value = doc?.source || `# ${tab.name.replace(/\.md$/, "")}\n\n`;
-        $("#windowTitle").textContent = `Plainroot 项目 — ${tab.name}${tab.dirty ? " •" : ""} — Plainroot`;
+        $("#windowTitle").textContent = `${workspaceName} — ${tab.name}${tab.dirty ? " •" : ""} — Plainroot`;
         $("#toolbarPath").textContent = doc?.path || tab.name;
         $("#statusPath").textContent = (doc?.path || tab.name).replaceAll(" / ", "/");
         $$(".tree-row[data-file]").forEach(row => row.classList.toggle("active", row.dataset.file === tab.name));
+        updateDocumentMetrics();
         updateSaveState();
+        requestAnimationFrame(() => { if (mode !== "reading") $("#canvas").scrollTop = tab.scrollTop || 0; });
       };
 
       const activateTab = id => {
+        if (id === activeId) return;
+        saveActiveViewState();
         activeId = id;
         renderTabs();
         renderDocument();
@@ -815,6 +886,8 @@
         const dirty = Boolean(tab?.dirty);
         save.textContent = dirty ? "未保存" : "已保存";
         save.classList.toggle("dirty", dirty);
+        if (tab) $("#windowTitle").textContent = `${workspaceName} — ${tab.name}${dirty ? " •" : ""} — Plainroot`;
+        syncTreeDirtyState();
       };
 
       const requestClose = id => {
@@ -842,7 +915,7 @@
         const existing = tabs.find(tab => tab.name === name);
         if (existing) return activateTab(existing.id);
         const id = `tab-${Date.now()}`;
-        tabs.push({ id, name, dirty: false });
+        tabs.push({ id, name, dirty: false, mode: "visual", readingPage: 0, scrollTop: 0 });
         activateTab(id);
         showToast(`已打开 ${name}`);
       };
@@ -854,6 +927,7 @@
         let name = "未命名文档.md";
         while (tabs.some(tab => tab.name === name)) name = `未命名文档 ${++number}.md`;
         docs[name] = { path: name, source: `# ${name.replace(/\.md$/, "")}\n\n`, html: `<p class="kicker">未保存文档</p><h1>${name.replace(/\.md$/, "")}</h1><p>开始输入 Markdown 内容。</p>` };
+        workspaceFiles.add(name);
         const row = document.createElement("button");
         row.type = "button";
         row.className = "tree-row";
@@ -864,13 +938,13 @@
         $(".file-tree").append(row);
         bindFileRow(row);
         const id = `new-${Date.now()}`;
-        tabs.push({ id, name, dirty: true });
+        tabs.push({ id, name, dirty: true, mode: "visual", readingPage: 0, scrollTop: 0 });
         activateTab(id);
         documentEl.focus();
         $("#fileMenu").classList.remove("open");
       };
 
-      const setMode = next => {
+      const applyMode = (next, announce = true) => {
         mode = next;
         $$(".mode-switch button").forEach(button => button.classList.toggle("active", button.dataset.mode === mode));
         editorRegion.classList.toggle("source", mode === "source");
@@ -878,12 +952,25 @@
         documentEl.contentEditable = String(mode === "visual");
         $("#statusMode").textContent = mode === "visual" ? "排版编辑" : mode === "source" ? "Markdown 源码" : "分页阅读";
         $("#statusPage").hidden = mode !== "reading";
-        if (mode === "reading") {
-          readingPage = 0;
-          paginateDocument();
-        }
+        if (mode === "reading") paginateDocument();
         if (mode === "source") sourceEditor.focus();
-        showToast($("#statusMode").textContent);
+        updateDocumentMetrics();
+        if (announce) showToast($("#statusMode").textContent);
+      };
+
+      const setMode = next => {
+        if (next === mode) return;
+        const tab = activeTab();
+        const anchor = mode === "reading" ? [...documentEl.children].find(child => Number(child.dataset.readPage) === readingPage) : null;
+        saveActiveViewState();
+        if (tab) tab.mode = next;
+        applyMode(next);
+        if (next === "reading") {
+          readingPage = tab?.readingPage || 0;
+          paginateDocument();
+        } else if (anchor) {
+          requestAnimationFrame(() => { $("#canvas").scrollTop = Math.max(0, anchor.offsetTop - 28); });
+        }
       };
 
       const openModal = id => $("#" + id).classList.add("open");
@@ -900,12 +987,20 @@
         const tab = activeTab();
         if (tab && docs[tab.name]) docs[tab.name].html = documentEl.innerHTML;
         markDirty();
+        renderOutline();
+        paginateDocument();
+        updateDocumentMetrics();
       });
       sourceEditor.addEventListener("input", () => {
         const tab = activeTab();
         if (tab && docs[tab.name]) docs[tab.name].source = sourceEditor.value;
         markDirty();
+        updateDocumentMetrics();
       });
+      $("#canvas").addEventListener("scroll", () => {
+        const tab = activeTab();
+        if (tab && mode !== "reading") tab.scrollTop = $("#canvas").scrollTop;
+      }, { passive: true });
       $("#newTabButton").addEventListener("click", newDoc);
       $("#newFileButton").addEventListener("click", newDoc);
       $("#menuNewFile").addEventListener("click", newDoc);
@@ -928,10 +1023,12 @@
         docs["研究索引.md"] = {
           path: "研究索引.md",
           source: "# 研究索引\n\nresearch-notes 已在当前窗口打开。\n\n## 今日条目\n\n从这里开始记录。",
-          html: `<p class="kicker">research-notes / 研究索引.md</p><h1>研究索引</h1><p class="lede">research-notes 已在当前窗口打开，原工作区页签已通过保存检查。</p><h2 id="core">今日条目</h2><p>从这里开始记录。</p>`
+          html: `<p class="kicker">research-notes / 研究索引.md</p><h1>研究索引</h1><p class="lede">research-notes 已在当前窗口打开，原工作区页签已通过保存检查。</p><h2 id="research-today">今日条目</h2><p>从这里开始记录。</p>`
         };
-        tabs = [{ id: "research-window", name: "研究索引.md", dirty: false }];
+        tabs = [{ id: "research-window", name: "研究索引.md", dirty: false, mode: "visual", readingPage: 0, scrollTop: 0 }];
         activeId = "research-window";
+        workspaceName = "research-notes";
+        workspaceFiles = new Set(["研究索引.md"]);
         $(".workspace-cap span:last-child").textContent = "research-notes";
         const fileTree = $(".file-tree");
         fileTree.innerHTML = `<div class="tree-label">RESEARCH-NOTES</div><button class="tree-row" data-file="研究索引.md" data-path="研究索引.md" type="button"><svg class="tree-icon" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.7" d="M6 3h8l4 4v14H6zM14 3v5h5"></path></svg><span class="tree-text">研究索引.md</span></button>`;
@@ -1004,7 +1101,7 @@
       $("#settingsButton").addEventListener("click", () => { window.location.href = "theme-preset-studio.html"; });
       const renderSearch = () => {
         const query = $("#searchInput").value.trim().toLowerCase();
-        const matches = Object.entries(docs).filter(([name, doc]) => !query || `${name} ${doc.path} ${doc.source}`.toLowerCase().includes(query));
+        const matches = Object.entries(docs).filter(([name, doc]) => workspaceFiles.has(name) && (!query || `${name} ${doc.path} ${doc.source}`.toLowerCase().includes(query)));
         const root = $("#searchResults");
         root.innerHTML = "";
         if (!matches.length) {
@@ -1022,7 +1119,13 @@
           root.append(button);
         });
       };
-      $("#searchButton").addEventListener("click", () => { renderSearch(); openModal("searchDialog"); $("#searchInput").focus(); });
+      const openSearch = () => {
+        $("#searchTitle").textContent = `搜索 ${workspaceName}`;
+        renderSearch();
+        openModal("searchDialog");
+        $("#searchInput").focus();
+      };
+      $("#searchButton").addEventListener("click", openSearch);
       $("#searchInput").addEventListener("input", renderSearch);
       $("#focusButton").addEventListener("click", () => { appWindow.classList.toggle("focus-mode"); showToast(appWindow.classList.contains("focus-mode") ? "已进入专注模式" : "已退出专注模式"); });
       $("#toggleFiles").addEventListener("click", () => {
@@ -1043,14 +1146,35 @@
       $("#canvas").addEventListener("wheel", event => {
         if (mode !== "reading" || Math.abs(event.deltaY) < 8) return;
         event.preventDefault();
+        const now = Date.now();
+        if (now - lastWheelAt < 320) return;
+        lastWheelAt = now;
         updateReadingPage(readingPage + (event.deltaY > 0 ? 1 : -1));
       }, { passive: false });
       document.addEventListener("keydown", event => {
+        const modifier = event.metaKey || event.ctrlKey;
+        if (modifier && !event.altKey) {
+          const key = event.key.toLowerCase();
+          if (key === "n" && event.shiftKey) { event.preventDefault(); return $("#menuNewWindow").click(); }
+          if (key === "n" && !event.shiftKey) { event.preventDefault(); return newDoc(); }
+          if (key === "w" && !event.shiftKey) { event.preventDefault(); return activeId && requestClose(activeId); }
+          if (key === "f" && event.shiftKey) { event.preventDefault(); return openSearch(); }
+          if (key === "e" && event.shiftKey) { event.preventDefault(); return $("#toggleFiles").click(); }
+          if (key === ",") { event.preventDefault(); return $("#settingsButton").click(); }
+        }
+        if (event.key === "Escape") {
+          const modal = $(".modal-backdrop.open");
+          if (modal) { event.preventDefault(); return modal.classList.remove("open"); }
+        }
         if (mode !== "reading" || event.target.closest("input, textarea, button")) return;
         if (["ArrowRight", "PageDown", " "].includes(event.key)) { event.preventDefault(); updateReadingPage(readingPage + 1); }
         if (["ArrowLeft", "PageUp"].includes(event.key)) { event.preventDefault(); updateReadingPage(readingPage - 1); }
       });
-      $("#hidePrototypeNote").addEventListener("click", () => { $(".prototype-stage").classList.add("note-hidden"); $("#prototypeNote").remove(); });
+      $("#hidePrototypeNote").addEventListener("click", event => {
+        const note = $("#prototypeNote");
+        const collapsed = note.classList.toggle("collapsed");
+        event.currentTarget.textContent = collapsed ? "显示说明" : "隐藏说明";
+      });
 
       const bindResizer = (element, side) => {
         let startX = 0;
@@ -1062,6 +1186,7 @@
           const width = Math.max(min, Math.min(max, startWidth + (side === "left" ? delta : -delta)));
           document.documentElement.style.setProperty(side === "left" ? "--left" : "--right", `${width}px`);
           element.setAttribute("aria-valuenow", String(Math.round(width)));
+          schedulePagination();
         };
         const up = () => {
           element.classList.remove("dragging");
@@ -1079,6 +1204,7 @@
           const width = side === "left" ? 252 : 220;
           document.documentElement.style.setProperty(side === "left" ? "--left" : "--right", `${width}px`);
           element.setAttribute("aria-valuenow", String(width));
+          schedulePagination();
         });
         element.addEventListener("keydown", event => {
           if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
@@ -1088,11 +1214,13 @@
           const width = Math.max(min, Math.min(max, current + direction * (event.shiftKey ? 24 : 8) * (side === "left" ? 1 : -1)));
           document.documentElement.style.setProperty(side === "left" ? "--left" : "--right", `${width}px`);
           element.setAttribute("aria-valuenow", String(width));
+          schedulePagination();
         });
       };
 
       bindResizer($("#leftResizer"), "left");
       bindResizer($("#rightResizer"), "right");
+      window.addEventListener("resize", schedulePagination);
       renderTabs();
       renderDocument();
     })();

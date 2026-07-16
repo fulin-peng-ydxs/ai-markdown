@@ -105,6 +105,14 @@
     .prototype-note { z-index: 50; justify-self: end; width: min(620px, 100%); padding: 9px 11px; border: 1px dashed #8e869a; border-radius: 7px; background: #fbfaf6; color: #55515d; box-shadow: 0 5px 14px rgba(35,35,39,.09); font-size: 11px; line-height: 1.45; }
     .prototype-note strong { display: block; margin-bottom: 4px; color: #3f3948; }
     .prototype-note button { margin-top: 8px; padding: 3px 8px; border: 1px solid #aaa3b2; border-radius: 4px; background: transparent; color: #514a5c; cursor: pointer; }
+    .prototype-note.collapsed { width: auto; padding: 7px 9px; }
+    .prototype-note.collapsed strong, .prototype-note.collapsed .note-copy { display: none; }
+    .prototype-note.collapsed button { margin-top: 0; }
+    .restore-list { display: grid; gap: 6px; margin-top: 15px; }
+    .restore-row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper); color: var(--muted); font-size: 11.5px; }
+    .restore-row strong { color: var(--heading); }
+    .restore-row .needs-action { color: var(--danger); }
+    .inline-action { margin-top: 10px; padding: 0; border: 0; background: transparent; color: var(--accent); font-size: 11.5px; text-decoration: underline; cursor: pointer; }
     @media (max-width: 760px) {
       .stage { padding: 0; }
       .window { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; }
@@ -121,7 +129,7 @@
   <div class="stage">
     <aside class="prototype-note" id="prototypeNote" aria-label="原型说明">
       <strong>原型说明</strong>
-      HTML 原型不能调用系统窗口控制和文件选择器，因此窗口控制与“已在其他窗口打开”的记录已禁用；打开和重新授权使用固定路径模拟应用内状态。加载完成后会自动进入工作台，不设置推进演示的正式按钮。
+      <span class="note-copy">HTML 原型不能调用系统窗口控制和文件选择器，因此窗口控制与“已在其他窗口打开”的记录已禁用；打开和重新授权使用固定路径模拟应用内状态。加载完成后会自动进入工作台，不设置推进演示的正式按钮。</span>
       <button id="hidePrototypeNote" type="button">隐藏说明</button>
     </aside>
     <section class="window" aria-label="Plainroot 启动窗口">
@@ -146,6 +154,9 @@
             </button>
             <button class="action" id="openFile" type="button">
               <svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v5h5"></path></svg><span>打开 Markdown 文件</span><span class="shortcut">⌘O</span>
+            </button>
+            <button class="action" id="restoreSession" type="button">
+              <svg viewBox="0 0 24 24"><path d="M4 11a8 8 0 1 0 2-5.3L4 8"></path><path d="M4 3v5h5"></path></svg><span>恢复上次会话</span><span class="shortcut">2 个窗口</span>
             </button>
           </div>
           <p class="principle">Plainroot 只读取你明确选择的路径。Markdown 文件仍保存在原目录中，不会被迁移到私有数据库。</p>
@@ -198,8 +209,23 @@
 
   <div class="modal-backdrop" id="missingDialog">
     <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="missingTitle">
-      <div class="dialog-body"><h2 id="missingTitle">找不到“旧博客”</h2><p>原路径不可访问。你可以重新选择目录并更新最近记录，或者从列表移除。</p><div class="path-preview">/Volumes/Archive/blog</div></div>
+      <div class="dialog-body"><h2 id="missingTitle">找不到“旧博客”</h2><p>原路径不可访问。你可以重新选择目录并更新最近记录，或者只移除这条最近记录；移除记录不会删除本地文件或目录。</p><div class="path-preview">/Volumes/Archive/blog</div></div>
       <div class="dialog-footer"><button class="button" id="removeRecent" type="button">移除记录</button><button class="button" id="closeMissing" type="button">取消</button><button class="button primary" id="reauthorize" type="button">重新选择目录</button></div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="restoreDialog">
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="restoreTitle">
+      <div class="dialog-body">
+        <h2 id="restoreTitle">恢复上次窗口会话</h2>
+        <p id="restoreSummary">找到 2 个窗口会话。可先恢复可用窗口，失效窗口不会阻塞其他窗口。</p>
+        <div class="restore-list">
+          <div class="restore-row"><strong>Plainroot 项目</strong><span>可恢复 · 3 个页签</span></div>
+          <div class="restore-row"><strong>旧博客</strong><span class="needs-action" id="restoreMissingState">需要重新授权</span></div>
+        </div>
+        <button class="inline-action" id="reauthorizeRestore" type="button">重新授权“旧博客”后继续恢复</button>
+      </div>
+      <div class="dialog-footer"><button class="button" data-close="restoreDialog" type="button">取消恢复</button><button class="button" id="retryRestore" type="button">重新检查</button><button class="button primary" id="restoreAvailable" type="button">跳过失效项并恢复 1 个窗口</button></div>
     </section>
   </div>
 
@@ -211,6 +237,7 @@
       const $$ = selector => [...document.querySelectorAll(selector)];
       let timer;
       let loadingTimer;
+      let restoringAfterAuthorization = false;
       const toast = message => { clearTimeout(timer); $("#toast").textContent = message; $("#toast").classList.add("show"); timer = setTimeout(() => $("#toast").classList.remove("show"), 1900); };
       const openDialog = id => $("#" + id).classList.add("open");
       const closeDialog = id => $("#" + id).classList.remove("open");
@@ -232,6 +259,15 @@
 
       $("#openFolder").addEventListener("click", () => showLoading("研究笔记", "~/Documents/research-notes"));
       $("#openFile").addEventListener("click", () => showLoading("notes.md", "~/Documents/notes.md"));
+      $("#restoreSession").addEventListener("click", () => {
+        const blogRow = $(".recent-row[data-name='旧博客']");
+        const missing = Boolean(blogRow?.classList.contains("missing"));
+        $("#restoreMissingState").textContent = !blogRow ? "已跳过 · 最近记录已移除" : missing ? "需要重新授权" : "已授权 · 可恢复";
+        $("#restoreMissingState").classList.toggle("needs-action", missing);
+        $("#reauthorizeRestore").hidden = !missing;
+        $("#restoreAvailable").textContent = missing ? "跳过失效项并恢复 1 个窗口" : blogRow ? "恢复 2 个窗口" : "恢复 1 个窗口";
+        openDialog("restoreDialog");
+      });
       $("#cancelLoading").addEventListener("click", () => { clearTimeout(loadingTimer); closeDialog("loadingDialog"); });
       $("#settings").addEventListener("click", () => window.location.href = "theme-preset-studio.html");
 
@@ -248,7 +284,19 @@
         row.querySelector(".recent-path").textContent = "~/Documents/archive/blog";
         row.querySelector(".badge").textContent = "已重新授权";
         closeDialog("missingDialog");
-        toast("“旧博客”已重新授权，可正常打开");
+        if (restoringAfterAuthorization) {
+          restoringAfterAuthorization = false;
+          $("#restoreMissingState").textContent = "已授权 · 可恢复";
+          $("#restoreMissingState").classList.remove("needs-action");
+          $("#restoreSummary").textContent = "两个窗口均已通过路径与权限校验，可以继续恢复。";
+          $("#reauthorizeRestore").hidden = true;
+          $("#restoreAvailable").textContent = "恢复 2 个窗口";
+          openDialog("restoreDialog");
+          toast("“旧博客”已重新授权，已返回会话恢复流程");
+        } else {
+          toast("“旧博客”已重新授权，正在继续打开");
+          showLoading("旧博客", "~/Documents/archive/blog");
+        }
       });
       $("#removeRecent").addEventListener("click", () => {
         const row = $(".recent-row.missing");
@@ -256,22 +304,71 @@
         $("#recentCount").textContent = "3 个目录";
         closeDialog("missingDialog");
         toast("已移除失效记录，未删除任何文件");
+        if (restoringAfterAuthorization) {
+          restoringAfterAuthorization = false;
+          $("#restoreMissingState").textContent = "已跳过 · 最近记录已移除";
+          $("#restoreMissingState").classList.remove("needs-action");
+          $("#restoreSummary").textContent = "失效窗口已跳过，可以继续恢复其余 1 个窗口。";
+          $("#reauthorizeRestore").hidden = true;
+          openDialog("restoreDialog");
+        }
       });
 
       $("#search").addEventListener("input", event => {
         const query = event.target.value.trim().toLowerCase();
-        $$(".recent-row").forEach(row => row.hidden = !row.textContent.toLowerCase().includes(query));
+        $$(".recent-row").forEach(row => {
+          const searchable = `${row.dataset.name} ${row.querySelector(".recent-path").textContent}`.toLowerCase();
+          row.hidden = !searchable.includes(query);
+        });
         const visible = $$(".recent-row").filter(row => !row.hidden).length;
         $("#recentEmpty").hidden = visible > 0;
         $("#recentList").hidden = visible === 0;
       });
+
+      $("#reauthorizeRestore").addEventListener("click", () => {
+        restoringAfterAuthorization = true;
+        closeDialog("restoreDialog");
+        openDialog("missingDialog");
+      });
+      $("#retryRestore").addEventListener("click", () => {
+        const missing = Boolean($(".recent-row.missing"));
+        $("#restoreSummary").textContent = missing ? "重新检查完成：1 个窗口可恢复，1 个窗口仍需重新授权。" : "重新检查完成：两个窗口均可恢复。";
+        toast("会话路径与权限已重新检查");
+      });
+      $("#restoreAvailable").addEventListener("click", () => {
+        const missing = Boolean($(".recent-row.missing"));
+        const hasBlog = Boolean($(".recent-row[data-name='旧博客']"));
+        closeDialog("restoreDialog");
+        showLoading(missing || !hasBlog ? "Plainroot 项目" : "2 个窗口会话", missing || !hasBlog ? "~/Projects/markdown-editor" : "Plainroot 项目 + 旧博客");
+      });
+
+      $$('[data-close]').forEach(button => button.addEventListener("click", () => closeDialog(button.dataset.close)));
 
       $$(".modal-backdrop").forEach(backdrop => backdrop.addEventListener("click", event => {
         if (event.target !== backdrop) return;
         if (backdrop.id === "loadingDialog") clearTimeout(loadingTimer);
         backdrop.classList.remove("open");
       }));
-      $("#hidePrototypeNote").addEventListener("click", () => { $(".stage").classList.add("note-hidden"); $("#prototypeNote").remove(); });
+      document.addEventListener("keydown", event => {
+        const modifier = event.metaKey || event.ctrlKey;
+        if (modifier && !event.altKey) {
+          const key = event.key.toLowerCase();
+          if (key === "o" && event.shiftKey) { event.preventDefault(); return $("#openFolder").click(); }
+          if (key === "o" && !event.shiftKey) { event.preventDefault(); return $("#openFile").click(); }
+        }
+        if (event.key === "Escape") {
+          const modal = $(".modal-backdrop.open");
+          if (!modal) return;
+          event.preventDefault();
+          if (modal.id === "loadingDialog") clearTimeout(loadingTimer);
+          modal.classList.remove("open");
+        }
+      });
+      $("#hidePrototypeNote").addEventListener("click", event => {
+        const note = $("#prototypeNote");
+        const collapsed = note.classList.toggle("collapsed");
+        event.currentTarget.textContent = collapsed ? "显示说明" : "隐藏说明";
+      });
     })();
   </script>
 </body>

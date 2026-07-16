@@ -169,6 +169,9 @@
     .prototype-note { z-index: 60; justify-self: end; width: min(660px, 100%); padding: 9px 11px; border: 1px dashed #8e869a; border-radius: 7px; background: #fbfaf6; color: #55515d; box-shadow: 0 5px 14px rgba(35,35,39,.09); font-size: 11px; line-height: 1.45; }
     .prototype-note strong { display: block; margin-bottom: 4px; color: #3f3948; }
     .prototype-note button { margin-top: 8px; padding: 3px 8px; border: 1px solid #aaa3b2; border-radius: 4px; background: transparent; color: #514a5c; cursor: pointer; }
+    .prototype-note.collapsed { width: auto; padding: 7px 9px; }
+    .prototype-note.collapsed strong, .prototype-note.collapsed .note-copy { display: none; }
+    .prototype-note.collapsed button { margin-top: 0; }
     @media (max-width: 1180px) {
       .main { grid-template-columns: 0 205px 365px minmax(340px,1fr); }
       .settings-nav { display: none; }
@@ -187,7 +190,7 @@
   <div class="stage">
     <aside class="prototype-note" id="prototypeNote" aria-label="原型说明">
       <strong>原型说明</strong>
-      HTML 原型不能调用系统窗口控制，也不模拟跨窗口广播或磁盘持久化，因此系统控制和未建模设置分类已禁用；预设库在本页内存中验证“草稿隔离 → 校验 → 保存”闭环。保存成功反馈只描述当前原型库已更新。
+      <span class="note-copy">HTML 原型不能调用系统窗口控制，也不模拟跨窗口广播或磁盘持久化，因此系统控制和未建模设置分类已禁用；预设库在本页内存中验证“草稿隔离 → 校验 → 保存”闭环。保存成功反馈只描述当前原型库已更新。</span>
       <button id="hidePrototypeNote" type="button">隐藏说明</button>
     </aside>
     <section class="window" id="themeWindow" aria-label="Plainroot 颜色主题预设工作室">
@@ -504,6 +507,10 @@
       }
 
       function duplicateCurrent() {
+        if (dirty) {
+          showToast("请先保存或放弃当前草稿，再创建副本");
+          return;
+        }
         const copy = clone(draft);
         copy.id = `preset-${Date.now()}`;
         copy.name = `${draft.name} Copy`;
@@ -618,12 +625,22 @@
       $$('[data-close]').forEach(button => button.addEventListener("click", () => $("#" + button.dataset.close).classList.remove("open")));
       $$(".modal-backdrop").forEach(backdrop => backdrop.addEventListener("click", event => { if (event.target === backdrop) backdrop.classList.remove("open"); }));
       document.addEventListener("keydown", event => {
-        if (event.key !== "Escape" || $(".modal-backdrop.open")) return;
+        if (event.key !== "Escape") return;
         event.preventDefault();
+        const modal = $(".modal-backdrop.open");
+        if (modal) {
+          modal.classList.remove("open");
+          if (modal.id === "switchDialog") pendingSelectionId = null;
+          return;
+        }
         if (dirty) $("#discardDialog").classList.add("open");
         else window.location.href = "markdown-workbench.html";
       });
-      $("#hidePrototypeNote").addEventListener("click", () => { $(".stage").classList.add("note-hidden"); $("#prototypeNote").remove(); });
+      $("#hidePrototypeNote").addEventListener("click", event => {
+        const note = $("#prototypeNote");
+        const collapsed = note.classList.toggle("collapsed");
+        event.currentTarget.textContent = collapsed ? "显示说明" : "隐藏说明";
+      });
 
       renderAll();
     })();
