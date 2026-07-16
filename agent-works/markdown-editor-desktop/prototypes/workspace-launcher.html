@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plainroot · 工作区启动原型</title>
+  <style>
+    :root {
+      --stage: #d7d7d8;
+      --chrome: #ececed;
+      --chrome-strong: #e4e4e6;
+      --paper: #f3f3f2;
+      --heading: #222226;
+      --text: #28282c;
+      --muted: #66666d;
+      --quiet: #85858c;
+      --line: #ceced2;
+      --line-strong: #b9b9bf;
+      --accent: #70677f;
+      --accent-soft: #dedbe3;
+      --danger: #955252;
+      --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --mono: "SFMono-Regular", Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body { background: var(--stage); color: var(--text); font-family: var(--ui); -webkit-font-smoothing: antialiased; }
+    button, input { font: inherit; color: inherit; }
+    .stage { width: 100%; height: 100%; padding: 24px; display: grid; place-items: center; }
+    .window {
+      width: min(1050px, 100%);
+      height: min(720px, 100%);
+      min-height: 560px;
+      display: grid;
+      grid-template-rows: 40px minmax(0, 1fr) 25px;
+      overflow: hidden;
+      border: 1px solid #ababaf;
+      border-radius: 11px;
+      background: var(--chrome);
+      box-shadow: 0 22px 55px rgba(37,37,41,.22), 0 3px 11px rgba(37,37,41,.14);
+    }
+    .titlebar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--chrome-strong); user-select: none; }
+    .traffic { display: flex; gap: 8px; }
+    .traffic button { width: 12px; height: 12px; padding: 0; border: 0; border-radius: 50%; }
+    .traffic .close { background: #ff5f57; } .traffic .min { background: #febc2e; } .traffic .max { background: #28c840; }
+    .title { color: #56565c; font-size: 12px; }
+    .title-actions { justify-self: end; display: flex; gap: 4px; }
+    .icon-button { width: 29px; height: 29px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 5px; background: transparent; cursor: pointer; }
+    .icon-button:hover { background: rgba(40,40,44,.06); }
+    .icon-button:focus-visible { outline: 2px solid rgba(112,103,127,.45); outline-offset: 1px; }
+    .icon-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.65; }
+    .content { min-height: 0; display: grid; grid-template-columns: 320px minmax(0, 1fr); }
+    .welcome { padding: 48px 40px; border-right: 1px solid var(--line); background: var(--chrome); }
+    .brand-mark { width: 32px; height: 32px; margin-bottom: 24px; display: grid; place-items: center; border: 1px solid var(--accent); border-radius: 7px; color: var(--accent); font-size: 17px; font-weight: 700; }
+    h1 { margin: 0; color: var(--heading); font-size: 28px; letter-spacing: -.025em; }
+    .tagline { margin: 9px 0 31px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .primary-actions { display: grid; gap: 9px; }
+    .action { width: 100%; min-height: 42px; display: flex; align-items: center; gap: 11px; padding: 0 13px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--paper); cursor: pointer; text-align: left; }
+    .action:hover { border-color: #aaa4b1; background: #eeeeed; }
+    .action.primary { border-color: var(--accent); background: var(--accent); color: white; }
+    .action svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.65; flex: none; }
+    .action span { font-size: 12.5px; font-weight: 600; }
+    .shortcut { margin-left: auto; color: var(--quiet); font-size: 10.5px; font-weight: 400 !important; }
+    .action.primary .shortcut { color: rgba(255,255,255,.72); }
+    .principle { margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--quiet); font-size: 11px; line-height: 1.6; }
+    .recent { min-width: 0; min-height: 0; padding: 38px 40px 30px; background: var(--paper); overflow: hidden; }
+    .recent-head { display: flex; align-items: center; gap: 12px; margin-bottom: 17px; }
+    .recent-head h2 { margin: 0; color: var(--heading); font-size: 15px; }
+    .recent-head span { color: var(--quiet); font-size: 11px; }
+    .search { margin-left: auto; width: 190px; height: 31px; padding: 0 10px 0 30px; border: 1px solid var(--line); border-radius: 5px; outline: none; background: #e9e9e8; font-size: 11.5px; }
+    .search:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(112,103,127,.16); }
+    .search-wrap { position: relative; margin-left: auto; }
+    .search-wrap svg { position: absolute; left: 9px; top: 8px; width: 14px; height: 14px; fill: none; stroke: var(--muted); stroke-width: 1.7; pointer-events: none; }
+    .recent-list { height: calc(100% - 50px); overflow: auto; }
+    .recent-row { width: 100%; min-height: 66px; display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 10px; border: 0; border-bottom: 1px solid #d9d9dc; background: transparent; text-align: left; cursor: pointer; }
+    .recent-row:hover { background: #eaeaeb; }
+    .folder-mark { width: 29px; height: 25px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 5px; color: var(--accent); }
+    .folder-mark svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+    .recent-name { display: flex; align-items: center; gap: 7px; color: var(--heading); font-size: 12.5px; font-weight: 600; }
+    .recent-path { margin-top: 4px; overflow: hidden; color: var(--muted); font: 10.5px/1.4 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .recent-time { color: var(--quiet); font-size: 10.5px; }
+    .badge { padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); font-size: 9.5px; font-weight: 500; }
+    .badge.open { border-color: #aaa3b2; color: var(--accent); }
+    .recent-row.missing .folder-mark { color: var(--danger); }
+    .recent-row.missing .recent-name { color: #6f5555; }
+    .statusbar { display: flex; align-items: center; gap: 13px; padding: 0 10px; border-top: 1px solid var(--line); background: var(--chrome-strong); color: var(--quiet); font-size: 10.5px; }
+    .statusbar span:last-child { margin-left: auto; }
+    .modal-backdrop { position: fixed; inset: 0; z-index: 20; display: none; place-items: center; background: rgba(35,35,39,.28); padding: 22px; }
+    .modal-backdrop.open { display: grid; }
+    .dialog { width: min(450px, 100%); overflow: hidden; border: 1px solid var(--line-strong); border-radius: 9px; background: #f4f4f3; box-shadow: 0 26px 70px rgba(29,29,33,.28); }
+    .dialog-body { padding: 24px 25px 20px; }
+    .dialog h2 { margin: 0 0 8px; color: var(--heading); font-size: 18px; }
+    .dialog p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+    .path-preview { margin: 15px 0 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: 5px; background: #e9e9ea; color: #505057; font: 11.5px/1.45 var(--mono); }
+    .progress { height: 3px; margin-top: 19px; overflow: hidden; border-radius: 2px; background: #dedee0; }
+    .progress span { display: block; width: 0; height: 100%; background: var(--accent); transition: width .45s ease; }
+    .dialog-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--chrome); }
+    .button { min-height: 31px; padding: 0 13px; border: 1px solid var(--line-strong); border-radius: 5px; background: #f4f4f3; font-size: 12px; cursor: pointer; }
+    .button.primary { border-color: var(--accent); background: var(--accent); color: white; }
+    .toast { position: fixed; left: 50%; bottom: 34px; z-index: 40; transform: translate(-50%, 10px); padding: 9px 13px; border-radius: 6px; background: #34343a; color: white; font-size: 12px; opacity: 0; transition: .16s ease; pointer-events: none; }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    @media (max-width: 760px) {
+      .stage { padding: 0; }
+      .window { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; }
+      .content { grid-template-columns: 1fr; }
+      .welcome { padding: 28px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .principle { display: none; }
+      .recent { padding: 24px 28px; }
+      .primary-actions { grid-template-columns: 1fr 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <section class="window" aria-label="Plainroot 启动窗口">
+      <header class="titlebar">
+        <div class="traffic" aria-label="macOS 窗口控制"><button class="close" aria-label="关闭"></button><button class="min" aria-label="最小化"></button><button class="max" aria-label="最大化"></button></div>
+        <div class="title">Plainroot</div>
+        <div class="title-actions">
+          <button class="icon-button" id="settings" type="button" aria-label="设置" title="设置">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1A7 7 0 0 0 15 6.2L14.7 4h-5.4L9 6.2a7 7 0 0 0-1.5.9l-2.4-1-2 3.4L5.1 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.5.9l.3 2.2h5.4l.3-2.2a7 7 0 0 0 1.5-.9l2.4 1 2-3.4-2-1.5a7 7 0 0 0 .1-1Z"></path></svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="content">
+        <section class="welcome">
+          <div class="brand-mark" aria-hidden="true">P</div>
+          <h1>Plainroot</h1>
+          <p class="tagline">A calm, local-first Markdown editor.<br>Write clearly. Keep it yours.</p>
+          <div class="primary-actions">
+            <button class="action primary" id="openFolder" type="button">
+              <svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"></path></svg><span>打开文件夹</span><span class="shortcut">⌘⇧O</span>
+            </button>
+            <button class="action" id="openFile" type="button">
+              <svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v5h5"></path></svg><span>打开 Markdown 文件</span><span class="shortcut">⌘O</span>
+            </button>
+          </div>
+          <p class="principle">Plainroot 只读取你明确选择的路径。Markdown 文件仍保存在原目录中，不会被迁移到私有数据库。</p>
+        </section>
+
+        <section class="recent">
+          <div class="recent-head">
+            <h2>最近工作区</h2><span id="recentCount">4 个目录</span>
+            <label class="search-wrap">
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg>
+              <input class="search" id="search" type="search" aria-label="筛选最近工作区" placeholder="筛选目录">
+            </label>
+          </div>
+          <div class="recent-list" id="recentList">
+            <button class="recent-row" data-name="Plainroot 项目" data-open="true" type="button">
+              <span class="folder-mark"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"></path></svg></span>
+              <span><span class="recent-name">Plainroot 项目 <span class="badge open">已在窗口中打开</span></span><span class="recent-path">~/Projects/markdown-editor</span></span>
+              <span class="recent-time">刚刚</span>
+            </button>
+            <button class="recent-row" data-name="研究笔记" type="button">
+              <span class="folder-mark"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"></path></svg></span>
+              <span><span class="recent-name">研究笔记</span><span class="recent-path">~/Documents/research-notes</span></span>
+              <span class="recent-time">昨天</span>
+            </button>
+            <button class="recent-row" data-name="产品文档" type="button">
+              <span class="folder-mark"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"></path></svg></span>
+              <span><span class="recent-name">产品文档</span><span class="recent-path">~/Work/product-docs</span></span>
+              <span class="recent-time">7 月 13 日</span>
+            </button>
+            <button class="recent-row missing" data-name="旧博客" data-missing="true" type="button">
+              <span class="folder-mark"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3zM5 5l14 14"></path></svg></span>
+              <span><span class="recent-name">旧博客 <span class="badge">路径失效</span></span><span class="recent-path">/Volumes/Archive/blog</span></span>
+              <span class="recent-time">6 月 28 日</span>
+            </button>
+          </div>
+        </section>
+      </main>
+
+      <footer class="statusbar"><span>Plainroot Neutral</span><span>本地模式</span><span>2 个窗口正在运行</span></footer>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="loadingDialog">
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="loadingTitle">
+      <div class="dialog-body"><h2 id="loadingTitle">打开工作区</h2><p id="loadingText">正在请求目录访问权限并恢复上次页签。</p><div class="path-preview" id="loadingPath">~/Documents/research-notes</div><div class="progress"><span id="progressBar"></span></div></div>
+      <div class="dialog-footer"><button class="button" id="cancelLoading" type="button">取消</button><button class="button primary" id="continueOpen" type="button">进入工作台</button></div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="missingDialog">
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="missingTitle">
+      <div class="dialog-body"><h2 id="missingTitle">找不到“旧博客”</h2><p>原路径不可访问。你可以重新选择目录并更新最近记录，或者从列表移除。</p><div class="path-preview">/Volumes/Archive/blog</div></div>
+      <div class="dialog-footer"><button class="button" id="removeRecent" type="button">移除记录</button><button class="button" id="closeMissing" type="button">取消</button><button class="button primary" id="reauthorize" type="button">重新选择目录</button></div>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      const $ = selector => document.querySelector(selector);
+      const $$ = selector => [...document.querySelectorAll(selector)];
+      let timer;
+      const toast = message => { clearTimeout(timer); $("#toast").textContent = message; $("#toast").classList.add("show"); timer = setTimeout(() => $("#toast").classList.remove("show"), 1900); };
+      const openDialog = id => $("#" + id).classList.add("open");
+      const closeDialog = id => $("#" + id).classList.remove("open");
+
+      const showLoading = (name, path) => {
+        $("#loadingTitle").textContent = `打开“${name}”`;
+        $("#loadingPath").textContent = path;
+        $("#progressBar").style.width = "0";
+        openDialog("loadingDialog");
+        requestAnimationFrame(() => $("#progressBar").style.width = "72%");
+      };
+
+      $("#openFolder").addEventListener("click", () => showLoading("研究笔记", "~/Documents/research-notes"));
+      $("#openFile").addEventListener("click", () => showLoading("notes.md", "~/Documents/notes.md"));
+      $("#cancelLoading").addEventListener("click", () => closeDialog("loadingDialog"));
+      $("#continueOpen").addEventListener("click", () => { $("#progressBar").style.width = "100%"; setTimeout(() => window.location.href = "markdown-workbench.html", 250); });
+      $("#settings").addEventListener("click", () => window.location.href = "theme-preset-studio.html");
+
+      $$(".recent-row").forEach(row => row.addEventListener("click", () => {
+        if (row.dataset.missing) return openDialog("missingDialog");
+        if (row.dataset.open) return toast("“Plainroot 项目”已打开，正在聚焦原窗口");
+        showLoading(row.dataset.name, row.querySelector(".recent-path").textContent);
+      }));
+
+      $("#closeMissing").addEventListener("click", () => closeDialog("missingDialog"));
+      $("#reauthorize").addEventListener("click", () => { closeDialog("missingDialog"); toast("桌面版将打开系统目录选择器"); });
+      $("#removeRecent").addEventListener("click", () => {
+        const row = $(".recent-row.missing");
+        if (row) row.remove();
+        $("#recentCount").textContent = "3 个目录";
+        closeDialog("missingDialog");
+        toast("已移除失效记录，未删除任何文件");
+      });
+
+      $("#search").addEventListener("input", event => {
+        const query = event.target.value.trim().toLowerCase();
+        $$(".recent-row").forEach(row => row.hidden = !row.textContent.toLowerCase().includes(query));
+      });
+
+      $$(".modal-backdrop").forEach(backdrop => backdrop.addEventListener("click", event => { if (event.target === backdrop) backdrop.classList.remove("open"); }));
+    })();
+  </script>
+</body>
+</html>

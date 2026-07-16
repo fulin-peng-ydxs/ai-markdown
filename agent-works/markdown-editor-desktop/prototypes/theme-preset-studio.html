@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plainroot · 颜色主题预设工作室原型</title>
+  <style>
+    :root {
+      --stage: #d7d7d8;
+      --chrome: #ececed;
+      --chrome-strong: #e4e4e6;
+      --paper: #f3f3f2;
+      --paper-deep: #eeeeed;
+      --heading: #222226;
+      --text: #28282c;
+      --muted: #66666d;
+      --quiet: #85858c;
+      --line: #ceced2;
+      --line-strong: #b9b9bf;
+      --accent: #70677f;
+      --accent-soft: #dedbe3;
+      --success: #52735e;
+      --warning: #8a6d3f;
+      --danger: #9b5050;
+      --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body { background: var(--stage); color: var(--text); font-family: var(--ui); -webkit-font-smoothing: antialiased; }
+    button, input { font: inherit; color: inherit; }
+    .stage { width: 100%; height: 100%; padding: 18px; display: grid; place-items: center; }
+    .window {
+      width: min(1540px, 100%);
+      height: min(970px, 100%);
+      min-width: 920px;
+      min-height: 650px;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: 40px minmax(0, 1fr) 55px;
+      border: 1px solid #ababaf;
+      border-radius: 11px;
+      background: var(--chrome);
+      box-shadow: 0 22px 55px rgba(37,37,41,.22), 0 3px 11px rgba(37,37,41,.14);
+      transition: background-color .12s ease, color .12s ease;
+    }
+    .titlebar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--chrome-strong); user-select: none; }
+    .traffic { display: flex; gap: 8px; }
+    .traffic button { width: 12px; height: 12px; padding: 0; border: 0; border-radius: 50%; }
+    .traffic .close { background: #ff5f57; } .traffic .min { background: #febc2e; } .traffic .max { background: #28c840; }
+    .window-title { color: var(--muted); font-size: 12px; }
+    .title-actions { justify-self: end; display: flex; gap: 4px; }
+    .icon-button { width: 29px; height: 29px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 5px; background: transparent; cursor: pointer; }
+    .icon-button:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
+    .icon-button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
+    .icon-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.65; }
+
+    .main { min-height: 0; display: grid; grid-template-columns: 176px 226px minmax(330px, 420px) minmax(390px, 1fr); }
+    .settings-nav { min-height: 0; padding: 18px 10px; border-right: 1px solid var(--line); background: var(--chrome-strong); }
+    .nav-label { padding: 0 9px 7px; color: var(--quiet); font-size: 10px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+    .nav-item { width: 100%; min-height: 31px; padding: 0 10px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-size: 12px; text-align: left; cursor: pointer; }
+    .nav-item:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+    .nav-item.active { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--heading); font-weight: 600; }
+
+    .preset-panel { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto 1fr auto; border-right: 1px solid var(--line); background: var(--chrome); }
+    .section-head { min-height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 13px; border-bottom: 1px solid var(--line); }
+    .section-head h2 { flex: 1; margin: 0; color: var(--heading); font-size: 13px; }
+    .preset-list { overflow: auto; padding: 8px; }
+    .preset-group { padding: 9px 7px 5px; color: var(--quiet); font-size: 9.5px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+    .preset-row { width: 100%; min-height: 44px; display: grid; grid-template-columns: 24px minmax(0,1fr) auto; gap: 8px; align-items: center; padding: 5px 7px; border: 1px solid transparent; border-radius: 5px; background: transparent; text-align: left; cursor: pointer; }
+    .preset-row:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+    .preset-row.active { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+    .preset-swatch { width: 22px; height: 22px; overflow: hidden; display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line-strong); border-radius: 4px; }
+    .preset-name { overflow: hidden; color: var(--heading); font-size: 11.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+    .preset-meta { margin-top: 2px; color: var(--quiet); font-size: 9.5px; }
+    .lock { color: var(--quiet); font-size: 11px; }
+    .preset-actions { display: flex; gap: 6px; padding: 10px; border-top: 1px solid var(--line); }
+    .small-button { min-height: 29px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--paper); color: var(--text); font-size: 10.5px; cursor: pointer; }
+    .small-button:hover { background: color-mix(in srgb, var(--text) 6%, var(--paper)); }
+    .small-button:disabled { opacity: .42; cursor: default; }
+
+    .token-panel { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto auto 1fr; border-right: 1px solid var(--line); background: var(--paper); }
+    .editor-head { padding: 13px 15px 12px; border-bottom: 1px solid var(--line); }
+    .name-row { display: flex; align-items: center; gap: 8px; }
+    .preset-name-input { min-width: 0; flex: 1; height: 31px; padding: 0 8px; border: 1px solid transparent; border-radius: 4px; outline: none; background: transparent; color: var(--heading); font-size: 13px; font-weight: 650; }
+    .preset-name-input:not(:disabled):hover { border-color: var(--line); }
+    .preset-name-input:not(:disabled):focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 17%, transparent); }
+    .preset-name-input:disabled { color: var(--heading); -webkit-text-fill-color: var(--heading); opacity: 1; }
+    .readonly { padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); font-size: 9.5px; white-space: nowrap; }
+    .helper { margin: 5px 0 0; color: var(--muted); font-size: 10.5px; line-height: 1.45; }
+    .palette-tabs { display: flex; align-items: center; gap: 3px; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+    .palette-tabs button { min-height: 28px; padding: 0 11px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 10.5px; cursor: pointer; }
+    .palette-tabs button.active { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--heading); font-weight: 600; }
+    .palette-tabs span { margin-left: auto; color: var(--quiet); font-size: 9.5px; }
+    .token-list { min-height: 0; overflow: auto; padding: 9px 14px 26px; }
+    .token-group { margin: 14px 0 6px; color: var(--quiet); font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+    .token-row { min-height: 39px; display: grid; grid-template-columns: minmax(104px,1fr) 26px 76px; gap: 7px; align-items: center; border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent); }
+    .token-label { min-width: 0; }
+    .token-label strong { display: block; color: var(--text); font-size: 10.5px; font-weight: 600; }
+    .token-label span { display: block; margin-top: 1px; color: var(--quiet); font: 8.8px/1.2 var(--mono); }
+    .color-input { width: 25px; height: 25px; padding: 2px; border: 1px solid var(--line-strong); border-radius: 4px; background: transparent; cursor: pointer; }
+    .color-input:disabled { opacity: .64; cursor: default; }
+    .hex-input { width: 76px; height: 27px; padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; outline: none; background: color-mix(in srgb, var(--chrome) 66%, var(--paper)); color: var(--text); font: 9.8px var(--mono); text-transform: uppercase; }
+    .hex-input:focus { border-color: var(--accent); }
+    .hex-input:disabled { opacity: .7; }
+    .hex-input.invalid { border-color: var(--danger); }
+
+    .preview-panel { min-width: 0; min-height: 0; display: grid; grid-template-rows: 52px minmax(0, 1fr) auto; background: var(--chrome); }
+    .preview-head { display: flex; align-items: center; gap: 9px; padding: 0 15px; border-bottom: 1px solid var(--line); }
+    .preview-head h2 { margin: 0; color: var(--heading); font-size: 13px; }
+    .preview-head span { color: var(--quiet); font-size: 10px; }
+    .preview-head .icon-button { margin-left: auto; }
+    .preview-stage { min-height: 0; padding: 18px; overflow: auto; background: var(--chrome); }
+    .preview-window { min-width: 340px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--paper); box-shadow: 0 7px 22px color-mix(in srgb, var(--text) 13%, transparent); }
+    .preview-tabs { height: 30px; display: flex; align-items: end; border-bottom: 1px solid var(--line); background: var(--chrome-strong); }
+    .preview-tab { height: 29px; min-width: 145px; display: flex; align-items: center; gap: 7px; padding: 0 10px; border-right: 1px solid var(--line); background: var(--paper); color: var(--heading); font-size: 9.5px; position: relative; }
+    .preview-tab::after { content: ""; position: absolute; left: 9px; right: 9px; bottom: 0; height: 2px; background: var(--accent); }
+    .preview-body { display: grid; grid-template-columns: 98px minmax(0,1fr) 92px; min-height: 470px; }
+    .preview-side { padding: 11px 7px; background: var(--chrome); color: var(--muted); font-size: 8px; }
+    .preview-side.right { border-left: 1px solid var(--line); }
+    .preview-side.left { border-right: 1px solid var(--line); }
+    .mini-label { margin: 3px 5px 7px; color: var(--quiet); font-size: 7px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+    .mini-row { height: 21px; display: flex; align-items: center; padding: 0 5px; border-radius: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mini-row.active { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--heading); }
+    .mini-outline { min-height: 20px; padding: 4px 4px 4px 8px; border-left: 1px solid var(--line); }
+    .mini-outline.active { border-left: 2px solid var(--accent); color: var(--heading); font-weight: 600; }
+    .preview-doc { min-width: 0; padding: 40px 33px 55px; background: var(--paper); color: var(--text); }
+    .preview-doc .kicker { margin: 0 0 10px; color: var(--muted); font-size: 8px; }
+    .preview-doc h1 { margin: 0 0 14px; color: var(--heading); font-size: 24px; line-height: 1.25; letter-spacing: -.02em; }
+    .preview-doc .lede { margin: 0 0 20px; color: var(--text); font-size: 11px; line-height: 1.68; }
+    .preview-doc h2 { margin: 25px 0 9px; padding-bottom: 6px; border-bottom: 1px solid var(--line); color: var(--heading); font-size: 14px; }
+    .preview-doc p { margin: 0 0 10px; color: var(--text); font-size: 9.5px; line-height: 1.75; }
+    .preview-doc a { color: var(--accent); text-decoration: none; }
+    .preview-callout { margin: 14px 0; padding: 10px 11px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 4px; background: var(--paper-deep); }
+    .preview-callout strong { display: block; margin-bottom: 3px; color: var(--heading); font-size: 9px; }
+    .preview-callout p { margin: 0; color: var(--muted); font-size: 8.5px; }
+    .semantic-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+    .semantic { padding: 3px 6px; border: 1px solid currentColor; border-radius: 4px; font-size: 7.5px; }
+    .semantic.success { color: var(--success); } .semantic.warning { color: var(--warning); } .semantic.danger { color: var(--danger); }
+    .validation { padding: 11px 15px; border-top: 1px solid var(--line); background: var(--chrome-strong); }
+    .validation-title { display: flex; align-items: center; gap: 7px; color: var(--heading); font-size: 10.5px; font-weight: 650; }
+    .validation-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+    .validation.error .validation-dot { background: var(--danger); }
+    .validation p { margin: 4px 0 0 14px; color: var(--muted); font-size: 9.5px; line-height: 1.45; }
+
+    .footer { display: flex; align-items: center; gap: 9px; padding: 0 15px; border-top: 1px solid var(--line); background: var(--chrome-strong); }
+    .footer-status { color: var(--muted); font-size: 10.5px; }
+    .footer-spacer { flex: 1; }
+    .button { min-height: 32px; padding: 0 13px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--paper); color: var(--text); font-size: 11px; cursor: pointer; }
+    .button:hover { background: color-mix(in srgb, var(--text) 6%, var(--paper)); }
+    .button.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+    .button.danger { color: var(--danger); }
+    .button:disabled { opacity: .45; cursor: default; }
+    .toast { position: fixed; left: 50%; bottom: 35px; z-index: 50; transform: translate(-50%, 10px); padding: 9px 13px; border-radius: 6px; background: #34343a; color: white; font-size: 12px; opacity: 0; pointer-events: none; transition: .16s ease; }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .modal-backdrop { position: fixed; inset: 0; z-index: 40; display: none; place-items: center; background: rgba(35,35,39,.28); padding: 20px; }
+    .modal-backdrop.open { display: grid; }
+    .dialog { width: min(420px, 100%); overflow: hidden; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--paper); box-shadow: 0 26px 70px rgba(29,29,33,.28); }
+    .dialog-body { padding: 23px 24px 19px; }
+    .dialog h2 { margin: 0 0 8px; color: var(--heading); font-size: 17px; }
+    .dialog p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .dialog-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 15px; border-top: 1px solid var(--line); background: var(--chrome); }
+    @media (max-width: 1180px) {
+      .main { grid-template-columns: 0 205px 365px minmax(340px,1fr); }
+      .settings-nav { display: none; }
+    }
+    @media (max-width: 940px) {
+      .stage { padding: 0; }
+      .window { width: 100%; height: 100%; min-width: 760px; border: 0; border-radius: 0; }
+      .main { grid-template-columns: 190px 330px minmax(330px,1fr); }
+      .preview-body { grid-template-columns: 82px minmax(0,1fr); }
+      .preview-side.right { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <section class="window" id="themeWindow" aria-label="Plainroot 颜色主题预设工作室">
+      <header class="titlebar">
+        <div class="traffic" aria-label="macOS 窗口控制"><button class="close" id="windowClose" aria-label="关闭"></button><button class="min" aria-label="最小化"></button><button class="max" aria-label="最大化"></button></div>
+        <div class="window-title">设置 — 外观 — 颜色预设</div>
+        <div class="title-actions">
+          <button class="icon-button" id="backWorkbench" type="button" aria-label="返回工作台" title="返回工作台">
+            <svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"></path></svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="main">
+        <nav class="settings-nav" aria-label="设置分类">
+          <div class="nav-label">设置</div>
+          <button class="nav-item" type="button">常规</button>
+          <button class="nav-item" type="button">编辑器</button>
+          <button class="nav-item active" type="button">外观</button>
+          <button class="nav-item" type="button">文件与链接</button>
+          <button class="nav-item" type="button">快捷键</button>
+          <button class="nav-item" type="button">高级</button>
+        </nav>
+
+        <section class="preset-panel" aria-label="颜色预设库">
+          <header class="section-head">
+            <h2>颜色预设</h2>
+            <button class="icon-button" id="newPreset" type="button" aria-label="新建颜色预设" title="新建预设">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>
+            </button>
+          </header>
+          <div class="preset-list" id="presetList"></div>
+          <div class="preset-actions">
+            <button class="small-button" id="duplicatePreset" type="button">复制</button>
+            <button class="small-button" id="deletePreset" type="button">删除</button>
+          </div>
+        </section>
+
+        <section class="token-panel" aria-label="颜色令牌编辑器">
+          <header class="editor-head">
+            <div class="name-row"><input class="preset-name-input" id="presetName" aria-label="预设名称"><span class="readonly" id="readonlyBadge">内置只读</span></div>
+            <p class="helper" id="presetHelper">复制内置预设后即可编辑。字体和正文宽度在“编辑器”中单独设置。</p>
+          </header>
+          <div class="palette-tabs" role="tablist" aria-label="明暗调色板">
+            <button class="active" data-palette="light" type="button">明亮</button>
+            <button data-palette="dark" type="button">暗色</button>
+            <span>跟随系统会自动使用对应调色板</span>
+          </div>
+          <div class="token-list" id="tokenList"></div>
+        </section>
+
+        <section class="preview-panel" aria-label="主题实时预览">
+          <header class="preview-head"><h2>实时预览</h2><span>仅影响当前窗口草稿</span><button class="icon-button" id="resetDraft" type="button" aria-label="恢复当前预设" title="放弃草稿并恢复">
+            <svg viewBox="0 0 24 24"><path d="M4 11a8 8 0 1 0 2-5.3L4 8"></path><path d="M4 3v5h5"></path></svg>
+          </button></header>
+          <div class="preview-stage">
+            <section class="preview-window" aria-label="文档工作台预览">
+              <div class="preview-tabs"><div class="preview-tab">主题与色彩.md</div></div>
+              <div class="preview-body">
+                <aside class="preview-side left"><div class="mini-label">文件</div><div class="mini-row">README.md</div><div class="mini-row active">主题与色彩.md</div><div class="mini-row">桌面窗口.md</div></aside>
+                <article class="preview-doc">
+                  <p class="kicker">产品构想 / 主题与色彩.md</p>
+                  <h1>安静，但不虚弱</h1>
+                  <p class="lede">正文保持稳定墨色，界面退后一步。颜色只帮助识别选中、链接、焦点和真实状态。</p>
+                  <h2>长期阅读</h2>
+                  <p>Plainroot 不使用纯白纸面，也不会为了柔和而把正文整体做淡。用户仍能清楚地辨认标题、正文和<a href="#">当前链接</a>。</p>
+                  <div class="preview-callout"><strong>实时预览不会修改文档</strong><p>颜色草稿只作用于这个设置窗口；保存后才更新预设库。</p></div>
+                  <h2>状态语义</h2>
+                  <p>成功、警告和危险只在相应状态中出现，并同时使用文字说明。</p>
+                  <div class="semantic-row"><span class="semantic success">保存成功</span><span class="semantic warning">需要检查</span><span class="semantic danger">保存失败</span></div>
+                </article>
+                <aside class="preview-side right"><div class="mini-label">大纲</div><div class="mini-outline active">安静，但不虚弱</div><div class="mini-outline">长期阅读</div><div class="mini-outline">状态语义</div></aside>
+              </div>
+            </section>
+          </div>
+          <div class="validation" id="validation"><div class="validation-title"><span class="validation-dot"></span><span id="validationTitle">对比度通过</span></div><p id="validationText">正文 13.1:1 · 标题 14.7:1</p></div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span class="footer-status" id="footerStatus">Plainroot Neutral · 无未保存修改</span>
+        <span class="footer-spacer"></span>
+        <button class="button" id="cancelChanges" type="button">取消</button>
+        <button class="button primary" id="savePreset" type="button" disabled>保存预设</button>
+      </footer>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="deleteDialog">
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
+      <div class="dialog-body"><h2 id="deleteTitle">删除这个颜色预设？</h2><p>使用该预设的工作区将回退到 Plainroot Neutral。此操作不会修改任何 Markdown 文件。</p></div>
+      <div class="dialog-footer"><button class="button" data-close="deleteDialog" type="button">取消</button><button class="button danger" id="confirmDelete" type="button">删除并回退</button></div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="discardDialog">
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="discardTitle">
+      <div class="dialog-body"><h2 id="discardTitle">放弃颜色草稿？</h2><p>当前窗口将恢复进入主题工作室前的颜色，其他窗口始终没有受到草稿影响。</p></div>
+      <div class="dialog-footer"><button class="button" data-close="discardDialog" type="button">继续编辑</button><button class="button danger" id="confirmDiscard" type="button">放弃并返回</button></div>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      const tokenGroups = [
+        { name: "表面", tokens: [
+          ["chrome", "应用界面", "--chrome"], ["paper", "正文纸面", "--paper"]
+        ]},
+        { name: "文字", tokens: [
+          ["heading", "标题文字", "--heading"], ["text", "正文文字", "--text"], ["muted", "辅助文字", "--muted"]
+        ]},
+        { name: "结构", tokens: [
+          ["line", "分隔线", "--line"], ["accent", "强调色", "--accent"]
+        ]},
+        { name: "状态", tokens: [
+          ["success", "成功", "--success"], ["warning", "警告", "--warning"], ["danger", "危险", "--danger"]
+        ]}
+      ];
+
+      const neutralLight = { chrome: "#ECECED", paper: "#F3F3F2", heading: "#222226", text: "#28282C", muted: "#66666D", line: "#CECED2", accent: "#70677F", success: "#52735E", warning: "#8A6D3F", danger: "#9B5050" };
+      const neutralDark = { chrome: "#242428", paper: "#2B2B30", heading: "#E6E6E4", text: "#D2D2D0", muted: "#9A9A9F", line: "#444449", accent: "#9B91AA", success: "#7FA48A", warning: "#BA955E", danger: "#C47A7A" };
+      const clone = value => JSON.parse(JSON.stringify(value));
+      let presets = [
+        { id: "neutral", name: "Plainroot Neutral", builtIn: true, light: neutralLight, dark: neutralDark },
+        { id: "graphite", name: "Graphite Notes", builtIn: false, light: { ...neutralLight, chrome: "#E9E9EA", paper: "#F1F1F0", accent: "#5F6875" }, dark: { ...neutralDark, chrome: "#222529", paper: "#292D31", accent: "#8F9AAA" } },
+        { id: "moss", name: "Quiet Moss", builtIn: false, light: { ...neutralLight, accent: "#5F7466" }, dark: { ...neutralDark, accent: "#879B8D" } }
+      ];
+      let selectedId = "neutral";
+      let palette = "light";
+      let draft = clone(presets[0]);
+      let dirty = false;
+      let toastTimer;
+
+      const $ = (selector, root = document) => root.querySelector(selector);
+      const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+      const selected = () => presets.find(item => item.id === selectedId);
+      const isHex = value => /^#[0-9a-f]{6}$/i.test(value);
+
+      function hexToRgb(hex) {
+        const value = hex.replace("#", "");
+        return [0, 2, 4].map(index => parseInt(value.slice(index, index + 2), 16));
+      }
+      function rgbToHex(rgb) { return "#" + rgb.map(value => Math.round(value).toString(16).padStart(2, "0")).join("").toUpperCase(); }
+      function mix(a, b, amount) {
+        if (!isHex(a) || !isHex(b)) return a;
+        const ar = hexToRgb(a), br = hexToRgb(b);
+        return rgbToHex(ar.map((value, index) => value * (1 - amount) + br[index] * amount));
+      }
+      function luminance(hex) {
+        return hexToRgb(hex).map(value => value / 255).map(value => value <= .03928 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
+      }
+      function contrast(a, b) {
+        if (!isHex(a) || !isHex(b)) return 0;
+        const l1 = luminance(a), l2 = luminance(b);
+        return (Math.max(l1, l2) + .05) / (Math.min(l1, l2) + .05);
+      }
+
+      function showToast(message) {
+        clearTimeout(toastTimer);
+        $("#toast").textContent = message;
+        $("#toast").classList.add("show");
+        toastTimer = setTimeout(() => $("#toast").classList.remove("show"), 1900);
+      }
+
+      function renderPresetList() {
+        const root = $("#presetList");
+        root.innerHTML = "";
+        [true, false].forEach(builtIn => {
+          const items = presets.filter(item => item.builtIn === builtIn);
+          if (!items.length) return;
+          const label = document.createElement("div");
+          label.className = "preset-group";
+          label.textContent = builtIn ? "内置" : "我的预设";
+          root.append(label);
+          items.forEach(item => {
+            const row = document.createElement("button");
+            row.className = `preset-row${item.id === selectedId ? " active" : ""}`;
+            row.type = "button";
+            row.innerHTML = `<span class="preset-swatch"><i></i><i></i></span><span><span class="preset-name"></span><span class="preset-meta"></span></span><span class="lock"></span>`;
+            $(".preset-swatch i:first-child", row).style.background = item.light.paper;
+            $(".preset-swatch i:last-child", row).style.background = item.light.accent;
+            $(".preset-name", row).textContent = item.name;
+            $(".preset-meta", row).textContent = item.builtIn ? "安全回退预设" : "全局自定义";
+            $(".lock", row).textContent = item.builtIn ? "⌁" : "";
+            row.addEventListener("click", () => selectPreset(item.id));
+            root.append(row);
+          });
+        });
+      }
+
+      function renderTokens() {
+        const root = $("#tokenList");
+        root.innerHTML = "";
+        tokenGroups.forEach(group => {
+          const title = document.createElement("div");
+          title.className = "token-group";
+          title.textContent = group.name;
+          root.append(title);
+          group.tokens.forEach(([key, label, cssVar]) => {
+            const row = document.createElement("label");
+            row.className = "token-row";
+            row.innerHTML = `<span class="token-label"><strong></strong><span></span></span><input class="color-input" type="color"><input class="hex-input" type="text" maxlength="7" spellcheck="false">`;
+            $("strong", row).textContent = label;
+            $(".token-label span", row).textContent = cssVar;
+            const colorInput = $(".color-input", row);
+            const hexInput = $(".hex-input", row);
+            colorInput.setAttribute("aria-label", `${label}颜色选择器`);
+            hexInput.setAttribute("aria-label", `${label}十六进制颜色`);
+            colorInput.value = draft[palette][key];
+            hexInput.value = draft[palette][key];
+            colorInput.disabled = draft.builtIn;
+            hexInput.disabled = draft.builtIn;
+            colorInput.addEventListener("input", event => updateToken(key, event.target.value.toUpperCase()));
+            hexInput.addEventListener("input", event => {
+              const value = event.target.value.toUpperCase();
+              event.target.classList.toggle("invalid", !isHex(value));
+              if (isHex(value)) updateToken(key, value, false);
+              else validate();
+            });
+            root.append(row);
+          });
+        });
+      }
+
+      function updateToken(key, value, rerender = true) {
+        draft[palette][key] = value;
+        dirty = true;
+        applyTheme();
+        validate();
+        updateFooter();
+        if (rerender) renderTokens();
+      }
+
+      function applyTheme() {
+        const colors = draft[palette];
+        const root = $("#themeWindow");
+        Object.entries(colors).forEach(([key, value]) => { if (isHex(value)) root.style.setProperty(`--${key}`, value); });
+        root.style.setProperty("--chrome-strong", mix(colors.chrome, colors.text, palette === "light" ? .055 : .12));
+        root.style.setProperty("--paper-deep", mix(colors.paper, colors.text, palette === "light" ? .035 : .08));
+        root.style.setProperty("--line-strong", mix(colors.line, colors.text, palette === "light" ? .12 : .22));
+        root.style.setProperty("--quiet", mix(colors.muted, colors.paper, .28));
+      }
+
+      function validate() {
+        const colors = draft[palette];
+        const textRatio = contrast(colors.text, colors.paper);
+        const headingRatio = contrast(colors.heading, colors.paper);
+        const validHex = Object.values(colors).every(isHex);
+        const valid = validHex && textRatio >= 4.5 && headingRatio >= 3;
+        const box = $("#validation");
+        box.classList.toggle("error", !valid);
+        $("#validationTitle").textContent = valid ? "对比度通过" : !validHex ? "存在无效颜色值" : "对比度不足，暂不能保存";
+        $("#validationText").textContent = `正文 ${textRatio.toFixed(1)}:1 · 标题 ${headingRatio.toFixed(1)}:1${valid ? "" : " · 正文需 ≥ 4.5:1，标题需 ≥ 3:1"}`;
+        $("#savePreset").disabled = draft.builtIn || !dirty || !valid;
+        return valid;
+      }
+
+      function updateHeader() {
+        $("#presetName").value = draft.name;
+        $("#presetName").disabled = draft.builtIn;
+        $("#readonlyBadge").hidden = !draft.builtIn;
+        $("#presetHelper").textContent = draft.builtIn ? "复制内置预设后即可编辑。字体和正文宽度在“编辑器”中单独设置。" : "修改会实时预览当前窗口；保存后才同步使用该预设的其他窗口。";
+        $("#deletePreset").disabled = draft.builtIn;
+      }
+
+      function updateFooter() {
+        $("#footerStatus").textContent = `${draft.name} · ${dirty ? "有未保存的颜色草稿" : "无未保存修改"}`;
+      }
+
+      function selectPreset(id) {
+        if (id === selectedId) return;
+        if (dirty && !confirm("切换预设会放弃当前颜色草稿。继续吗？")) return;
+        selectedId = id;
+        draft = clone(selected());
+        dirty = false;
+        renderAll();
+      }
+
+      function renderAll() {
+        renderPresetList();
+        updateHeader();
+        renderTokens();
+        applyTheme();
+        validate();
+        updateFooter();
+      }
+
+      function duplicateCurrent() {
+        const copy = clone(draft);
+        copy.id = `preset-${Date.now()}`;
+        copy.name = `${draft.name} Copy`;
+        copy.builtIn = false;
+        presets.push(copy);
+        selectedId = copy.id;
+        draft = clone(copy);
+        dirty = true;
+        renderAll();
+        $("#presetName").focus();
+        $("#presetName").select();
+        showToast("已创建可编辑副本");
+      }
+
+      $("#presetName").addEventListener("input", event => {
+        draft.name = event.target.value;
+        dirty = true;
+        updateFooter();
+        validate();
+      });
+      $("#duplicatePreset").addEventListener("click", duplicateCurrent);
+      $("#newPreset").addEventListener("click", () => {
+        selectedId = `preset-${Date.now()}`;
+        draft = { id: selectedId, name: "Untitled preset", builtIn: false, light: clone(neutralLight), dark: clone(neutralDark) };
+        presets.push(clone(draft));
+        dirty = true;
+        renderAll();
+        $("#presetName").focus();
+        $("#presetName").select();
+      });
+      $("#deletePreset").addEventListener("click", () => { if (!draft.builtIn) $("#deleteDialog").classList.add("open"); });
+      $("#confirmDelete").addEventListener("click", () => {
+        presets = presets.filter(item => item.id !== selectedId);
+        selectedId = "neutral";
+        draft = clone(selected());
+        dirty = false;
+        $("#deleteDialog").classList.remove("open");
+        renderAll();
+        showToast("已删除预设并回退 Plainroot Neutral");
+      });
+
+      $$(".palette-tabs button").forEach(button => button.addEventListener("click", () => {
+        palette = button.dataset.palette;
+        $$(".palette-tabs button").forEach(item => item.classList.toggle("active", item === button));
+        renderTokens();
+        applyTheme();
+        validate();
+      }));
+
+      $("#resetDraft").addEventListener("click", () => {
+        draft = clone(selected());
+        dirty = false;
+        renderAll();
+        showToast("已恢复到上次保存的颜色");
+      });
+      $("#cancelChanges").addEventListener("click", () => {
+        if (!dirty) return window.location.href = "markdown-workbench.html";
+        $("#discardDialog").classList.add("open");
+      });
+      $("#windowClose").addEventListener("click", () => {
+        if (dirty) $("#discardDialog").classList.add("open");
+        else showToast("桌面版将关闭设置窗口");
+      });
+      $("#confirmDiscard").addEventListener("click", () => window.location.href = "markdown-workbench.html");
+      $("#backWorkbench").addEventListener("click", () => {
+        if (dirty) $("#discardDialog").classList.add("open");
+        else window.location.href = "markdown-workbench.html";
+      });
+
+      $("#savePreset").addEventListener("click", () => {
+        if (!validate()) return;
+        const normalized = draft.name.trim();
+        if (!normalized) return showToast("预设名称不能为空");
+        if (presets.some(item => item.id !== selectedId && item.name.toLowerCase() === normalized.toLowerCase())) return showToast("预设名称已存在");
+        draft.name = normalized;
+        const index = presets.findIndex(item => item.id === selectedId);
+        presets[index] = clone(draft);
+        dirty = false;
+        renderAll();
+        showToast("预设已保存，并同步到使用它的窗口");
+      });
+
+      $$('[data-close]').forEach(button => button.addEventListener("click", () => $("#" + button.dataset.close).classList.remove("open")));
+      $$(".modal-backdrop").forEach(backdrop => backdrop.addEventListener("click", event => { if (event.target === backdrop) backdrop.classList.remove("open"); }));
+
+      renderAll();
+    })();
+  </script>
+</body>
+</html>
