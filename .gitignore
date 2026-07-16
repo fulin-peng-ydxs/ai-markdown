@@ -1,0 +1,47 @@
+.idea
+.obsidian/
+/*.iml
+/**/*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 数据与产物（本地 DuckDB 单文件、parquet、导出）
+data/*.duckdb
+data/*.duckdb.wal
+data/*.duckdb.bak*
+data/parquet/
+data/exports/
+
+# 前端
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo
+frontend/test-results/
+frontend/playwright-report/
+
+# OS
+.DS_Store
+
+# 密钥（如 JWT secret、Tushare token 等，禁止入库）
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.local.example
+config/secrets.yaml
+
+# 后端运行时日志与 PID（start.sh 产物）
+logs/
+# AI 验证截图目录（任意含 screenshot(s) 的目录名，如 screenshots/、page-test-screenshots/）
+**/*screenshot*/

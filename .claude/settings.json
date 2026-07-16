@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Read(//**)",
+      "Edit(//**)",
+      "WebFetch",
+      "WebSearch",
+      "Glob",
+      "Grep",
+      "mcp__aiot-dm-database__*",
+      "mcp__Claude_Preview__preview_start"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(rm -rf ~)"
+    ]
+  },
+  "enableAllProjectMcpServers": true
+}
