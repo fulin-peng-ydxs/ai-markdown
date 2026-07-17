@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use serde::{Serialize, Serializer};
+
 use crate::error::{DesktopError, DesktopErrorCode};
 
 use super::{WorkspaceRelativePath, WorkspaceRootResolution};
@@ -96,20 +98,7 @@ pub fn windows_path_identity(path: &str) -> Result<String, DesktopError> {
         ));
     }
 
-    let slashes = path.replace('/', "\\");
-    let without_extended_prefix = if slashes
-        .get(..8)
-        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("\\\\?\\UNC\\"))
-    {
-        format!("\\\\{}", &slashes[8..])
-    } else if slashes
-        .get(..4)
-        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("\\\\?\\"))
-    {
-        slashes[4..].to_owned()
-    } else {
-        slashes
-    };
+    let without_extended_prefix = windows_public_path(path);
 
     if !is_absolute_windows_path(&without_extended_prefix) {
         return Err(DesktopError::new(
@@ -124,6 +113,33 @@ pub fn windows_path_identity(path: &str) -> Result<String, DesktopError> {
         identity.pop();
     }
     Ok(identity)
+}
+
+pub fn windows_public_path(path: &str) -> String {
+    let slashes = path.replace('/', "\\");
+    if slashes
+        .get(..8)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("\\\\?\\UNC\\"))
+    {
+        format!("\\\\{}", &slashes[8..])
+    } else if slashes
+        .get(..4)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("\\\\?\\"))
+    {
+        slashes[4..].to_owned()
+    } else {
+        slashes
+    }
+}
+
+pub(crate) fn serialize_public_path<S>(path: &Path, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let path = path.to_string_lossy();
+    #[cfg(windows)]
+    let path = windows_public_path(&path);
+    path.serialize(serializer)
 }
 
 fn is_absolute_windows_path(path: &str) -> bool {
@@ -224,6 +240,14 @@ mod tests {
                 "{invalid} is not an absolute Windows path"
             );
         }
+        assert_eq!(
+            super::windows_public_path(r"\\?\C:\Users\Alice\Notes"),
+            r"C:\Users\Alice\Notes"
+        );
+        assert_eq!(
+            super::windows_public_path(r"\\?\UNC\Server\Share\Notes"),
+            r"\\Server\Share\Notes"
+        );
     }
 
     #[test]

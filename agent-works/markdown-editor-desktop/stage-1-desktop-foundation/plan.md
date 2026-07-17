@@ -332,7 +332,7 @@
 - 边界与异常：错误消息不泄露无关绝对路径；相对路径中 `..`、绝对路径注入和链接越界均拒绝；同一链接根和真实路径使用 canonical root 去重。
 - 验证方式：Rust 参数化单测覆盖 macOS/Windows 路径样例、越界、大小写、根本身为链接、根内链接越界/循环和不可读路径。
 - 完成标准：每个前端文件操作都只能基于已登记 workspaceId 和根内相对路径执行。
-- 实际落地情况：已实现 Rust `WorkspaceDescriptor`、`FsEntry`、`FileRevision`、最近工作区/根会话模型、`DesktopError` 稳定错误码、校验式 `WorkspaceId`/相对路径反序列化、授权根解析与 canonical identity、Windows 前缀/分隔符/大小写身份归一和进程内 `WorkspaceRegistry`。根链接必须显式确认，根内链接默认拒绝，链接根与真实根按 canonical root 去重；前端仅获得 camelCase 序列化契约，不获得绝对路径拼接或直接 I/O 能力。macOS arm64 的 15 个 Rust 单测及 TypeScript 构建已通过；真实 Windows 文件系统行为仍由 T16 验证。详细清单见 `t2-domain-contract.md`。
+- 实际落地情况：已实现 Rust `WorkspaceDescriptor`、`FsEntry`、`FileRevision`、最近工作区/根会话模型、`DesktopError` 稳定错误码、校验式 `WorkspaceId`/相对路径反序列化、授权根解析与 canonical identity、Windows 前缀/分隔符/大小写身份归一和进程内 `WorkspaceRegistry`。根链接必须显式确认，根内链接默认拒绝，链接根与真实根按 canonical root 去重；Windows 对外路径去除扩展前缀，内部仍保留 canonical `PathBuf`。Rust 序列化字段与 TypeScript interface、Rust 错误码全集与前端常量均由自动契约测试防漂移。macOS arm64 的 17 个 Rust 单测及 TypeScript 构建已通过；真实 Windows 文件系统行为仍由 T16 验证。详细清单见 `t2-domain-contract.md`。
 
 ### 6.3 任务 T3：原生桌面壳、窗口标题和菜单
 

@@ -68,7 +68,7 @@
 - 2026-07-17 已在 macOS arm64 实际验证：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm build`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo check --locked --manifest-path src-tauri/Cargo.toml`、`cargo test --locked --manifest-path src-tauri/Cargo.toml`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`、`pnpm tauri build --no-bundle`。
 - `pnpm tauri build --no-bundle` 已生成本机 release 空壳；这只证明 T1 工具链与工程骨架可构建，不证明窗口、文件、页面或 Windows 行为完成。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。Windows 编译与 CI 实际 Node 版本留给 T16 验证，当前不得标记通过。
-- 当前自动化测试覆盖许可证拒绝策略及 T2 领域/路径安全单元测试；文件命令集成、桌面 E2E 与 CI 验证仍由后续任务建立。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
+- 当前自动化测试覆盖许可证拒绝策略、T2 领域/路径安全单元测试及 Rust↔TypeScript 契约 parity；文件命令集成、桌面 E2E 与 CI 验证仍由后续任务建立。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
 
 ## 文档、协作与 Git
 

@@ -23,6 +23,7 @@ pub enum WorkspaceAvailability {
 #[serde(rename_all = "camelCase")]
 pub struct RecentWorkspace {
     pub workspace_id: WorkspaceId,
+    #[serde(serialize_with = "crate::fs::serialize_public_path")]
     pub canonical_root: PathBuf,
     pub display_name: String,
     pub last_opened_at: u64,
@@ -99,6 +100,7 @@ mod tests {
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    use crate::contract_test::assert_interface_matches;
     use crate::error::DesktopErrorCode;
     use crate::fs::{inspect_workspace_root, WorkspaceDescriptor, WorkspaceId};
 
@@ -219,5 +221,26 @@ mod tests {
         assert_eq!(error.code, DesktopErrorCode::WorkspaceAlreadyRegistered);
 
         fs::remove_dir_all(parent).expect("fixture should be removed");
+    }
+
+    #[test]
+    fn persisted_state_serialization_matches_typescript_interfaces() {
+        let workspace_id = WorkspaceId::parse("workspace-1").unwrap();
+        let recent = super::RecentWorkspace {
+            workspace_id: workspace_id.clone(),
+            canonical_root: "/canonical/root".into(),
+            display_name: "root".to_owned(),
+            last_opened_at: 1_700_000_000_000,
+            availability: super::WorkspaceAvailability::Available,
+        };
+        assert_interface_matches("RecentWorkspace", &recent);
+
+        let session = super::WorkspaceSessionRoot {
+            workspace_id,
+            window_label: "workspace-window".to_owned(),
+            window_state_ref: Some("window-state-1".to_owned()),
+            last_active_at: 1_700_000_000_001,
+        };
+        assert_interface_matches("WorkspaceSessionRoot", &session);
     }
 }

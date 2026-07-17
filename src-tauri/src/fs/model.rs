@@ -59,6 +59,8 @@ impl WorkspaceRelativePath {
         }
 
         let segments = normalized.split('/').collect::<Vec<_>>();
+        // A colon is legal on some POSIX file systems but is rejected deliberately so the same
+        // relative contract cannot address an NTFS alternate data stream on Windows.
         if segments.iter().any(|segment| {
             segment.is_empty() || matches!(*segment, "." | "..") || segment.contains(':')
         }) {
@@ -95,7 +97,9 @@ fn invalid_relative_path(path: &str) -> DesktopError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceRootResolution {
+    #[serde(serialize_with = "super::path::serialize_public_path")]
     selected_path: PathBuf,
+    #[serde(serialize_with = "super::path::serialize_public_path")]
     canonical_root: PathBuf,
     display_name: String,
     root_is_symlink: bool,
@@ -139,7 +143,9 @@ impl WorkspaceRootResolution {
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceDescriptor {
     id: WorkspaceId,
+    #[serde(serialize_with = "super::path::serialize_public_path")]
     selected_path: PathBuf,
+    #[serde(serialize_with = "super::path::serialize_public_path")]
     canonical_root: PathBuf,
     display_name: String,
     writable: bool,
@@ -237,6 +243,8 @@ pub struct FileRevision {
 
 #[cfg(test)]
 mod tests {
+    use crate::contract_test::assert_interface_matches;
+
     use super::{FileRevision, LineEnding, TextEncoding, WorkspaceId, WorkspaceRelativePath};
 
     #[test]
@@ -284,10 +292,11 @@ mod tests {
             line_ending: LineEnding::Crlf,
         };
 
-        let json = serde_json::to_value(revision).expect("revision should serialize");
+        let json = serde_json::to_value(&revision).expect("revision should serialize");
         assert_eq!(json["modifiedAt"], 1_700_000_000_000_u64);
         assert_eq!(json["contentHash"], "sha256:example");
         assert_eq!(json["lineEnding"], "crlf");
+        assert_interface_matches("FileRevision", &revision);
     }
 
     #[test]
@@ -312,5 +321,36 @@ mod tests {
             error.code,
             crate::error::DesktopErrorCode::RootConfirmationRequired
         );
+    }
+
+    #[test]
+    fn workspace_and_entry_serialization_match_typescript_interfaces() {
+        let resolution = super::WorkspaceRootResolution::new(
+            "/selected/root".into(),
+            "/canonical/root".into(),
+            "root".to_owned(),
+            false,
+        );
+        assert_interface_matches("WorkspaceRootResolution", &resolution);
+
+        let descriptor = super::WorkspaceDescriptor::from_resolution(
+            WorkspaceId::parse("workspace-1").unwrap(),
+            resolution,
+            true,
+            Some(WorkspaceRelativePath::parse("README.md").unwrap()),
+            false,
+        )
+        .unwrap();
+        assert_interface_matches("WorkspaceDescriptor", &descriptor);
+
+        let entry = super::FsEntry {
+            relative_path: WorkspaceRelativePath::parse("docs/guide.md").unwrap(),
+            name: "guide.md".to_owned(),
+            kind: super::FsEntryKind::MarkdownFile,
+            writable: true,
+            symlink: false,
+            children_state: super::FsChildrenState::NotLoaded,
+        };
+        assert_interface_matches("FsEntry", &entry);
     }
 }

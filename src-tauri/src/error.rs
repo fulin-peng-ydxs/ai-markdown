@@ -4,9 +4,21 @@ use std::path::Path;
 
 use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DesktopErrorCode {
+macro_rules! define_desktop_error_codes {
+    ($($variant:ident),+ $(,)?) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+        #[serde(rename_all = "snake_case")]
+        pub enum DesktopErrorCode {
+            $($variant),+
+        }
+
+        impl DesktopErrorCode {
+            pub const ALL: &'static [Self] = &[$(Self::$variant),+];
+        }
+    };
+}
+
+define_desktop_error_codes!(
     InvalidWorkspaceId,
     WorkspaceNotRegistered,
     WorkspaceAlreadyRegistered,
@@ -21,7 +33,7 @@ pub enum DesktopErrorCode {
     NotFile,
     IoFailure,
     RegistryUnavailable,
-}
+);
 
 impl DesktopErrorCode {
     pub const fn message_key(self) -> &'static str {
@@ -99,6 +111,8 @@ impl std::error::Error for DesktopError {}
 mod tests {
     use std::path::Path;
 
+    use crate::contract_test::{assert_interface_matches, typescript_string_constant_values};
+
     use super::{DesktopError, DesktopErrorCode};
 
     #[test]
@@ -112,5 +126,22 @@ mod tests {
         assert!(json.contains("\"messageKey\":\"error.path.permissionDenied\""));
         assert!(json.contains("\"pathHint\":\"notes\""));
         assert!(!json.contains("/Users/alice"));
+        assert_interface_matches("DesktopError", &error);
+
+        let rust_codes = DesktopErrorCode::ALL
+            .iter()
+            .map(|code| {
+                serde_json::to_value(code)
+                    .expect("error code should serialize")
+                    .as_str()
+                    .expect("error code should serialize to a string")
+                    .to_owned()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rust_codes,
+            typescript_string_constant_values("DESKTOP_ERROR_CODES"),
+            "Rust and TypeScript desktop error code lists drifted"
+        );
     }
 }
