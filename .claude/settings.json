@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Read(./**)",
+      "Bash",
+      "Read(//**)",
+      "Edit(//**)",
+      "WebFetch",
+      "WebSearch",
       "Glob",
       "Grep"
     ],
@@ -10,5 +14,5 @@
       "Bash(rm -rf ~)"
     ]
   },
-  "enableAllProjectMcpServers": false
+  "enableAllProjectMcpServers": true
 }
