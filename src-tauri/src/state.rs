@@ -566,6 +566,25 @@ impl WorkspaceRegistry {
             .ok_or_else(|| DesktopError::new(DesktopErrorCode::WorkspaceNotRegistered, true, false))
     }
 
+    pub fn workspace_id_for_root(
+        &self,
+        canonical_root: &Path,
+    ) -> Result<Option<WorkspaceId>, DesktopError> {
+        let root_identity = native_path_identity(canonical_root)?;
+        let state = self.state.read().map_err(|_| registry_unavailable())?;
+        Ok(state.by_canonical_root.get(&root_identity).cloned())
+    }
+
+    pub fn unregister(&self, id: &WorkspaceId) -> Result<bool, DesktopError> {
+        let mut state = self.state.write().map_err(|_| registry_unavailable())?;
+        let Some(workspace) = state.by_id.remove(id) else {
+            return Ok(false);
+        };
+        let root_identity = native_path_identity(workspace.canonical_root())?;
+        state.by_canonical_root.remove(&root_identity);
+        Ok(true)
+    }
+
     pub fn resolve_existing(
         &self,
         id: &WorkspaceId,

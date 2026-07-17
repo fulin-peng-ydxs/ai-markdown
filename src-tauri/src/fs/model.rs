@@ -130,6 +130,10 @@ impl WorkspaceRootResolution {
         &self.canonical_root
     }
 
+    pub fn display_name(&self) -> &str {
+        &self.display_name
+    }
+
     pub fn root_is_symlink(&self) -> bool {
         self.root_is_symlink
     }
@@ -183,6 +187,18 @@ impl WorkspaceDescriptor {
 
     pub fn canonical_root(&self) -> &Path {
         &self.canonical_root
+    }
+
+    pub fn display_name(&self) -> &str {
+        &self.display_name
+    }
+
+    pub fn writable(&self) -> bool {
+        self.writable
+    }
+
+    pub fn initial_file(&self) -> Option<&WorkspaceRelativePath> {
+        self.initial_file.as_ref()
     }
 }
 

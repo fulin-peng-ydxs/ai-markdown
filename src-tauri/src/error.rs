@@ -43,6 +43,12 @@ define_desktop_error_codes!(
     StateBackupFailed,
     UnsupportedStateVersion,
     InvalidStateData,
+    DialogUnavailable,
+    UnsupportedMarkdownFile,
+    SelectionNotFound,
+    SelectionUnavailable,
+    SelectionConfirmationRequired,
+    RecentWorkspaceNotFound,
 );
 
 impl DesktopErrorCode {
@@ -72,6 +78,12 @@ impl DesktopErrorCode {
             Self::StateBackupFailed => "error.state.backupFailed",
             Self::UnsupportedStateVersion => "error.state.unsupportedVersion",
             Self::InvalidStateData => "error.state.invalidData",
+            Self::DialogUnavailable => "error.dialog.unavailable",
+            Self::UnsupportedMarkdownFile => "error.selection.unsupportedMarkdownFile",
+            Self::SelectionNotFound => "error.selection.notFound",
+            Self::SelectionUnavailable => "error.selection.unavailable",
+            Self::SelectionConfirmationRequired => "error.selection.confirmationRequired",
+            Self::RecentWorkspaceNotFound => "error.workspace.recentNotFound",
         }
     }
 }

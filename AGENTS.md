@@ -13,12 +13,12 @@
 - Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器，核心体验是目录工作区、多文档页签、所见即所得与源码无损切换、长文阅读和可编辑颜色预设。
 - T1 已建立并验证技术基线：Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以当前清单和锁文件为准。
 - Markdown 内容事实源始终是用户授权目录中的真实 `.md` 文件；首版不建立云端账号、在线协作、插件市场或私有内容数据库。
-- 当前仓库已完成 T1 工具链、T2 领域/路径安全契约、T3 原生窗口壳和 T4 版本化本地状态；T4 提供 Rust 私有 JSON 仓储、原子替换、损坏备份和未知版本保护，但尚无文件选择、工作区页面、扫描或 CRUD，也没有 Windows 实机、产品集成/E2E 与 CI，不得据此表述为 R1、R2、R14 或第一阶段整体完成。
+- 当前仓库已完成 T1 工具链、T2 领域/路径安全契约、T3 原生窗口壳、T4 版本化本地状态和 T5 系统选择/授权管线；T5 提供 Rust 发起的目录/`.md` 选择、一次性授权提案、父目录/链接确认边界、同根识别及最近记录复检，但尚无工作区页面、扫描、CRUD 或完整窗口打开协调，也没有 Windows 实机、产品集成/E2E 与 CI，不得据此表述为 R1、R2、R14 或第一阶段整体完成。
 
 ## 当前与目标代码边界
 
 - `agent-works/markdown-editor-desktop/`：本产品的需求、计划、原型和后续开发留痕；同一产品能力继续复用该目录或其语义明确的阶段子目录。
-- `src/`、`src-tauri/`：已建立前端空壳、共享桌面契约、Rust/Tauri 工程、原生窗口/菜单服务及版本化本地状态仓储；当前不含文件选择、扫描、CRUD 或工作区页面业务。
+- `src/`、`src-tauri/`：已建立前端空壳、共享桌面契约/调用封装、Rust/Tauri 工程、原生窗口/菜单服务、版本化本地状态仓储及工作区选择命令；当前不含扫描、CRUD、完整窗口协调或工作区页面业务。
 - `tests/`、`.github/`：仍是后续任务的目标结构，实际建立前不得作为已有测试或 CI 引用。
 - 前端只负责视图、用户意图和可观察状态；不得直接拼接任意绝对路径执行磁盘写操作。
 - Rust 命令层集中负责授权根、路径规范化、越界检查、文件扫描与 CRUD、安全写入、回收站和窗口协调。
@@ -68,7 +68,7 @@
 - 2026-07-17 已在 macOS arm64 实际验证：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm build`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo check --locked --manifest-path src-tauri/Cargo.toml`、`cargo test --locked --manifest-path src-tauri/Cargo.toml`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`、`pnpm tauri build --no-bundle`。
 - `pnpm tauri build --no-bundle` 已生成本机 release 可执行文件；T3 另以 `pnpm tauri build --bundles app` 生成并启动 macOS `.app`，实测原生窗口控件、标题、顶层菜单、禁用态及新建/关闭窗口链路。上述证据不证明文件、页面或 Windows 行为完成。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。Windows 编译与 CI 实际 Node 版本留给 T16 验证，当前不得标记通过。
-- 当前自动化测试覆盖许可证拒绝策略、T2 领域/路径安全、Rust↔TypeScript 契约 parity、T3 窗口协调/菜单启用态及 T4 本地状态初始化、往返、损坏/超限恢复、未知版本保护和原子失败，共 30 个 Rust 单元测试；文件命令集成、稳定桌面 E2E 与 CI 验证仍由后续任务建立。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
+- 当前自动化测试覆盖许可证拒绝策略、T2 领域/路径安全、Rust↔TypeScript 契约 parity、T3 窗口/菜单、T4 状态仓储及 T5 选择/授权/最近记录边界，共 43 个 Rust 单元测试；文件扫描/CRUD、真实选择器 UI、稳定桌面 E2E 与 CI 验证仍由后续任务建立。当前许可证扫描为 29 个 Node 包、431 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
 
 ## 文档、协作与 Git
 

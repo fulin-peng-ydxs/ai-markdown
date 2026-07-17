@@ -26,6 +26,12 @@ export const DESKTOP_ERROR_CODES = [
   "state_backup_failed",
   "unsupported_state_version",
   "invalid_state_data",
+  "dialog_unavailable",
+  "unsupported_markdown_file",
+  "selection_not_found",
+  "selection_unavailable",
+  "selection_confirmation_required",
+  "recent_workspace_not_found",
 ] as const;
 
 export type DesktopErrorCode = (typeof DESKTOP_ERROR_CODES)[number];
@@ -108,3 +114,30 @@ export interface PlainrootStateV1 {
   recentWorkspaces: RecentWorkspace[];
   workspaceSessions: WorkspaceSessionRoot[];
 }
+
+export type WorkspaceSelectionKind = "folder" | "markdown_file";
+
+export interface WorkspaceSelectionProposal {
+  selectionId: string;
+  kind: WorkspaceSelectionKind;
+  selectedPath: string;
+  canonicalRoot: string;
+  displayName: string;
+  initialFile: WorkspaceRelativePath | null;
+  rootIsSymlink: boolean;
+  scopeConfirmationRequired: boolean;
+  requiresConfirmation: boolean;
+}
+
+export type WorkspaceSelectionOutcome =
+  | { status: "cancelled" }
+  | {
+      status: "already_open";
+      workspaceId: WorkspaceId;
+      initialFile: WorkspaceRelativePath | null;
+    }
+  | { status: "ready"; proposal: WorkspaceSelectionProposal }
+  | {
+      status: "confirmation_required";
+      proposal: WorkspaceSelectionProposal;
+    };
