@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const virtualStore = join(projectRoot, "node_modules", ".pnpm");
+export const LICENSE_FILE_REVIEW = "SEE LICENSE FILE";
 
 function readPackage(packageDirectory) {
   try {
@@ -119,7 +120,7 @@ function collectRustPackages() {
       name: packageInfo.name,
       version: packageInfo.version,
       license: packageInfo.license ||
-        (packageInfo.license_file ? "SEE LICENSE FILE" : null),
+        (packageInfo.license_file ? LICENSE_FILE_REVIEW : null),
     }))
     .sort((left, right) =>
       `${left.name}@${left.version}`.localeCompare(
@@ -137,29 +138,50 @@ function summarize(packages) {
   return licenses;
 }
 
-const nodePackages = collectNodePackages();
-const rustPackages = collectRustPackages();
-const allPackages = [...nodePackages, ...rustPackages];
-const deniedLicense = /\b(?:AGPL|GPL|SSPL|BUSL)-/i;
-const problems = allPackages.filter(
-  (packageInfo) =>
-    !packageInfo.license || deniedLicense.test(packageInfo.license),
-);
-const report = {
-  generatedAt: new Date().toISOString(),
-  summary: {
-    nodePackages: nodePackages.length,
-    rustPackages: rustPackages.length,
-    problems: problems.length,
-    nodeLicenses: summarize(nodePackages),
-    rustLicenses: summarize(rustPackages),
-  },
-  problems,
-  ...(process.argv.includes("--json") ? { nodePackages, rustPackages } : {}),
-};
+export function findLicenseProblems(packages) {
+  const deniedLicense = /\b(?:AGPL|GPL|SSPL|BUSL)(?:\b|-)/i;
+  return packages.filter(
+    (packageInfo) =>
+      !packageInfo.license ||
+      packageInfo.license === LICENSE_FILE_REVIEW ||
+      deniedLicense.test(packageInfo.license),
+  );
+}
 
-console.log(JSON.stringify(report, null, 2));
+function buildReport(nodePackages, rustPackages, includeInventory) {
+  const problems = findLicenseProblems([...nodePackages, ...rustPackages]);
+  return {
+    generatedAt: new Date().toISOString(),
+    summary: {
+      nodePackages: nodePackages.length,
+      rustPackages: rustPackages.length,
+      problems: problems.length,
+      nodeLicenses: summarize(nodePackages),
+      rustLicenses: summarize(rustPackages),
+    },
+    problems,
+    ...(includeInventory ? { nodePackages, rustPackages } : {}),
+  };
+}
 
-if (problems.length > 0) {
-  process.exitCode = 1;
+function run() {
+  const fixtureArgumentIndex = process.argv.indexOf("--policy-fixture");
+  const report = fixtureArgumentIndex >= 0
+    ? buildReport(
+        JSON.parse(readFileSync(resolve(process.argv[fixtureArgumentIndex + 1]), "utf8")),
+        [],
+        true,
+      )
+    : buildReport(
+        collectNodePackages(),
+        collectRustPackages(),
+        process.argv.includes("--json"),
+      );
+
+  console.log(JSON.stringify(report, null, 2));
+  if (report.problems.length > 0) process.exitCode = 1;
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  run();
 }

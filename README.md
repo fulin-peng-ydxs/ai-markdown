@@ -16,8 +16,9 @@ nvm use
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build
+pnpm test:licenses
 pnpm licenses:check
-cargo check --manifest-path src-tauri/Cargo.toml
+cargo check --locked --manifest-path src-tauri/Cargo.toml
 pnpm tauri build --no-bundle
 ```
 

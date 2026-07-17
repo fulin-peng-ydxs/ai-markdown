@@ -1,0 +1,54 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { dirname, join } from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+import {
+  findLicenseProblems,
+  LICENSE_FILE_REVIEW,
+} from "./check-licenses.mjs";
+
+const scriptsDirectory = dirname(fileURLToPath(import.meta.url));
+
+test("license policy blocks copyleft, missing, and manual-review entries", () => {
+  const problems = findLicenseProblems([
+    { name: "versioned", version: "1", license: "GPL-3.0-only" },
+    { name: "bare", version: "1", license: "GPL" },
+    { name: "agpl", version: "1", license: "AGPL" },
+    { name: "missing", version: "1", license: null },
+    { name: "file-only", version: "1", license: LICENSE_FILE_REVIEW },
+    { name: "permissive", version: "1", license: "MIT OR Apache-2.0" },
+    { name: "weak-copyleft-or-mit", version: "1", license: "LGPL-2.1 OR MIT" },
+  ]);
+
+  assert.deepEqual(
+    problems.map(({ name }) => name),
+    ["versioned", "bare", "agpl", "missing", "file-only"],
+  );
+});
+
+test("license policy CLI exits with code 1 for an invalid fixture", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      join(scriptsDirectory, "check-licenses.mjs"),
+      "--policy-fixture",
+      join(scriptsDirectory, "fixtures", "license-policy-invalid.json"),
+    ],
+    { encoding: "utf8" },
+  );
+
+  assert.equal(result.status, 1, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.summary.problems, 4);
+  assert.deepEqual(
+    report.problems.map(({ name }) => name),
+    [
+      "versioned-copyleft",
+      "bare-copyleft",
+      "missing-license",
+      "license-file-only",
+    ],
+  );
+});

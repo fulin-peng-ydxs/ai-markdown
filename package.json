@@ -13,6 +13,7 @@
     "build": "tsc -b && vite build",
     "licenses:check": "node scripts/check-licenses.mjs",
     "licenses:inventory": "node scripts/check-licenses.mjs --json",
+    "test:licenses": "node --test scripts/check-licenses.test.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },

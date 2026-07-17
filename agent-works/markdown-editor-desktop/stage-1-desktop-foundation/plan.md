@@ -31,7 +31,7 @@
 
 ### 2.1 仓库与工具链事实
 
-- 当前仓库由绿地文档阶段进入 T1 工程阶段：已有需求、闭环文档、HTML 原型、`DESIGN.md`、页面开发流程、协作配置和可构建的 Tauri/React 空壳；尚无业务代码、数据库、运行时组件库、测试或 CI 基线。
+- 当前仓库由绿地文档阶段进入 T1 工程阶段：已有需求、闭环文档、HTML 原型、`DESIGN.md`、页面开发流程、协作配置、可构建的 Tauri/React 空壳和许可证策略测试；尚无业务代码、数据库、运行时组件库、产品单元/集成/E2E 或 CI 基线。
 - 本机 NVM 已安装 Node `v24.11.1`、npm `11.6.2`、Corepack `0.34.2` 和 pnpm `11.5.1`；当前默认 Node 仍为 18，因此项目必须用 `.nvmrc` 和 `packageManager` 固定工具链，所有本地命令先执行 `nvm use`。
 - 本机已安装 macOS Command Line Tools、Apple Clang 16，以及由 T1 安装并锁定的 Rust/Cargo 1.97.1、rustfmt 与 clippy；完整 Xcode 未安装且移动端不在本阶段范围。
 - Windows 实机无法由用户提供。第一阶段使用 GitHub Actions `windows-latest` 完成真实 Windows 编译、Rust/前端测试和 WebdriverIO 桌面 E2E；原生文件选择器、系统回收站、文件管理器定位等不适合稳定无人值守验证的交互，保留为最终跨平台/发布前 Windows 人工验收，不虚假标记为已通过。
@@ -310,15 +310,15 @@
 
 - 状态：已完成。
 - 依赖：无。
-- 涉及文件/模块：`.nvmrc`、`package.json`、`pnpm-lock.yaml`、`rust-toolchain.toml`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json`。
+- 涉及文件/模块：`.gitignore`、`.claude/settings.json`、`.nvmrc`、`README.md`、`package.json`、`pnpm-lock.yaml`、`rust-toolchain.toml`、`index.html`、`src/`、`tsconfig*.json`、`vite.config.ts`、`scripts/check-licenses*.mjs`、`scripts/fixtures/`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/build.rs`、`src-tauri/src/`、`src-tauri/capabilities/`、`src-tauri/icons/`、`src-tauri/tauri.conf.json`。
 - 目标：在本机现有 Node 24.11.1、pnpm 和经 PoC 确认的 Rust stable 版本上建立可重复构建的 Tauri 2 + React + TypeScript + Vite 8 工程。
 - 操作：用 `.nvmrc` 和 CI 固定 Node 24.11.1，`engines.node` 声明兼容范围，`packageManager` 固定 pnpm 精确版本；安装 Rust stable、rustfmt、clippy，并在 PoC 通过后把 `rust-toolchain.toml` 固定到实际验证版本；脚手架初始化；验证 Tauri/Rust/React/Vite/plugin/候选回收站库许可证、包体和兼容性；提交锁文件。
 - 产出：可运行桌面空壳、锁文件、依赖与许可证清单、PoC 结论。
 - 影响范围：全项目开发与 CI 基线。
 - 边界与异常：不安装 Milkdown、CodeMirror 或 SQLite；依赖 PoC 失败时回到候选技术确认，不静默替换框架。
-- 验证方式：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm build`、`cargo check --manifest-path src-tauri/Cargo.toml`、`pnpm tauri build --no-bundle`。
+- 验证方式：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm build`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo check --locked --manifest-path src-tauri/Cargo.toml`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml -- -D warnings`、`pnpm tauri build --no-bundle`。
 - 完成标准：全新检出可按 README 命令构建；本地实际 Node 为 24.11.1，并提供供 T16 CI 消费的同一精确版本钉子；Rust/Cargo 和前端锁文件可复现。CI 实际版本只能在依赖 T1 的 T16 中验证，不反向阻塞 T1。
-- 实际落地情况：已建立 Tauri 2.11.5 + React 19.2.7 + TypeScript 6.0.2 + Vite 8.1.4 空壳，锁定 Node 24.11.1、pnpm 11.5.1 与 Rust 1.97.1；提交 `pnpm-lock.yaml`、`Cargo.lock`、最小 capability/CSP、README 和许可证审计脚本。macOS arm64 已通过 frozen-lockfile 安装、前端构建、Cargo check/fmt/clippy、完整依赖许可证扫描及 `tauri build --no-bundle`；后续插件与 `trash` 仅在临时 PoC 编译，不提前注册到正式应用。详细证据见 `t1-toolchain-poc.md`。
+- 实际落地情况：已建立 Tauri 2.11.5 + React 19.2.7 + TypeScript 6.0.2 + Vite 8.1.4 空壳，锁定 Node 24.11.1、pnpm 11.5.1 与 Rust 1.97.1；提交双锁文件、最小 capability/CSP、README、许可证审计脚本及拒绝策略测试。macOS arm64 已通过 frozen-lockfile 安装、前端构建、许可证策略测试、Cargo check/fmt/clippy、完整依赖许可证扫描及 `tauri build --no-bundle`；后续插件与 `trash` 仅在临时 PoC 编译，不提前注册到正式应用。已清除早期协作配置中的兄弟项目忽略项、数据库 MCP 和全局读写/命令预授权。`tauri.conf.json` 的 800×600 仅为无页面空壳占位，不是产品默认尺寸；`DESIGN.md` 的 1180/1050/820/760 是响应式验证断点，T3 负责确认正式默认窗口尺寸，T12/T13 负责断点矩阵验收。详细证据见 `t1-toolchain-poc.md`。
 
 ### 6.2 任务 T2：领域契约、路径安全与错误模型
 
@@ -650,7 +650,7 @@ pnpm test:e2e
 
 - Windows 原生选择器、回收站、Explorer 和菜单没有用户侧实机环境；CI 可覆盖真实 Windows 编译、命令和稳定 E2E，但不能完全替代人工可用性验收。缓解：T16 作为阶段门禁，T17 明确登记未验证人工项，最终跨平台阶段通过临时 Windows 设备、云桌面或受托测试取得证据。
 - Windows WebView2 桌面 E2E 可能波动。缓解：构建/单元/命令集成为硬门禁；单用例最多重试一次并上传诊断；重复波动用例隔离并登记，核心链路不能静默放行。
-- Rust 尚未安装；T1 是开发启动前置，安装失败会阻塞 Tauri 工程构建。
+- macOS 已安装并锁定 Rust 1.97.1，T1 构建链路已验证；Windows 工具链和同锁文件构建仍未验证，由 T16 建立 CI 后收口，当前不得把 macOS 结果外推为双平台通过。
 - Windows 与 POSIX 的覆盖写语义不同；T10 必须做平台适配和故障注入，不能只用通用 rename 假定原子性。
 - 文件监听在不同平台产生的事件序列不同；T9 以最终磁盘一致为准并合并事件，不把单一事件序列写成跨平台契约。
 - macOS App Store 沙箱的安全作用域书签会改变授权持久化方案。本阶段假设先做直接分发桌面应用；若确定 App Store 首发，需在发布计划前补充授权数据迁移设计。

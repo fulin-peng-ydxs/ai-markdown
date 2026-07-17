@@ -63,14 +63,15 @@
 - 测试文件系统能力时只使用临时工作区或仓库 fixtures，不触碰用户真实文档目录。
 - 必测高风险链路包括路径越界、符号链接、只读、权限撤销、写入中断、外部修改、同目录窗口去重、部分恢复失败和主题草稿回退。
 - 密钥、个人绝对路径、本机应用数据、日志、构建产物和测试截图不得进入版本库；需要示例时使用脱敏相对路径或 fixtures。
+- 仓库级 AI 工具配置不得预授权兄弟项目 MCP、无限制 Bash/Edit 或仓库外绝对路径读写；项目 MCP 默认关闭，确有项目内服务时再按最小范围显式启用。
 - 不执行未经用户授权的提交、推送、发布、删除或其他破坏性操作。
 
 ## 命令与验证状态
 
-- 2026-07-17 已在 macOS arm64 实际验证：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm build`、`pnpm licenses:check`、`cargo check --locked --manifest-path src-tauri/Cargo.toml`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml -- -D warnings`、`pnpm tauri build --no-bundle`。
+- 2026-07-17 已在 macOS arm64 实际验证：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm build`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo check --locked --manifest-path src-tauri/Cargo.toml`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml -- -D warnings`、`pnpm tauri build --no-bundle`。
 - `pnpm tauri build --no-bundle` 已生成本机 release 空壳；这只证明 T1 工具链与工程骨架可构建，不证明窗口、文件、页面或 Windows 行为完成。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。Windows 编译与 CI 实际 Node 版本留给 T16 验证，当前不得标记通过。
-- 当前尚无自动化测试脚本；新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
+- 当前自动化测试仅覆盖许可证拒绝策略；产品单元、集成、桌面 E2E 与 CI 验证仍由后续任务建立。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
 
 ## 文档、协作与 Git
 

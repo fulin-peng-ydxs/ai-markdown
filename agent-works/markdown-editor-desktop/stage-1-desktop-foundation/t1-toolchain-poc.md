@@ -46,7 +46,8 @@ PoC 只证明当前 macOS + Rust 组合能够解析和编译这些候选，不�
 
 ## 4. 许可证与包体结果
 
-- `pnpm licenses:check` 扫描 `pnpm-lock.yaml` 对应的 29 个已安装 Node 包和 `Cargo.lock` 中的 417 个 Rust 包，缺失许可证或命中 AGPL/GPL/SSPL/BUSL 阻断规则的包为 0。
+- `pnpm licenses:check` 扫描 `pnpm-lock.yaml` 对应的 29 个已安装 Node 包和 `Cargo.lock` 中的 417 个 Rust 包，缺失许可证、仅提供 `license_file` 而需人工复核，或命中 AGPL/GPL/SSPL/BUSL 阻断规则的包为 0。
+- `pnpm test:licenses` 使用固定夹具验证带版本 GPL、裸 GPL/AGPL、缺失许可证和仅 `license_file` 四类输入均进入阻断列表，并验证 CLI 以退出码 1 失败；LGPL 与 MIT 的可选表达式不会被误判为 GPL。
 - 完整明细可用 `pnpm licenses:inventory` 重新生成；该检查是工程准入辅助，不替代发布前法律审阅。
 - 前端 `dist/` 为 192 KiB；macOS arm64 的无安装包 release 可执行文件为 10 MiB。
 - `src-tauri/icons/icon.png` 是 Tauri 官方脚手架占位图标，只用于让空壳编译；`bundle.active` 当前为 `false`，正式打包前必须替换品牌图标并在对应任务验收。
@@ -58,6 +59,7 @@ PoC 只证明当前 macOS + Rust 组合能够解析和编译这些候选，不�
 | `nvm use` / `node --version` / `pnpm --version` | 通过：24.11.1 / 11.5.1 |
 | `pnpm install --frozen-lockfile` | 通过；锁文件可复现 |
 | `pnpm build` | 通过；Vite 8.1.4 生产构建成功 |
+| `pnpm test:licenses` | 通过；2 个策略测试覆盖判定列表与非零退出码 |
 | `cargo check --locked --manifest-path src-tauri/Cargo.toml` | 通过 |
 | `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` | 通过 |
 | `cargo clippy --locked --manifest-path src-tauri/Cargo.toml -- -D warnings` | 通过 |
@@ -66,3 +68,10 @@ PoC 只证明当前 macOS + Rust 组合能够解析和编译这些候选，不�
 | `pnpm tauri build --no-bundle` | 通过；生成 `src-tauri/target/release/plainroot` |
 
 `pnpm tauri info` 报告完整 Xcode 未安装，但同时确认 Command Line Tools、Rust 1.97.1、Node 24.11.1 与 pnpm 11.5.1；Tauri 官方桌面前置条件允许只使用 Command Line Tools，且本次桌面 release 已实际构建通过。移动端不在当前范围。
+
+## 6. T1 审查整改记录
+
+- 清理早期提交遗留的 DuckDB、Parquet、Tushare、独立 `frontend/`、Python 与后端日志忽略项；`.gitignore` 仅保留当前 Tauri/React 工程、通用本地密钥和验证截图产物。
+- `.claude/settings.json` 移除 AIOT 达梦 MCP、Claude Preview MCP、无限制 Bash/Edit、仓库外绝对路径 Read 与自动启用全部项目 MCP；只预授权仓库内 Read、Glob、Grep，其他能力恢复为显式确认。
+- README 的 Cargo 可复现命令补齐 `--locked`；计划 T1 文件清单与验证命令同步到真实交付。
+- 初始窗口 800×600 保持为空壳编译占位。`DESIGN.md` 只把 1180/1050/820/760 定义为响应式断点，没有定义产品默认窗口尺寸；T3/T12/T13 按各自任务确认默认值并完成多宽度验证。
