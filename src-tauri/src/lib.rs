@@ -15,6 +15,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::workspace::WorkspaceAccessService::default())
+        .manage(fs::scan::WorkspaceScanService::default())
         .menu(menu::build_app_menu)
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
         .invoke_handler(tauri::generate_handler![
@@ -23,6 +24,10 @@ pub fn run() {
             commands::workspace::authorize_workspace_selection,
             commands::workspace::cancel_workspace_selection,
             commands::workspace::validate_recent_workspace,
+            commands::files::start_workspace_scan,
+            commands::files::poll_workspace_scan,
+            commands::files::cancel_workspace_scan,
+            commands::files::read_markdown_file,
         ])
         .setup(|app| {
             let persistent_state = state::PersistentAppState::initialize_for_app(app.handle());

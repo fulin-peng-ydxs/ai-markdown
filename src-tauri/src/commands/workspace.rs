@@ -111,6 +111,10 @@ impl Default for WorkspaceAccessService {
 }
 
 impl WorkspaceAccessService {
+    pub fn workspace(&self, id: &WorkspaceId) -> Result<WorkspaceDescriptor, DesktopError> {
+        self.registry.workspace(id)
+    }
+
     fn prepare_folder(
         &self,
         selected_path: Option<PathBuf>,

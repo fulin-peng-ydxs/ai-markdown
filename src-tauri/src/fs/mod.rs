@@ -1,5 +1,7 @@
 mod model;
 mod path;
+pub mod read;
+pub mod scan;
 
 pub use model::{
     FileRevision, FsChildrenState, FsEntry, FsEntryKind, LineEnding, TextEncoding,

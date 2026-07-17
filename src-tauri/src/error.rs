@@ -49,6 +49,9 @@ define_desktop_error_codes!(
     SelectionUnavailable,
     SelectionConfirmationRequired,
     RecentWorkspaceNotFound,
+    ScanNotFound,
+    ScanUnavailable,
+    FileChangedDuringRead,
 );
 
 impl DesktopErrorCode {
@@ -84,6 +87,9 @@ impl DesktopErrorCode {
             Self::SelectionUnavailable => "error.selection.unavailable",
             Self::SelectionConfirmationRequired => "error.selection.confirmationRequired",
             Self::RecentWorkspaceNotFound => "error.workspace.recentNotFound",
+            Self::ScanNotFound => "error.scan.notFound",
+            Self::ScanUnavailable => "error.scan.unavailable",
+            Self::FileChangedDuringRead => "error.file.changedDuringRead",
         }
     }
 }

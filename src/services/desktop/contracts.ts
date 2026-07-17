@@ -32,6 +32,9 @@ export const DESKTOP_ERROR_CODES = [
   "selection_unavailable",
   "selection_confirmation_required",
   "recent_workspace_not_found",
+  "scan_not_found",
+  "scan_unavailable",
+  "file_changed_during_read",
 ] as const;
 
 export type DesktopErrorCode = (typeof DESKTOP_ERROR_CODES)[number];
@@ -86,6 +89,36 @@ export interface FileRevision {
   contentHash: string;
   encoding: TextEncoding;
   lineEnding: LineEnding;
+}
+
+export const MARKDOWN_READ_STATUSES = [
+  "ready",
+  "unsupported_encoding",
+  "too_large",
+] as const;
+
+export type MarkdownReadStatus = (typeof MARKDOWN_READ_STATUSES)[number];
+
+export interface MarkdownReadResult {
+  relativePath: WorkspaceRelativePath;
+  status: MarkdownReadStatus;
+  content: string | null;
+  revision: FileRevision;
+}
+
+export interface WorkspaceScanStart {
+  scanId: string;
+  workspaceId: WorkspaceId;
+  directory: WorkspaceRelativePath | null;
+}
+
+export interface WorkspaceScanBatch {
+  scanId: string;
+  processed: number;
+  entries: FsEntry[];
+  issues: DesktopError[];
+  complete: boolean;
+  cancelled: boolean;
 }
 
 export type WorkspaceAvailability =
