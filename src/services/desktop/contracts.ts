@@ -115,7 +115,13 @@ export interface PlainrootStateV1 {
   workspaceSessions: WorkspaceSessionRoot[];
 }
 
-export type WorkspaceSelectionKind = "folder" | "markdown_file";
+export const WORKSPACE_SELECTION_KINDS = [
+  "folder",
+  "markdown_file",
+] as const;
+
+export type WorkspaceSelectionKind =
+  (typeof WORKSPACE_SELECTION_KINDS)[number];
 
 export interface WorkspaceSelectionProposal {
   selectionId: string;
@@ -129,15 +135,28 @@ export interface WorkspaceSelectionProposal {
   requiresConfirmation: boolean;
 }
 
+export const WORKSPACE_SELECTION_STATUSES = [
+  "cancelled",
+  "already_open",
+  "ready",
+  "confirmation_required",
+] as const;
+
+export type WorkspaceSelectionStatus =
+  (typeof WORKSPACE_SELECTION_STATUSES)[number];
+
 export type WorkspaceSelectionOutcome =
-  | { status: "cancelled" }
+  | { status: (typeof WORKSPACE_SELECTION_STATUSES)[0] }
   | {
-      status: "already_open";
+      status: (typeof WORKSPACE_SELECTION_STATUSES)[1];
       workspaceId: WorkspaceId;
       initialFile: WorkspaceRelativePath | null;
     }
-  | { status: "ready"; proposal: WorkspaceSelectionProposal }
   | {
-      status: "confirmation_required";
+      status: (typeof WORKSPACE_SELECTION_STATUSES)[2];
+      proposal: WorkspaceSelectionProposal;
+    }
+  | {
+      status: (typeof WORKSPACE_SELECTION_STATUSES)[3];
       proposal: WorkspaceSelectionProposal;
     };

@@ -68,7 +68,7 @@
 - 2026-07-17 已在 macOS arm64 实际验证：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm build`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo check --locked --manifest-path src-tauri/Cargo.toml`、`cargo test --locked --manifest-path src-tauri/Cargo.toml`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`、`pnpm tauri build --no-bundle`。
 - `pnpm tauri build --no-bundle` 已生成本机 release 可执行文件；T3 另以 `pnpm tauri build --bundles app` 生成并启动 macOS `.app`，实测原生窗口控件、标题、顶层菜单、禁用态及新建/关闭窗口链路。上述证据不证明文件、页面或 Windows 行为完成。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。Windows 编译与 CI 实际 Node 版本留给 T16 验证，当前不得标记通过。
-- 当前自动化测试覆盖许可证拒绝策略、T2 领域/路径安全、Rust↔TypeScript 契约 parity、T3 窗口/菜单、T4 状态仓储及 T5 选择/授权/最近记录边界，共 43 个 Rust 单元测试；文件扫描/CRUD、真实选择器 UI、稳定桌面 E2E 与 CI 验证仍由后续任务建立。当前许可证扫描为 29 个 Node 包、431 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
+- 当前自动化测试覆盖许可证拒绝策略、T2 领域/路径安全、Rust↔TypeScript 契约 parity、T3 窗口/菜单、T4 状态仓储及 T5 选择/授权/最近记录边界，共 44 个 Rust 单元测试；文件扫描/CRUD、真实选择器 UI、稳定桌面 E2E 与 CI 验证仍由后续任务建立。当前许可证扫描为 29 个 Node 包、431 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
 
 ## 文档、协作与 Git
 

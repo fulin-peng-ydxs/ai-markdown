@@ -9,7 +9,7 @@
 ## 已落地契约
 
 - Rust 模型：`WorkspaceDescriptor`、`WorkspaceRootResolution`、`FsEntry`、`FileRevision`、`RecentWorkspace`、`WorkspaceSessionRoot` 与 `DesktopError`。
-- 前端镜像：`src/services/desktop/contracts.ts`，字段使用 camelCase，枚举值使用 snake_case；Rust 单测逐模型比较序列化字段集合，并全量比较错误码与 `DESKTOP_ERROR_CODES`，任一侧单独变更都会失败。T2 建立了 14 个基础错误码，T3 新增 4 个窗口错误码，T4 新增 6 个状态仓储错误码，T5 新增 6 个选择/最近记录错误码，均受同一 parity 测试约束。
+- 前端镜像：`src/services/desktop/contracts.ts`，字段使用 camelCase，枚举值使用 snake_case；Rust 单测逐模型比较序列化字段集合，全量比较错误码与 `DESKTOP_ERROR_CODES`，并将 T5 的选择类型、tagged union 状态及 `already_open` 字段与 TypeScript 常量/固定 JSON 形状对照，任一侧单独变更都会失败。T2 建立了 14 个基础错误码，T3 新增 4 个窗口错误码，T4 新增 6 个状态仓储错误码，T5 新增 6 个选择/最近记录错误码，均受同一 parity 测试约束。
 - 安全入口：`WorkspaceId` 和 `WorkspaceRelativePath` 在构造及反序列化时统一校验；拒绝父级、绝对路径、Windows drive/UNC 注入及 NTFS ADS 冒号；工作区描述符只能由已检查的根解析结果建立。
 - 注册边界：`WorkspaceRegistry` 只接受已构造描述符；后续前端文件命令必须提交已登记 `workspaceId + relativePath`，由 Rust 重新解析实际路径。
 - 链接规则：所选根本身是符号链接时保留 selected path、展示 canonical root 并要求确认；根内链接默认不跟随，链接越界与循环均拒绝；链接根和真实根按 canonical identity 去重。

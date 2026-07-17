@@ -604,6 +604,7 @@ fn registry_unavailable() -> DesktopError {
 mod tests {
     use std::fs;
     use std::path::Path;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use crate::contract_test::assert_interface_matches;
@@ -616,13 +617,18 @@ mod tests {
         MAX_STATE_FILE_BYTES, STATE_FILE_NAME,
     };
 
+    static TEST_ROOT_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+
     fn test_root() -> std::path::PathBuf {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock should be valid")
             .as_nanos();
-        let path =
-            std::env::temp_dir().join(format!("plainroot-registry-{}-{nonce}", std::process::id()));
+        let sequence = TEST_ROOT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "plainroot-registry-{}-{nonce}-{sequence}",
+            std::process::id()
+        ));
         fs::create_dir_all(&path).expect("root should be created");
         path
     }

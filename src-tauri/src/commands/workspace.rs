@@ -185,6 +185,9 @@ impl WorkspaceAccessService {
         }
     }
 
+    /// `confirmed` acknowledges that the trusted local UI completed its confirmation flow. It is
+    /// not a filesystem authority: every call still consumes a pending capability and revalidates
+    /// the canonical root, file type, extension, and link boundary before registry insertion.
     pub fn authorize(
         &self,
         selection_id: &str,
@@ -478,6 +481,9 @@ fn ensure_selection_unchanged(
     if original_identity != current_identity || original.initial_file != current.initial_file {
         return Err(selection_error(DesktopErrorCode::InvalidSelectedRoot, true));
     }
+    // Link syntax is not part of the authorization identity: replacing a selected folder with a
+    // link to the same canonical target preserves the exact scope the user selected. A different
+    // target still fails the identity comparison above before the workspace is registered.
     Ok(())
 }
 
@@ -530,13 +536,15 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-    use crate::contract_test::assert_interface_matches;
+    use crate::contract_test::{assert_interface_matches, typescript_string_constant_values};
     use crate::error::DesktopErrorCode;
+    use crate::fs::{WorkspaceId, WorkspaceRelativePath};
     use crate::state::{PersistentAppState, StateRepositoryStatus};
 
     use super::{
         resolve_markdown_selection, workspace_id_for_root, WorkspaceAccessService,
-        WorkspaceSelectionOutcome, MAX_PENDING_SELECTIONS, PENDING_SELECTION_LIFETIME,
+        WorkspaceSelectionKind, WorkspaceSelectionOutcome, WorkspaceSelectionProposal,
+        MAX_PENDING_SELECTIONS, PENDING_SELECTION_LIFETIME,
     };
 
     struct TestDirectory(PathBuf);
@@ -585,6 +593,76 @@ mod tests {
             WorkspaceSelectionOutcome::Cancelled
         );
         assert_eq!(access.pending_count(), 0);
+    }
+
+    #[test]
+    fn selection_kind_and_tagged_outcome_match_typescript_contract() {
+        let rust_kinds = [
+            WorkspaceSelectionKind::Folder,
+            WorkspaceSelectionKind::MarkdownFile,
+        ]
+        .into_iter()
+        .map(|kind| {
+            serde_json::to_value(kind)
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+        assert_eq!(
+            rust_kinds,
+            typescript_string_constant_values("WORKSPACE_SELECTION_KINDS")
+        );
+
+        let proposal = WorkspaceSelectionProposal {
+            selection_id: "selection-v1-contract".to_owned(),
+            kind: WorkspaceSelectionKind::MarkdownFile,
+            selected_path: PathBuf::from("contract-root"),
+            canonical_root: PathBuf::from("contract-root"),
+            display_name: "contract-root".to_owned(),
+            initial_file: Some(WorkspaceRelativePath::parse("note.md").unwrap()),
+            root_is_symlink: false,
+            scope_confirmation_required: true,
+            requires_confirmation: true,
+        };
+        let workspace_id = WorkspaceId::parse("workspace-v1-contract").unwrap();
+        let outcomes = [
+            WorkspaceSelectionOutcome::Cancelled,
+            WorkspaceSelectionOutcome::AlreadyOpen {
+                workspace_id,
+                initial_file: Some(WorkspaceRelativePath::parse("note.md").unwrap()),
+            },
+            WorkspaceSelectionOutcome::Ready {
+                proposal: proposal.clone(),
+            },
+            WorkspaceSelectionOutcome::ConfirmationRequired { proposal },
+        ];
+        let serialized = outcomes
+            .iter()
+            .map(|outcome| serde_json::to_value(outcome).unwrap())
+            .collect::<Vec<_>>();
+        let rust_statuses = serialized
+            .iter()
+            .map(|outcome| outcome["status"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rust_statuses,
+            typescript_string_constant_values("WORKSPACE_SELECTION_STATUSES")
+        );
+        assert_eq!(serialized[0], serde_json::json!({ "status": "cancelled" }));
+        assert_eq!(
+            serialized[1],
+            serde_json::json!({
+                "status": "already_open",
+                "workspaceId": "workspace-v1-contract",
+                "initialFile": "note.md"
+            })
+        );
+        assert_eq!(serialized[2]["status"], "ready");
+        assert!(serialized[2].get("proposal").is_some());
+        assert_eq!(serialized[3]["status"], "confirmation_required");
+        assert!(serialized[3].get("proposal").is_some());
     }
 
     #[test]
