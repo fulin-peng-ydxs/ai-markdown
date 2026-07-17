@@ -20,6 +20,12 @@ export const DESKTOP_ERROR_CODES = [
   "window_create_failed",
   "window_focus_failed",
   "window_close_failed",
+  "state_unavailable",
+  "state_read_failed",
+  "state_write_failed",
+  "state_backup_failed",
+  "unsupported_state_version",
+  "invalid_state_data",
 ] as const;
 
 export type DesktopErrorCode = (typeof DESKTOP_ERROR_CODES)[number];
@@ -95,4 +101,10 @@ export interface WorkspaceSessionRoot {
   windowLabel: string;
   windowStateRef: string | null;
   lastActiveAt: number;
+}
+
+export interface PlainrootStateV1 {
+  schemaVersion: 1;
+  recentWorkspaces: RecentWorkspace[];
+  workspaceSessions: WorkspaceSessionRoot[];
 }

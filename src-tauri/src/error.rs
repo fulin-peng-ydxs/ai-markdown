@@ -37,6 +37,12 @@ define_desktop_error_codes!(
     WindowCreateFailed,
     WindowFocusFailed,
     WindowCloseFailed,
+    StateUnavailable,
+    StateReadFailed,
+    StateWriteFailed,
+    StateBackupFailed,
+    UnsupportedStateVersion,
+    InvalidStateData,
 );
 
 impl DesktopErrorCode {
@@ -60,6 +66,12 @@ impl DesktopErrorCode {
             Self::WindowCreateFailed => "error.window.createFailed",
             Self::WindowFocusFailed => "error.window.focusFailed",
             Self::WindowCloseFailed => "error.window.closeFailed",
+            Self::StateUnavailable => "error.state.unavailable",
+            Self::StateReadFailed => "error.state.readFailed",
+            Self::StateWriteFailed => "error.state.writeFailed",
+            Self::StateBackupFailed => "error.state.backupFailed",
+            Self::UnsupportedStateVersion => "error.state.unsupportedVersion",
+            Self::InvalidStateData => "error.state.invalidData",
         }
     }
 }
