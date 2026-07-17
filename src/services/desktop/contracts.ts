@@ -16,6 +16,10 @@ export const DESKTOP_ERROR_CODES = [
   "not_file",
   "io_failure",
   "registry_unavailable",
+  "window_not_found",
+  "window_create_failed",
+  "window_focus_failed",
+  "window_close_failed",
 ] as const;
 
 export type DesktopErrorCode = (typeof DESKTOP_ERROR_CODES)[number];

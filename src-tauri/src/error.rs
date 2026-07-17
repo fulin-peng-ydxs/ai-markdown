@@ -33,6 +33,10 @@ define_desktop_error_codes!(
     NotFile,
     IoFailure,
     RegistryUnavailable,
+    WindowNotFound,
+    WindowCreateFailed,
+    WindowFocusFailed,
+    WindowCloseFailed,
 );
 
 impl DesktopErrorCode {
@@ -52,6 +56,10 @@ impl DesktopErrorCode {
             Self::NotFile => "error.path.notFile",
             Self::IoFailure => "error.io.failure",
             Self::RegistryUnavailable => "error.workspace.registryUnavailable",
+            Self::WindowNotFound => "error.window.notFound",
+            Self::WindowCreateFailed => "error.window.createFailed",
+            Self::WindowFocusFailed => "error.window.focusFailed",
+            Self::WindowCloseFailed => "error.window.closeFailed",
         }
     }
 }
