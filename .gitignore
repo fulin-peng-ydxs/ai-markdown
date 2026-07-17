@@ -29,6 +29,13 @@ frontend/.vite/
 frontend/*.tsbuildinfo
 frontend/test-results/
 frontend/playwright-report/
+/node_modules/
+/dist/
+/.pnpm-store/
+
+# Tauri / Rust
+/src-tauri/target/
+/src-tauri/gen/
 
 # OS
 .DS_Store
