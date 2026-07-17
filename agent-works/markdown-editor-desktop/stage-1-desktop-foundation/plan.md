@@ -4,7 +4,7 @@
 >
 > 当前阶段：阶段 1——原生桌面壳、本地授权、文件模型、安全写入底座和窗口创建/目录决策壳
 >
-> 计划状态：进行中（T1 已完成，T2 待开始）
+> 计划状态：进行中（T1、T2 已完成，T3 待开始）
 >
 > 需求编号规则：完全沿用 `requirement.md` 的 R1～R34，不新增、重排或改变 R 编号含义。
 
@@ -31,7 +31,7 @@
 
 ### 2.1 仓库与工具链事实
 
-- 当前仓库由绿地文档阶段进入 T1 工程阶段：已有需求、闭环文档、HTML 原型、`DESIGN.md`、页面开发流程、协作配置、可构建的 Tauri/React 空壳和许可证策略测试；尚无业务代码、数据库、运行时组件库、产品单元/集成/E2E 或 CI 基线。
+- 当前仓库已完成 T1 工程基线和 T2 领域契约：具备可构建的 Tauri/React 空壳、许可证策略测试、Rust/TypeScript 共享模型、授权根与相对路径安全校验及 Rust 单元测试；尚无扫描、CRUD、窗口、页面、数据库、产品集成/E2E 或 CI 基线。
 - 本机 NVM 已安装 Node `v24.11.1`、npm `11.6.2`、Corepack `0.34.2` 和 pnpm `11.5.1`；当前默认 Node 仍为 18，因此项目必须用 `.nvmrc` 和 `packageManager` 固定工具链，所有本地命令先执行 `nvm use`。
 - 本机已安装 macOS Command Line Tools、Apple Clang 16，以及由 T1 安装并锁定的 Rust/Cargo 1.97.1、rustfmt 与 clippy；完整 Xcode 未安装且移动端不在本阶段范围。
 - Windows 实机无法由用户提供。第一阶段使用 GitHub Actions `windows-latest` 完成真实 Windows 编译、Rust/前端测试和 WebdriverIO 桌面 E2E；原生文件选择器、系统回收站、文件管理器定位等不适合稳定无人值守验证的交互，保留为最终跨平台/发布前 Windows 人工验收，不虚假标记为已通过。
@@ -66,7 +66,7 @@
 | 需求编号 | 需求内容 | 当前阶段覆盖 | 开发状态 | 第一阶段任务编号 | 当前阶段验证方式 |
 | --- | --- | --- | --- | --- | --- |
 | R1 | Windows + macOS 桌面应用与本地优先工作区 | 桌面壳、真实选择器、授权根、离线启动、原生窗口和菜单；Windows 原生 UI 人工项不在本阶段伪称通过 | 进行中 | T1、T3、T5、T11～T17 | T1 已验证 macOS 空壳构建；其余按 macOS 实机、Windows CI 构建/命令集成/稳定 E2E 与未覆盖项登记 |
-| R2 | Markdown 文件与文件夹目录管理 | 扫描、读取、文件树、CRUD、回收站、系统定位和外部变化；不含编辑会话联动 | 待开始 | T2、T5～T10、T12～T17 | 临时工作区集成、文件树 E2E、回收站/权限/监听故障测试 |
+| R2 | Markdown 文件与文件夹目录管理 | 扫描、读取、文件树、CRUD、回收站、系统定位和外部变化；不含编辑会话联动 | 进行中 | T2、T5～T10、T12～T17 | T2 已验证授权根、相对路径和错误契约；其余使用临时工作区集成、文件树 E2E、回收站/权限/监听故障测试 |
 | R3 | Markdown 所见即所得查看与编辑 | 阶段外，需另立阶段计划 | 跳过 | - | 后续计划必须逐项承接需求 §11 的 R3 验收，不得复用第一阶段任务号 |
 | R4 | 当前文档标题大纲 | 阶段外，需另立阶段计划 | 跳过 | - | 后续计划必须覆盖 H1～H6、空态、联动和异常验收 |
 | R5 | 自动保存、恢复与外部修改冲突处理 | 仅安全写入与修订原语；不含自动保存、恢复快照和冲突 UI | 待开始 | T10、T15、T17 | 原子写故障注入、修订准确性、失败保持原文件；完整 R5 后续另验 |
@@ -270,7 +270,7 @@
 | 范围类别 | 需求编号 | 需求内容/来源 | 第一阶段开发内容 | 第一阶段任务 | 状态 | 偏差判断 | 验证与后续约束 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 必须实现 | R1 | 双平台桌面应用与授权工作区 | 桌面壳、授权、窗口、菜单、P1/P2 与双平台 CI | T1、T3、T5、T11～T17 | 进行中 | 部分覆盖 | T1 工具链与 macOS 空壳已完成；其余验证见 §8，Windows 原生 UI 未取得人工证据前不标完整完成 |
-| 必须实现 | R2 | 文件与文件夹目录管理 | 文件层扫描、读取、CRUD、删除、定位与监听 | T2、T5～T10、T12～T17 | 待开始 | 部分覆盖 | 临时目录、故障注入、P1 E2E；编辑会话耦合留后续独立计划 |
+| 必须实现 | R2 | 文件与文件夹目录管理 | 文件层扫描、读取、CRUD、删除、定位与监听 | T2、T5～T10、T12～T17 | 进行中 | 部分覆盖 | T2 领域与路径安全底座已完成；其余使用临时目录、故障注入、P1 E2E，编辑会话耦合留后续独立计划 |
 | 必须实现 | R3 | 所见即所得编辑 | 阶段外 | - | 跳过 | 未覆盖 | 后续独立计划按需求 §11 验收 |
 | 必须实现 | R4 | 当前文档大纲 | 阶段外 | - | 跳过 | 未覆盖 | 后续独立计划按需求 §11 验收 |
 | 必须实现 | R5 | 自动保存、恢复与冲突 | 仅安全写入与修订底座 | T10、T15、T17 | 待开始 | 部分覆盖 | 故障注入验证不破坏原文件；完整状态机后续另立计划 |
@@ -318,11 +318,11 @@
 - 边界与异常：不安装 Milkdown、CodeMirror 或 SQLite；依赖 PoC 失败时回到候选技术确认，不静默替换框架。
 - 验证方式：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm build`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo check --locked --manifest-path src-tauri/Cargo.toml`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml -- -D warnings`、`pnpm tauri build --no-bundle`。
 - 完成标准：全新检出可按 README 命令构建；本地实际 Node 为 24.11.1，并提供供 T16 CI 消费的同一精确版本钉子；Rust/Cargo 和前端锁文件可复现。CI 实际版本只能在依赖 T1 的 T16 中验证，不反向阻塞 T1。
-- 实际落地情况：已建立 Tauri 2.11.5 + React 19.2.7 + TypeScript 6.0.2 + Vite 8.1.4 空壳，锁定 Node 24.11.1、pnpm 11.5.1 与 Rust 1.97.1；提交双锁文件、最小 capability/CSP、README、许可证审计脚本及拒绝策略测试。macOS arm64 已通过 frozen-lockfile 安装、前端构建、许可证策略测试、Cargo check/fmt/clippy、完整依赖许可证扫描及 `tauri build --no-bundle`；后续插件与 `trash` 仅在临时 PoC 编译，不提前注册到正式应用。已清除早期协作配置中的兄弟项目忽略项、数据库 MCP 和全局读写/命令预授权。`tauri.conf.json` 的 800×600 仅为无页面空壳占位，不是产品默认尺寸；`DESIGN.md` 的 1180/1050/820/760 是响应式验证断点，T3 负责确认正式默认窗口尺寸，T12/T13 负责断点矩阵验收。详细证据见 `t1-toolchain-poc.md`。
+- 实际落地情况：已建立 Tauri 2.11.5 + React 19.2.7 + TypeScript 6.0.2 + Vite 8.1.4 空壳，锁定 Node 24.11.1、pnpm 11.5.1 与 Rust 1.97.1；提交双锁文件、最小 capability/CSP、README、许可证审计脚本及拒绝策略测试。macOS arm64 已通过 frozen-lockfile 安装、前端构建、许可证策略测试、Cargo check/fmt/clippy、完整依赖许可证扫描及 `tauri build --no-bundle`；后续插件与 `trash` 仅在临时 PoC 编译，不提前注册到正式应用。`tauri.conf.json` 的 800×600 仅为无页面空壳占位，不是产品默认尺寸；`DESIGN.md` 的 1180/1050/820/760 是响应式验证断点，T3 负责确认正式默认窗口尺寸，T12/T13 负责断点矩阵验收。详细证据见 `t1-toolchain-poc.md`。
 
 ### 6.2 任务 T2：领域契约、路径安全与错误模型
 
-- 状态：待开始。
+- 状态：已完成。
 - 依赖：T1。
 - 涉及文件/模块：`src-tauri/src/fs/`、`src-tauri/src/state.rs`、`src/services/desktop/`、共享 TypeScript 类型。
 - 目标：建立 4.2 的模型和稳定错误契约。
@@ -332,7 +332,7 @@
 - 边界与异常：错误消息不泄露无关绝对路径；相对路径中 `..`、绝对路径注入和链接越界均拒绝；同一链接根和真实路径使用 canonical root 去重。
 - 验证方式：Rust 参数化单测覆盖 macOS/Windows 路径样例、越界、大小写、根本身为链接、根内链接越界/循环和不可读路径。
 - 完成标准：每个前端文件操作都只能基于已登记 workspaceId 和根内相对路径执行。
-- 实际落地情况：待实施。
+- 实际落地情况：已实现 Rust `WorkspaceDescriptor`、`FsEntry`、`FileRevision`、最近工作区/根会话模型、`DesktopError` 稳定错误码、校验式 `WorkspaceId`/相对路径反序列化、授权根解析与 canonical identity、Windows 前缀/分隔符/大小写身份归一和进程内 `WorkspaceRegistry`。根链接必须显式确认，根内链接默认拒绝，链接根与真实根按 canonical root 去重；前端仅获得 camelCase 序列化契约，不获得绝对路径拼接或直接 I/O 能力。macOS arm64 的 15 个 Rust 单测及 TypeScript 构建已通过；真实 Windows 文件系统行为仍由 T16 验证。详细清单见 `t2-domain-contract.md`。
 
 ### 6.3 任务 T3：原生桌面壳、窗口标题和菜单
 

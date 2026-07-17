@@ -19,6 +19,7 @@ pnpm build
 pnpm test:licenses
 pnpm licenses:check
 cargo check --locked --manifest-path src-tauri/Cargo.toml
+cargo test --locked --manifest-path src-tauri/Cargo.toml
 pnpm tauri build --no-bundle
 ```
 
