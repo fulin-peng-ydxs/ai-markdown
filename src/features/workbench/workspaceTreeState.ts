@@ -4,6 +4,8 @@ import type {
   WorkspaceRelativePath,
   WorkspaceScanBatch,
   WorkspaceScanStart,
+  WorkspaceMutationKind,
+  WorkspaceMutationResult,
 } from "../../services/desktop/contracts";
 
 export type DirectoryLoadStatus =
@@ -24,12 +26,21 @@ export interface WorkspaceTreeState {
   entries: Record<WorkspaceRelativePath, FsEntry>;
   children: Record<string, WorkspaceRelativePath[]>;
   scans: Record<string, DirectoryScanState>;
+  mutation: WorkspaceTreeMutationState | null;
+}
+
+export interface WorkspaceTreeMutationState {
+  id: string;
+  kind: WorkspaceMutationKind;
+  sourcePath: WorkspaceRelativePath | null;
+  status: "processing" | "failed";
+  error: DesktopError | null;
 }
 
 const ROOT_KEY = "";
 
 export function createWorkspaceTreeState(): WorkspaceTreeState {
-  return { entries: {}, children: {}, scans: {} };
+  return { entries: {}, children: {}, scans: {}, mutation: null };
 }
 
 export function beginDirectoryScan(
@@ -61,6 +72,7 @@ export function beginDirectoryScan(
         issues: [],
       },
     },
+    mutation: state.mutation,
   };
 }
 
@@ -100,6 +112,86 @@ export function applyDirectoryScanBatch(
         issues,
       },
     },
+    mutation: state.mutation,
+  };
+}
+
+export function beginWorkspaceTreeMutation(
+  state: WorkspaceTreeState,
+  id: string,
+  kind: WorkspaceMutationKind,
+  sourcePath: WorkspaceRelativePath | null,
+): WorkspaceTreeState {
+  return {
+    ...state,
+    mutation: { id, kind, sourcePath, status: "processing", error: null },
+  };
+}
+
+export function applyWorkspaceTreeMutationSuccess(
+  state: WorkspaceTreeState,
+  id: string,
+  result: WorkspaceMutationResult,
+): WorkspaceTreeState {
+  if (!state.mutation || state.mutation.id !== id) {
+    return state;
+  }
+  const previousPath = result.previousPath;
+  const nextPath = result.entry.relativePath;
+  const entries: Record<WorkspaceRelativePath, FsEntry> = {};
+  for (const [path, entry] of Object.entries(state.entries)) {
+    const mapped = previousPath ? replacePathPrefix(path, previousPath, nextPath) : path;
+    entries[mapped] = path === previousPath ? result.entry : { ...entry, relativePath: mapped };
+  }
+  entries[nextPath] = result.entry;
+
+  const children: Record<string, WorkspaceRelativePath[]> = {};
+  const previousParent = previousPath ? parentPath(previousPath) : null;
+  const nextParent = parentPath(nextPath);
+  for (const [parent, paths] of Object.entries(state.children)) {
+    const mappedParent = previousPath
+      ? replacePathPrefix(parent, previousPath, nextPath)
+      : parent;
+    const mappedPaths = paths.map((path) =>
+      previousPath ? replacePathPrefix(path, previousPath, nextPath) : path,
+    );
+    children[mappedParent] =
+      previousParent !== null && previousParent !== nextParent && parent === previousParent
+        ? mappedPaths.filter((path) => path !== nextPath)
+        : mappedPaths;
+  }
+  if (!previousPath || previousParent !== nextParent) {
+    children[nextParent] = [
+      ...new Set([...(children[nextParent] ?? []), nextPath]),
+    ];
+  }
+
+  const affectedParents = new Set([
+    previousParent ?? nextParent,
+    nextParent,
+  ]);
+  const scans = Object.fromEntries(
+    Object.entries(state.scans).filter(
+      ([directory]) =>
+        !affectedParents.has(directory) &&
+        (!previousPath || !isSameOrInside(directory, previousPath)) &&
+        !isSameOrInside(directory, nextPath),
+    ),
+  );
+  return { entries, children, scans, mutation: null };
+}
+
+export function applyWorkspaceTreeMutationFailure(
+  state: WorkspaceTreeState,
+  id: string,
+  error: DesktopError,
+): WorkspaceTreeState {
+  if (!state.mutation || state.mutation.id !== id) {
+    return state;
+  }
+  return {
+    ...state,
+    mutation: { ...state.mutation, status: "failed", error },
   };
 }
 
@@ -124,4 +216,25 @@ export function markDirectoryScanCancelled(
 
 function isInsideDirectory(path: string, directory: string): boolean {
   return directory === ROOT_KEY || path.startsWith(`${directory}/`);
+}
+
+function isSameOrInside(path: string, directory: string): boolean {
+  return path === directory || isInsideDirectory(path, directory);
+}
+
+function replacePathPrefix(
+  path: string,
+  previousPath: string,
+  nextPath: string,
+): string {
+  if (path === previousPath) {
+    return nextPath;
+  }
+  return path.startsWith(`${previousPath}/`)
+    ? `${nextPath}${path.slice(previousPath.length)}`
+    : path;
+}
+
+function parentPath(path: string): string {
+  return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ROOT_KEY;
 }

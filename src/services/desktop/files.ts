@@ -6,6 +6,7 @@ import type {
   WorkspaceRelativePath,
   WorkspaceScanBatch,
   WorkspaceScanStart,
+  WorkspaceMutationResult,
 } from "./contracts";
 
 export function startWorkspaceScan(
@@ -35,5 +36,53 @@ export function readMarkdownFile(
   return invoke<MarkdownReadResult>("read_markdown_file", {
     workspaceId,
     relativePath,
+  });
+}
+
+export function createMarkdownFile(
+  workspaceId: WorkspaceId,
+  name: string,
+  parent: WorkspaceRelativePath | null = null,
+): Promise<WorkspaceMutationResult> {
+  return invoke<WorkspaceMutationResult>("create_markdown_file", {
+    workspaceId,
+    parent,
+    name,
+  });
+}
+
+export function createWorkspaceDirectory(
+  workspaceId: WorkspaceId,
+  name: string,
+  parent: WorkspaceRelativePath | null = null,
+): Promise<WorkspaceMutationResult> {
+  return invoke<WorkspaceMutationResult>("create_workspace_directory", {
+    workspaceId,
+    parent,
+    name,
+  });
+}
+
+export function renameWorkspaceEntry(
+  workspaceId: WorkspaceId,
+  relativePath: WorkspaceRelativePath,
+  name: string,
+): Promise<WorkspaceMutationResult> {
+  return invoke<WorkspaceMutationResult>("rename_workspace_entry", {
+    workspaceId,
+    relativePath,
+    name,
+  });
+}
+
+export function moveWorkspaceEntry(
+  workspaceId: WorkspaceId,
+  relativePath: WorkspaceRelativePath,
+  targetDirectory: WorkspaceRelativePath | null,
+): Promise<WorkspaceMutationResult> {
+  return invoke<WorkspaceMutationResult>("move_workspace_entry", {
+    workspaceId,
+    relativePath,
+    targetDirectory,
   });
 }

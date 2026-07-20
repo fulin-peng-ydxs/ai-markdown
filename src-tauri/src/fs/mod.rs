@@ -1,4 +1,5 @@
 mod model;
+pub mod mutate;
 mod path;
 pub mod read;
 pub mod scan;

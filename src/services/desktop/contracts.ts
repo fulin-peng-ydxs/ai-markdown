@@ -35,6 +35,12 @@ export const DESKTOP_ERROR_CODES = [
   "scan_not_found",
   "scan_unavailable",
   "file_changed_during_read",
+  "invalid_entry_name",
+  "reserved_entry_name",
+  "target_already_exists",
+  "cross_device_move",
+  "invalid_move_target",
+  "mutation_unavailable",
 ] as const;
 
 export type DesktopErrorCode = (typeof DESKTOP_ERROR_CODES)[number];
@@ -119,6 +125,22 @@ export interface WorkspaceScanBatch {
   issues: DesktopError[];
   complete: boolean;
   cancelled: boolean;
+}
+
+export const WORKSPACE_MUTATION_KINDS = [
+  "create_file",
+  "create_directory",
+  "rename",
+  "move",
+] as const;
+
+export type WorkspaceMutationKind =
+  (typeof WORKSPACE_MUTATION_KINDS)[number];
+
+export interface WorkspaceMutationResult {
+  kind: WorkspaceMutationKind;
+  previousPath: WorkspaceRelativePath | null;
+  entry: FsEntry;
 }
 
 export type WorkspaceAvailability =

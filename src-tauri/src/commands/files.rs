@@ -3,6 +3,7 @@ use std::fs;
 use tauri::State;
 
 use crate::error::{DesktopError, DesktopErrorCode};
+use crate::fs::mutate::{WorkspaceMutationResult, WorkspaceMutationService};
 use crate::fs::read::{self, MarkdownReadResult};
 use crate::fs::scan::{WorkspaceScanBatch, WorkspaceScanService, WorkspaceScanStart};
 use crate::fs::{resolve_existing_workspace_path, WorkspaceId, WorkspaceRelativePath};
@@ -64,4 +65,56 @@ pub async fn read_markdown_file(
     tauri::async_runtime::spawn_blocking(move || read::read_markdown_file(&path, relative_path))
         .await
         .map_err(|_| DesktopError::new(DesktopErrorCode::IoFailure, true, true))?
+}
+
+#[tauri::command]
+pub fn create_markdown_file(
+    workspace_id: WorkspaceId,
+    parent: Option<String>,
+    name: String,
+    access: State<'_, WorkspaceAccessService>,
+    mutations: State<'_, WorkspaceMutationService>,
+) -> Result<WorkspaceMutationResult, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    mutations.create_markdown_file(workspace.canonical_root(), parent.as_deref(), &name)
+}
+
+#[tauri::command]
+pub fn create_workspace_directory(
+    workspace_id: WorkspaceId,
+    parent: Option<String>,
+    name: String,
+    access: State<'_, WorkspaceAccessService>,
+    mutations: State<'_, WorkspaceMutationService>,
+) -> Result<WorkspaceMutationResult, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    mutations.create_directory(workspace.canonical_root(), parent.as_deref(), &name)
+}
+
+#[tauri::command]
+pub fn rename_workspace_entry(
+    workspace_id: WorkspaceId,
+    relative_path: String,
+    name: String,
+    access: State<'_, WorkspaceAccessService>,
+    mutations: State<'_, WorkspaceMutationService>,
+) -> Result<WorkspaceMutationResult, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    mutations.rename(workspace.canonical_root(), &relative_path, &name)
+}
+
+#[tauri::command]
+pub fn move_workspace_entry(
+    workspace_id: WorkspaceId,
+    relative_path: String,
+    target_directory: Option<String>,
+    access: State<'_, WorkspaceAccessService>,
+    mutations: State<'_, WorkspaceMutationService>,
+) -> Result<WorkspaceMutationResult, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    mutations.move_entry(
+        workspace.canonical_root(),
+        &relative_path,
+        target_directory.as_deref(),
+    )
 }

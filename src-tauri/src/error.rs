@@ -52,6 +52,12 @@ define_desktop_error_codes!(
     ScanNotFound,
     ScanUnavailable,
     FileChangedDuringRead,
+    InvalidEntryName,
+    ReservedEntryName,
+    TargetAlreadyExists,
+    CrossDeviceMove,
+    InvalidMoveTarget,
+    MutationUnavailable,
 );
 
 impl DesktopErrorCode {
@@ -90,6 +96,12 @@ impl DesktopErrorCode {
             Self::ScanNotFound => "error.scan.notFound",
             Self::ScanUnavailable => "error.scan.unavailable",
             Self::FileChangedDuringRead => "error.file.changedDuringRead",
+            Self::InvalidEntryName => "error.file.invalidName",
+            Self::ReservedEntryName => "error.file.reservedName",
+            Self::TargetAlreadyExists => "error.file.targetAlreadyExists",
+            Self::CrossDeviceMove => "error.file.crossDeviceMove",
+            Self::InvalidMoveTarget => "error.file.invalidMoveTarget",
+            Self::MutationUnavailable => "error.file.mutationUnavailable",
         }
     }
 }
