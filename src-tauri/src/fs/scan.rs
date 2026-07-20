@@ -11,7 +11,10 @@ use serde::Serialize;
 
 use crate::error::{DesktopError, DesktopErrorCode};
 
-use super::{FsChildrenState, FsEntry, FsEntryKind, WorkspaceId, WorkspaceRelativePath};
+use super::{
+    metadata_writable_hint, FsChildrenState, FsEntry, FsEntryKind, WorkspaceId,
+    WorkspaceRelativePath,
+};
 
 const SCAN_BATCH_SIZE: usize = 128;
 const SCAN_CHANNEL_CAPACITY: usize = 4;
@@ -285,7 +288,7 @@ fn scan_directory(
             relative_path,
             name,
             kind,
-            writable: !metadata.permissions().readonly(),
+            writable: metadata_writable_hint(&metadata),
             symlink: false,
             children_state: if kind == FsEntryKind::Directory {
                 FsChildrenState::NotLoaded

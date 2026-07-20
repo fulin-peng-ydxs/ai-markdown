@@ -13,8 +13,9 @@ use tauri_plugin_dialog::{DialogExt, FilePath};
 
 use crate::error::{DesktopError, DesktopErrorCode};
 use crate::fs::{
-    inspect_workspace_root, native_path_identity, resolve_existing_workspace_path,
-    WorkspaceDescriptor, WorkspaceId, WorkspaceRelativePath, WorkspaceRootResolution,
+    inspect_workspace_root, metadata_writable_hint, native_path_identity,
+    resolve_existing_workspace_path, WorkspaceDescriptor, WorkspaceId, WorkspaceRelativePath,
+    WorkspaceRootResolution,
 };
 use crate::state::{
     PersistentAppState, PlainrootStateV1, RecentWorkspace, WorkspaceAvailability, WorkspaceRegistry,
@@ -240,7 +241,7 @@ impl WorkspaceAccessService {
         let root_metadata = fs::metadata(current.resolution.canonical_root()).map_err(|error| {
             DesktopError::from_io(&error, current.resolution.canonical_root(), true)
         })?;
-        let writable = workspace_writable_hint(&root_metadata);
+        let writable = metadata_writable_hint(&root_metadata);
         let descriptor = WorkspaceDescriptor::from_resolution(
             workspace_id,
             current.resolution,
@@ -510,18 +511,6 @@ fn secure_selection_id() -> Result<String, DesktopError> {
         write!(&mut value, "{byte:02x}").expect("writing to a String cannot fail");
     }
     Ok(value)
-}
-
-#[cfg(not(windows))]
-fn workspace_writable_hint(metadata: &fs::Metadata) -> bool {
-    !metadata.permissions().readonly()
-}
-
-#[cfg(windows)]
-fn workspace_writable_hint(_metadata: &fs::Metadata) -> bool {
-    // Windows' read-only directory attribute is not an access-control decision. File commands
-    // remain authoritative and must report the actual permission result for every mutation.
-    true
 }
 
 fn prune_pending(state: &mut PendingSelectionState, now: Instant) {

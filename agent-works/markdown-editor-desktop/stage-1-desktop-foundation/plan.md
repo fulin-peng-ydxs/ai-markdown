@@ -388,7 +388,7 @@
 - 边界与异常：数千文件显示进度；不可读节点局部失败；非 UTF-8 标记且禁止覆盖；链接不跟随。
 - 验证方式：空目录、深目录、千文件、权限错误、CRLF/LF、非 UTF-8、链接循环测试。
 - 完成标准：树与磁盘一致，扫描不阻塞窗口交互，错误不吞掉其他有效项。
-- 实际落地情况：已新增后台 `WorkspaceScanService`，每个授权工作区/目录以独立 worker 分批扫描，前端通过 start/poll/cancel 命令消费；同目录重新开始会取消旧会话，活动扫描上限 16，通道有界，避免未轮询时无界积压。根和懒加载子目录只返回文件夹与大小写不敏感的 `.md`，默认排除隐藏项、非 Markdown 和不可表达路径；符号链接在临近 I/O 时再次检查、只报告局部问题且不跟随。前端 `WorkspaceTreeState` 以 scanId 防止过期批次回写，刷新时清理目标子树，保留进度、局部错误、完成/取消状态。Markdown 读取仅接受已登记 workspaceId 与根内相对路径，在 blocking worker 中流式计算 SHA-256、UTF-8/BOM、LF/CRLF/CR/Mixed 和修改时间；64 MiB 是当前内联正文安全上限，超限返回 `too_large`，非 UTF-8 返回 `unsupported_encoding`，两者均不返回可编辑内容；读取期间尺寸或修改时间变化返回可重试错误。Rust/TypeScript 的新增对象字段和错误码继续由 parity 测试约束。macOS arm64 已通过 55 个 Rust 测试、clippy 与 TypeScript 生产构建；Windows 隐藏属性分支、真实 Tauri IPC、P1 文件树页面与真实大目录交互仍分别由 T16、T12/T15 验证。详细证据见 `t6-directory-scan-read.md`。
+- 实际落地情况：已新增后台 `WorkspaceScanService`，每个授权工作区/目录以独立 worker 分批扫描，前端通过 start/poll/cancel 命令消费；同目录重新开始会取消旧会话，活动扫描上限 16，通道有界，避免未轮询时无界积压。根和懒加载子目录只返回文件夹与大小写不敏感的 `.md`，默认排除隐藏项、非 Markdown 和不可表达路径；符号链接在临近 I/O 时再次检查、只报告局部问题且不跟随。前端 `WorkspaceTreeState` 以 scanId 防止过期批次回写，刷新时清理目标子树，保留进度、局部错误、完成/取消状态；复审后新增 4 个 Node 24 原生回归测试，覆盖过期批次、根/子树重扫和局部错误派生，不提前引入 T15 才需统一评估的测试框架。Markdown 读取仅接受已登记 workspaceId 与根内相对路径，在 blocking worker 中流式计算 SHA-256、UTF-8/BOM、LF/CRLF/CR/Mixed 和修改时间；64 MiB 是当前内联正文安全上限，超限返回 `too_large`，非 UTF-8 返回 `unsupported_encoding`，两者均不返回可编辑内容；就绪内容直接移动缓冲区构造 String，避免再复制至多 64 MiB。读取期间尺寸或修改时间变化返回可重试错误。`MarkdownReadStatus` 枚举值、对象字段和错误码均有 Rust↔TypeScript parity 测试；文件树与工作区 writable 提示复用同一跨平台规则，Windows 不把 readonly 属性误当 ACL。macOS arm64 已通过 55 个 Rust 测试、4 个前端状态测试、clippy 与 TypeScript 生产构建；Windows 隐藏属性/提示分支、真实 Tauri IPC、P1 文件树页面与真实大目录交互仍分别由 T16、T12/T15 验证。详细证据见 `t6-directory-scan-read.md`。
 
 ### 6.7 任务 T7：文件/文件夹新建、重命名和移动
 
@@ -580,7 +580,7 @@
 ### 8.1 单元测试
 
 - 计划：Rust 覆盖路径规范化、根内判定、文件名校验、文件修订、安全写入、状态 schema 迁移和窗口去重；TypeScript 覆盖 view model、过滤、状态 reducer 和组件契约。
-- 具体完成情况：T1～T6 共 55 个 Rust 单测已通过；T6 新增空目录、深目录懒加载、千文件多批次、隐藏/非 Markdown 过滤、取消/刷新、目录失败/权限拒绝、链接拒绝、UTF-8 BOM/跨缓冲区字符、LF/CRLF/CR/Mixed、非 UTF-8、超大正文及新增契约 parity。安全写入和完整窗口协调的后续用例仍待对应任务。
+- 具体完成情况：T1～T6 共 55 个 Rust 单测和 4 个前端状态测试已通过；T6 覆盖空目录、深目录懒加载、千文件多批次、隐藏/非 Markdown 过滤、取消/刷新、目录失败/权限拒绝、链接拒绝、UTF-8 BOM/跨缓冲区字符、LF/CRLF/CR/Mixed、非 UTF-8、超大正文、读取状态枚举 parity、过期前端批次、根/子树重扫及局部错误派生。安全写入和完整窗口协调的后续用例仍待对应任务。
 
 ### 8.2 接口与集成测试
 

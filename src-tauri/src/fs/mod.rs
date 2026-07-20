@@ -9,6 +9,6 @@ pub use model::{
 };
 pub(crate) use path::serialize_public_path;
 pub use path::{
-    inspect_workspace_root, native_path_identity, resolve_existing_workspace_path,
-    windows_path_identity, windows_public_path,
+    inspect_workspace_root, metadata_writable_hint, native_path_identity,
+    resolve_existing_workspace_path, windows_path_identity, windows_public_path,
 };

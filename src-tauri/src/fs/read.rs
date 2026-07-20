@@ -21,6 +21,10 @@ pub enum MarkdownReadStatus {
     TooLarge,
 }
 
+impl MarkdownReadStatus {
+    pub const ALL: &'static [Self] = &[Self::Ready, Self::UnsupportedEncoding, Self::TooLarge];
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MarkdownReadResult {
@@ -124,8 +128,10 @@ fn read_markdown_file_with_limit(
         MarkdownReadStatus::Ready
     };
     let content = if status == MarkdownReadStatus::Ready {
-        let body = if has_bom { &retained[3..] } else { &retained };
-        Some(String::from_utf8(body.to_vec()).expect("validated UTF-8 should decode"))
+        if has_bom {
+            retained.drain(..3);
+        }
+        Some(String::from_utf8(retained).expect("validated UTF-8 should decode"))
     } else {
         None
     };
@@ -238,7 +244,7 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use crate::contract_test::assert_interface_matches;
+    use crate::contract_test::{assert_interface_matches, typescript_string_constant_values};
     use crate::fs::{LineEnding, TextEncoding, WorkspaceRelativePath};
 
     use super::{read_markdown_file_with_limit, MarkdownReadStatus};
@@ -266,6 +272,21 @@ mod tests {
         assert!(result.revision.content_hash.starts_with("sha256:"));
         assert_interface_matches("MarkdownReadResult", &result);
         assert_interface_matches("FileRevision", &result.revision);
+        let rust_statuses = super::MarkdownReadStatus::ALL
+            .iter()
+            .map(|status| {
+                serde_json::to_value(status)
+                    .expect("read status should serialize")
+                    .as_str()
+                    .expect("read status should be a string")
+                    .to_owned()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rust_statuses,
+            typescript_string_constant_values("MARKDOWN_READ_STATUSES"),
+            "Rust and TypeScript Markdown read statuses drifted"
+        );
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 

@@ -7,6 +7,18 @@ use crate::error::{DesktopError, DesktopErrorCode};
 
 use super::{WorkspaceRelativePath, WorkspaceRootResolution};
 
+#[cfg(not(windows))]
+pub fn metadata_writable_hint(metadata: &fs::Metadata) -> bool {
+    !metadata.permissions().readonly()
+}
+
+#[cfg(windows)]
+pub fn metadata_writable_hint(_metadata: &fs::Metadata) -> bool {
+    // The Windows readonly attribute is not an ACL writability decision. Actual mutations remain
+    // authoritative and return their filesystem error instead of presenting a false read-only UI.
+    true
+}
+
 pub fn inspect_workspace_root(
     selected_root: &Path,
 ) -> Result<WorkspaceRootResolution, DesktopError> {

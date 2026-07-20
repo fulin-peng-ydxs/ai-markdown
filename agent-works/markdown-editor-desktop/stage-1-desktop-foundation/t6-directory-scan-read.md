@@ -15,10 +15,13 @@
 - Markdown 读取在 blocking worker 中流式处理，不阻塞 async command 执行器；结果包含 SHA-256、修改时间、大小、UTF-8/BOM 和换行类型。读取期间尺寸或修改时间发生变化时拒绝返回不一致快照。
 - 当前内联正文上限为 64 MiB。超过上限返回 `too_large`，非 UTF-8 返回 `unsupported_encoding`；两种状态均保留修订元数据但不返回正文，后续 UI 不得将其置为可编辑状态。该上限是第一阶段防内存失控的实现边界，不改变需求对大文件降级提示和安全打开的验收义务。
 - 新增 `scan_not_found`、`scan_unavailable`、`file_changed_during_read` 稳定错误码；Rust 序列化字段、错误码全集和 TypeScript interface 由现有 parity 测试约束。
+- 复审整改补齐 `MarkdownReadStatus` 枚举值 parity；文件树和工作区根统一消费跨平台 writable 提示，Windows 不再根据 readonly 属性给出误导性只读结论；就绪正文直接移动已校验缓冲区生成 String，避免上限附近再次整体复制。
+- 前端渐进树使用 Node 24 内建 test runner 增加 4 个回归用例，不新增第三方测试依赖；T12/T15 建立统一前端测试基线时可迁移到届时确认的运行器。
 
 ## 验证证据
 
 - `cargo test --locked --manifest-path src-tauri/Cargo.toml`：55/55 通过。
+- `pnpm test:workspace-tree`：4/4 通过。
 - `cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`：通过。
 - `cargo check --locked --manifest-path src-tauri/Cargo.toml`：通过。
 - `pnpm build`（Node 24.11.1、pnpm 11.5.1）：通过。
