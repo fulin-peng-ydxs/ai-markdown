@@ -3,6 +3,7 @@ use std::fs;
 use tauri::State;
 
 use crate::error::{DesktopError, DesktopErrorCode};
+use crate::fs::delete::{DeleteResult, PermanentDeleteProposal, WorkspaceDeleteService};
 use crate::fs::mutate::{WorkspaceMutationResult, WorkspaceMutationService};
 use crate::fs::read::{self, MarkdownReadResult};
 use crate::fs::scan::{WorkspaceScanBatch, WorkspaceScanService, WorkspaceScanStart};
@@ -117,4 +118,70 @@ pub fn move_workspace_entry(
         &relative_path,
         target_directory.as_deref(),
     )
+}
+
+#[tauri::command]
+pub async fn trash_workspace_entry(
+    workspace_id: WorkspaceId,
+    relative_path: String,
+    access: State<'_, WorkspaceAccessService>,
+    deletions: State<'_, WorkspaceDeleteService>,
+) -> Result<DeleteResult, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    let root = workspace.canonical_root().to_path_buf();
+    let service = deletions.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || service.move_to_trash(&root, &relative_path))
+        .await
+        .map_err(|_| DesktopError::new(DesktopErrorCode::TrashUnavailable, true, true))?
+}
+
+#[tauri::command]
+pub fn prepare_permanent_delete(
+    workspace_id: WorkspaceId,
+    relative_path: String,
+    access: State<'_, WorkspaceAccessService>,
+    deletions: State<'_, WorkspaceDeleteService>,
+) -> Result<PermanentDeleteProposal, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    deletions.prepare_permanent_delete(&workspace_id, workspace.canonical_root(), &relative_path)
+}
+
+#[tauri::command]
+pub async fn confirm_permanent_delete(
+    workspace_id: WorkspaceId,
+    confirmation_id: String,
+    access: State<'_, WorkspaceAccessService>,
+    deletions: State<'_, WorkspaceDeleteService>,
+) -> Result<DeleteResult, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    let root = workspace.canonical_root().to_path_buf();
+    let service = deletions.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        service.confirm_permanent_delete(&workspace_id, &root, &confirmation_id)
+    })
+    .await
+    .map_err(|_| DesktopError::new(DesktopErrorCode::PermanentDeleteFailed, true, true))?
+}
+
+#[tauri::command]
+pub fn cancel_permanent_delete(
+    confirmation_id: String,
+    deletions: State<'_, WorkspaceDeleteService>,
+) -> Result<bool, DesktopError> {
+    deletions.cancel_permanent_delete(&confirmation_id)
+}
+
+#[tauri::command]
+pub async fn reveal_workspace_entry(
+    workspace_id: WorkspaceId,
+    relative_path: String,
+    access: State<'_, WorkspaceAccessService>,
+) -> Result<(), DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    let root = workspace.canonical_root().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::fs::delete::reveal_workspace_entry(&root, &relative_path)
+    })
+    .await
+    .map_err(|_| DesktopError::new(DesktopErrorCode::RevealUnavailable, true, true))?
 }

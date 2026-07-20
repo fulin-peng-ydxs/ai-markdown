@@ -1,7 +1,7 @@
 use std::fs::{self, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 #[cfg(target_os = "macos")]
 use std::ffi::CString;
@@ -43,10 +43,14 @@ pub struct WorkspaceMutationResult {
 
 #[derive(Debug, Default)]
 pub struct WorkspaceMutationService {
-    operation_lock: Mutex<()>,
+    operation_lock: Arc<Mutex<()>>,
 }
 
 impl WorkspaceMutationService {
+    pub(crate) fn operation_lock(&self) -> Arc<Mutex<()>> {
+        Arc::clone(&self.operation_lock)
+    }
+
     pub fn create_markdown_file(
         &self,
         canonical_root: &Path,
@@ -240,7 +244,10 @@ fn validate_mutation_root(canonical_root: &Path) -> Result<(), DesktopError> {
     Ok(())
 }
 
-fn supported_kind(path: &Path, metadata: &fs::Metadata) -> Result<FsEntryKind, DesktopError> {
+pub(crate) fn supported_kind(
+    path: &Path,
+    metadata: &fs::Metadata,
+) -> Result<FsEntryKind, DesktopError> {
     if metadata.is_dir() {
         Ok(FsEntryKind::Directory)
     } else if metadata.is_file()

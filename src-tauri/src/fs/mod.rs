@@ -1,3 +1,4 @@
+pub mod delete;
 mod model;
 pub mod mutate;
 mod path;

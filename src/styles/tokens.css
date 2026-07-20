@@ -1,0 +1,20 @@
+:root {
+  --color-paper: #f3f3f2;
+  --color-paper-deep: #eeeeed;
+  --color-heading: #222226;
+  --color-text: #28282c;
+  --color-line: #ceced2;
+  --color-line-strong: #b9b9bf;
+  --color-accent: #70677f;
+  --color-on-accent: #ffffff;
+  --color-danger: #9b5050;
+  --font-ui-sm: 400 12px/18px -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-ui-md: 400 13px/20px -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 9px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+}

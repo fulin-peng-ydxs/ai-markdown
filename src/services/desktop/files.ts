@@ -7,6 +7,8 @@ import type {
   WorkspaceScanBatch,
   WorkspaceScanStart,
   WorkspaceMutationResult,
+  DeleteResult,
+  PermanentDeleteProposal,
 } from "./contracts";
 
 export function startWorkspaceScan(
@@ -84,5 +86,51 @@ export function moveWorkspaceEntry(
     workspaceId,
     relativePath,
     targetDirectory,
+  });
+}
+
+export function trashWorkspaceEntry(
+  workspaceId: WorkspaceId,
+  relativePath: WorkspaceRelativePath,
+): Promise<DeleteResult> {
+  return invoke<DeleteResult>("trash_workspace_entry", {
+    workspaceId,
+    relativePath,
+  });
+}
+
+export function preparePermanentDelete(
+  workspaceId: WorkspaceId,
+  relativePath: WorkspaceRelativePath,
+): Promise<PermanentDeleteProposal> {
+  return invoke<PermanentDeleteProposal>("prepare_permanent_delete", {
+    workspaceId,
+    relativePath,
+  });
+}
+
+export function confirmPermanentDelete(
+  workspaceId: WorkspaceId,
+  confirmationId: string,
+): Promise<DeleteResult> {
+  return invoke<DeleteResult>("confirm_permanent_delete", {
+    workspaceId,
+    confirmationId,
+  });
+}
+
+export function cancelPermanentDelete(
+  confirmationId: string,
+): Promise<boolean> {
+  return invoke<boolean>("cancel_permanent_delete", { confirmationId });
+}
+
+export function revealWorkspaceEntry(
+  workspaceId: WorkspaceId,
+  relativePath: WorkspaceRelativePath,
+): Promise<void> {
+  return invoke<void>("reveal_workspace_entry", {
+    workspaceId,
+    relativePath,
   });
 }

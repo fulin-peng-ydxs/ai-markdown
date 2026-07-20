@@ -41,6 +41,11 @@ export const DESKTOP_ERROR_CODES = [
   "cross_device_move",
   "invalid_move_target",
   "mutation_unavailable",
+  "trash_unavailable",
+  "permanent_delete_confirmation_not_found",
+  "permanent_delete_target_changed",
+  "permanent_delete_failed",
+  "reveal_unavailable",
 ] as const;
 
 export type DesktopErrorCode = (typeof DESKTOP_ERROR_CODES)[number];
@@ -141,6 +146,27 @@ export interface WorkspaceMutationResult {
   kind: WorkspaceMutationKind;
   previousPath: WorkspaceRelativePath | null;
   entry: FsEntry;
+}
+
+export const WORKSPACE_DELETE_KINDS = [
+  "trash",
+  "permanent",
+] as const;
+
+export type WorkspaceDeleteKind = (typeof WORKSPACE_DELETE_KINDS)[number];
+
+export interface DeleteResult {
+  kind: WorkspaceDeleteKind;
+  relativePath: WorkspaceRelativePath;
+  entryKind: FsEntryKind;
+}
+
+export interface PermanentDeleteProposal {
+  confirmationId: string;
+  relativePath: WorkspaceRelativePath;
+  name: string;
+  entryKind: FsEntryKind;
+  consequenceKey: "confirm.permanentDelete.cannotUndo";
 }
 
 export type WorkspaceAvailability =

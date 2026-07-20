@@ -6,6 +6,8 @@ import type {
   WorkspaceScanStart,
   WorkspaceMutationKind,
   WorkspaceMutationResult,
+  DeleteResult,
+  WorkspaceDeleteKind,
 } from "../../services/desktop/contracts";
 
 export type DirectoryLoadStatus =
@@ -31,7 +33,7 @@ export interface WorkspaceTreeState {
 
 export interface WorkspaceTreeMutationState {
   id: string;
-  kind: WorkspaceMutationKind;
+  kind: WorkspaceMutationKind | WorkspaceDeleteKind;
   sourcePath: WorkspaceRelativePath | null;
   status: "processing" | "failed";
   error: DesktopError | null;
@@ -119,7 +121,7 @@ export function applyDirectoryScanBatch(
 export function beginWorkspaceTreeMutation(
   state: WorkspaceTreeState,
   id: string,
-  kind: WorkspaceMutationKind,
+  kind: WorkspaceMutationKind | WorkspaceDeleteKind,
   sourcePath: WorkspaceRelativePath | null,
 ): WorkspaceTreeState {
   return {
@@ -193,6 +195,37 @@ export function applyWorkspaceTreeMutationFailure(
     ...state,
     mutation: { ...state.mutation, status: "failed", error },
   };
+}
+
+export function applyWorkspaceTreeDeleteSuccess(
+  state: WorkspaceTreeState,
+  id: string,
+  result: DeleteResult,
+): WorkspaceTreeState {
+  if (!state.mutation || state.mutation.id !== id) {
+    return state;
+  }
+  const entries = Object.fromEntries(
+    Object.entries(state.entries).filter(
+      ([path]) => !isSameOrInside(path, result.relativePath),
+    ),
+  );
+  const children = Object.fromEntries(
+    Object.entries(state.children)
+      .filter(([parent]) => !isSameOrInside(parent, result.relativePath))
+      .map(([parent, paths]) => [
+        parent,
+        paths.filter((path) => !isSameOrInside(path, result.relativePath)),
+      ]),
+  );
+  const scans = Object.fromEntries(
+    Object.entries(state.scans).filter(
+      ([directory]) =>
+        directory !== parentPath(result.relativePath) &&
+        !isSameOrInside(directory, result.relativePath),
+    ),
+  );
+  return { entries, children, scans, mutation: null };
 }
 
 export function markDirectoryScanCancelled(

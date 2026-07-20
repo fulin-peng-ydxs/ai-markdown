@@ -12,11 +12,15 @@ mod contract_test;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let mutations = fs::mutate::WorkspaceMutationService::default();
+    let deletions =
+        fs::delete::WorkspaceDeleteService::with_operation_lock(mutations.operation_lock());
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::workspace::WorkspaceAccessService::default())
         .manage(fs::scan::WorkspaceScanService::default())
-        .manage(fs::mutate::WorkspaceMutationService::default())
+        .manage(mutations)
+        .manage(deletions)
         .menu(menu::build_app_menu)
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
         .invoke_handler(tauri::generate_handler![
@@ -33,6 +37,11 @@ pub fn run() {
             commands::files::create_workspace_directory,
             commands::files::rename_workspace_entry,
             commands::files::move_workspace_entry,
+            commands::files::trash_workspace_entry,
+            commands::files::prepare_permanent_delete,
+            commands::files::confirm_permanent_delete,
+            commands::files::cancel_permanent_delete,
+            commands::files::reveal_workspace_entry,
         ])
         .setup(|app| {
             let persistent_state = state::PersistentAppState::initialize_for_app(app.handle());

@@ -58,6 +58,11 @@ define_desktop_error_codes!(
     CrossDeviceMove,
     InvalidMoveTarget,
     MutationUnavailable,
+    TrashUnavailable,
+    PermanentDeleteConfirmationNotFound,
+    PermanentDeleteTargetChanged,
+    PermanentDeleteFailed,
+    RevealUnavailable,
 );
 
 impl DesktopErrorCode {
@@ -102,6 +107,13 @@ impl DesktopErrorCode {
             Self::CrossDeviceMove => "error.file.crossDeviceMove",
             Self::InvalidMoveTarget => "error.file.invalidMoveTarget",
             Self::MutationUnavailable => "error.file.mutationUnavailable",
+            Self::TrashUnavailable => "error.file.trashUnavailable",
+            Self::PermanentDeleteConfirmationNotFound => {
+                "error.file.permanentDeleteConfirmationNotFound"
+            }
+            Self::PermanentDeleteTargetChanged => "error.file.permanentDeleteTargetChanged",
+            Self::PermanentDeleteFailed => "error.file.permanentDeleteFailed",
+            Self::RevealUnavailable => "error.file.revealUnavailable",
         }
     }
 }

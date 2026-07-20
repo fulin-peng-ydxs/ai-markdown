@@ -5,6 +5,7 @@ import {
   applyDirectoryScanBatch,
   applyWorkspaceTreeMutationFailure,
   applyWorkspaceTreeMutationSuccess,
+  applyWorkspaceTreeDeleteSuccess,
   beginDirectoryScan,
   beginWorkspaceTreeMutation,
   createWorkspaceTreeState,
@@ -253,4 +254,62 @@ test("stale mutation result cannot commit into a newer tree operation", () => {
   assert.equal(result, active);
   assert.deepEqual(result.entries, {});
   assert.equal(result.mutation.id, "mutation-new");
+});
+
+test("successful delete removes the target subtree only after disk success", () => {
+  const initial = {
+    entries: {
+      docs: entry("docs", "directory"),
+      "docs/note.md": entry("docs/note.md"),
+      "root.md": entry("root.md"),
+    },
+    children: {
+      "": ["docs", "root.md"],
+      docs: ["docs/note.md"],
+    },
+    scans: {
+      "": { scanId: null, status: "ready", processed: 2, issues: [] },
+      docs: { scanId: null, status: "ready", processed: 1, issues: [] },
+    },
+    mutation: null,
+  };
+  const processing = beginWorkspaceTreeMutation(
+    initial,
+    "delete-docs",
+    "trash",
+    "docs",
+  );
+  assert.ok(processing.entries["docs/note.md"]);
+  const result = applyWorkspaceTreeDeleteSuccess(processing, "delete-docs", {
+    kind: "trash",
+    relativePath: "docs",
+    entryKind: "directory",
+  });
+  assert.equal(result.entries.docs, undefined);
+  assert.equal(result.entries["docs/note.md"], undefined);
+  assert.ok(result.entries["root.md"]);
+  assert.deepEqual(result.children[""], ["root.md"]);
+  assert.equal(result.children.docs, undefined);
+  assert.deepEqual(result.scans, {});
+  assert.equal(result.mutation, null);
+});
+
+test("stale delete result cannot remove a newer tree target", () => {
+  const active = beginWorkspaceTreeMutation(
+    {
+      ...createWorkspaceTreeState(),
+      entries: { "note.md": entry("note.md") },
+      children: { "": ["note.md"] },
+    },
+    "delete-new",
+    "trash",
+    "note.md",
+  );
+  const result = applyWorkspaceTreeDeleteSuccess(active, "delete-old", {
+    kind: "trash",
+    relativePath: "note.md",
+    entryKind: "markdown_file",
+  });
+  assert.equal(result, active);
+  assert.ok(result.entries["note.md"]);
 });
