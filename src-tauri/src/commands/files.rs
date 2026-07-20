@@ -6,9 +6,12 @@ use crate::error::{DesktopError, DesktopErrorCode};
 use crate::fs::delete::{DeleteResult, PermanentDeleteProposal, WorkspaceDeleteService};
 use crate::fs::mutate::{WorkspaceMutationResult, WorkspaceMutationService};
 use crate::fs::read::{self, MarkdownReadResult};
+use crate::fs::safe_write::{SafeWriteResult, WorkspaceSafeWriteService};
 use crate::fs::scan::{WorkspaceScanBatch, WorkspaceScanService, WorkspaceScanStart};
 use crate::fs::watch::{WorkspaceWatchBatch, WorkspaceWatchService, WorkspaceWatchStart};
-use crate::fs::{resolve_existing_workspace_path, WorkspaceId, WorkspaceRelativePath};
+use crate::fs::{
+    resolve_existing_workspace_path, FileRevision, WorkspaceId, WorkspaceRelativePath,
+};
 
 use super::workspace::WorkspaceAccessService;
 
@@ -103,6 +106,30 @@ pub async fn read_markdown_file(
     tauri::async_runtime::spawn_blocking(move || read::read_markdown_file(&path, relative_path))
         .await
         .map_err(|_| DesktopError::new(DesktopErrorCode::IoFailure, true, true))?
+}
+
+#[tauri::command]
+pub async fn safe_write_markdown_file(
+    workspace_id: WorkspaceId,
+    relative_path: String,
+    content: String,
+    expected_revision: FileRevision,
+    access: State<'_, WorkspaceAccessService>,
+    safe_writes: State<'_, WorkspaceSafeWriteService>,
+    watches: State<'_, WorkspaceWatchService>,
+) -> Result<SafeWriteResult, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    let root = workspace.canonical_root().to_path_buf();
+    let relative_path = WorkspaceRelativePath::parse(&relative_path)?;
+    let service = safe_writes.inner().clone();
+    let write_path = relative_path.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        service.write_markdown(&root, write_path, content, expected_revision)
+    })
+    .await
+    .map_err(|_| DesktopError::new(DesktopErrorCode::SafeWriteFailed, true, true))??;
+    watches.record_write(&workspace_id, &result.relative_path);
+    Ok(result)
 }
 
 #[tauri::command]

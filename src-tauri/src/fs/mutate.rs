@@ -3,9 +3,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-#[cfg(target_os = "macos")]
-use std::ffi::CString;
-
 use serde::Serialize;
 
 use crate::error::{DesktopError, DesktopErrorCode};
@@ -441,7 +438,7 @@ fn rename_without_replace(source: &Path, target: &Path) -> Result<(), DesktopErr
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(DesktopError::from_io(&error, target, true)),
     }
-    platform_rename_without_replace(source, target)
+    super::atomic::rename_without_replace(source, target)
         .map_err(|error| map_mutation_error(error, target))
 }
 
@@ -466,59 +463,6 @@ fn same_file_identity(source: &fs::Metadata, target: &fs::Metadata) -> bool {
         (Some(source_volume), Some(source_index), Some(target_volume), Some(target_index))
             if source_volume == target_volume && source_index == target_index
     )
-}
-
-#[cfg(target_os = "macos")]
-fn platform_rename_without_replace(source: &Path, target: &Path) -> io::Result<()> {
-    use std::os::raw::{c_char, c_int};
-    use std::os::unix::ffi::OsStrExt;
-
-    const RENAME_EXCL: u32 = 0x0000_0004;
-    unsafe extern "C" {
-        fn renamex_np(from: *const c_char, to: *const c_char, flags: u32) -> c_int;
-    }
-    let source = CString::new(source.as_os_str().as_bytes())?;
-    let target = CString::new(target.as_os_str().as_bytes())?;
-    // SAFETY: both pointers come from live NUL-terminated CString values and remain valid for the
-    // duration of the call. RENAME_EXCL is the documented macOS no-replace flag.
-    let result = unsafe { renamex_np(source.as_ptr(), target.as_ptr(), RENAME_EXCL) };
-    if result == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
-}
-
-#[cfg(windows)]
-fn platform_rename_without_replace(source: &Path, target: &Path) -> io::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_WRITE_THROUGH};
-
-    let source = source
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    let target = target
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    // SAFETY: both vectors are NUL-terminated and remain alive for the duration of the call. The
-    // absence of MOVEFILE_REPLACE_EXISTING is the required no-overwrite contract.
-    let result = unsafe { MoveFileExW(source.as_ptr(), target.as_ptr(), MOVEFILE_WRITE_THROUGH) };
-    if result != 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
-}
-
-#[cfg(not(any(target_os = "macos", windows)))]
-fn platform_rename_without_replace(source: &Path, target: &Path) -> io::Result<()> {
-    // Plainroot targets macOS and Windows. This fallback keeps development tests portable; the
-    // process mutation lock protects in-app races, while target platforms use atomic no-replace.
-    fs::rename(source, target)
 }
 
 #[cfg(test)]

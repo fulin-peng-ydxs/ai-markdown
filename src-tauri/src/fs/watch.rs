@@ -267,6 +267,10 @@ impl WorkspaceWatchService {
         self.record_self_change(workspace_id, vec![result.relative_path.as_str().to_owned()]);
     }
 
+    pub fn record_write(&self, workspace_id: &WorkspaceId, relative_path: &WorkspaceRelativePath) {
+        self.record_self_change(workspace_id, vec![relative_path.as_str().to_owned()]);
+    }
+
     fn record_self_change(&self, workspace_id: &WorkspaceId, paths: Vec<String>) {
         let Ok(mut changes) = self.self_changes.lock() else {
             return;
@@ -406,9 +410,11 @@ fn normalize_events(
 
     let mut events = Vec::new();
     let mut external_directories = BTreeSet::new();
+    let mut consumed_operations = BTreeSet::new();
     for (kind, paths) in grouped {
         let paths = paths.into_iter().collect::<Vec<_>>();
-        let (source, operation_id) = classify_source(workspace_id, &paths, self_changes);
+        let (source, operation_id) =
+            classify_source(workspace_id, &paths, self_changes, &mut consumed_operations);
         if source != WorkspaceWatchEventSource::Application {
             if requires_root_rescan {
                 external_directories.insert(String::new());
@@ -426,6 +432,7 @@ fn normalize_events(
             operation_id,
         });
     }
+    consume_self_changes(self_changes, &consumed_operations);
 
     WorkspaceWatchBatch {
         watch_id: watch_id.to_owned(),
@@ -452,6 +459,7 @@ fn classify_source(
     workspace_id: &WorkspaceId,
     paths: &[String],
     self_changes: &Mutex<VecDeque<SelfChange>>,
+    consumed_operations: &mut BTreeSet<String>,
 ) -> (WorkspaceWatchEventSource, Option<String>) {
     if paths.is_empty() {
         return (WorkspaceWatchEventSource::External, None);
@@ -471,6 +479,11 @@ fn classify_source(
             })
         })
         .collect::<Vec<_>>();
+    consumed_operations.extend(
+        matching
+            .iter()
+            .filter_map(|change| change.map(|change| change.operation_id.clone())),
+    );
     if matching.iter().all(Option::is_some) {
         let first_id = matching[0].map(|change| change.operation_id.as_str());
         if matching
@@ -488,6 +501,18 @@ fn classify_source(
         (WorkspaceWatchEventSource::Mixed, None)
     } else {
         (WorkspaceWatchEventSource::External, None)
+    }
+}
+
+fn consume_self_changes(
+    self_changes: &Mutex<VecDeque<SelfChange>>,
+    consumed_operations: &BTreeSet<String>,
+) {
+    if consumed_operations.is_empty() {
+        return;
+    }
+    if let Ok(mut changes) = self_changes.lock() {
+        changes.retain(|change| !consumed_operations.contains(&change.operation_id));
     }
 }
 
@@ -657,7 +682,10 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    use notify::{event::CreateKind, EventKind};
+    use notify::{
+        event::{CreateKind, DataChange, ModifyKind},
+        EventKind,
+    };
 
     use crate::contract_test::{assert_interface_matches, typescript_string_constant_values};
     use crate::fs::mutate::WorkspaceMutationService;
@@ -763,6 +791,24 @@ mod tests {
         );
         assert!(batch.events[0].operation_id.is_some());
         assert!(batch.rescan_directories.is_empty());
+
+        let external_event = notify::Event::new(EventKind::Create(CreateKind::File))
+            .add_path(root.path().join("self.md"));
+        let external_batch = normalize_events(
+            "watch-test",
+            2,
+            &workspace_id,
+            root.path(),
+            vec![external_event],
+            false,
+            &service.self_changes,
+        );
+        assert_eq!(
+            external_batch.events[0].source,
+            WorkspaceWatchEventSource::External,
+            "a later same-path external event must not reuse the consumed operation"
+        );
+        assert_eq!(external_batch.rescan_directories, vec![None]);
     }
 
     #[test]
@@ -798,6 +844,51 @@ mod tests {
         );
         assert!(batch.events[0].operation_id.is_none());
         assert!(batch.rescan_directories.is_empty());
+    }
+
+    #[test]
+    fn saved_path_suppresses_one_multi_kind_batch_but_not_a_later_external_change() {
+        let root = Fixture::new();
+        let service = WorkspaceWatchService::default();
+        let workspace_id = WorkspaceId::parse("ws-save-batch").unwrap();
+        let relative = crate::fs::WorkspaceRelativePath::parse("saved.md").unwrap();
+        service.record_write(&workspace_id, &relative);
+        let created = notify::Event::new(EventKind::Create(CreateKind::File))
+            .add_path(root.path().join("saved.md"));
+        let modified = notify::Event::new(EventKind::Modify(ModifyKind::Data(DataChange::Any)))
+            .add_path(root.path().join("saved.md"));
+
+        let application_batch = normalize_events(
+            "watch-test",
+            1,
+            &workspace_id,
+            root.path(),
+            vec![created, modified],
+            false,
+            &service.self_changes,
+        );
+        assert!(application_batch
+            .events
+            .iter()
+            .all(|event| event.source == WorkspaceWatchEventSource::Application));
+        assert!(application_batch.rescan_directories.is_empty());
+
+        let external = notify::Event::new(EventKind::Modify(ModifyKind::Data(DataChange::Any)))
+            .add_path(root.path().join("saved.md"));
+        let external_batch = normalize_events(
+            "watch-test",
+            2,
+            &workspace_id,
+            root.path(),
+            vec![external],
+            false,
+            &service.self_changes,
+        );
+        assert_eq!(
+            external_batch.events[0].source,
+            WorkspaceWatchEventSource::External
+        );
+        assert_eq!(external_batch.rescan_directories, vec![None]);
     }
 
     #[test]

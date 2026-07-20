@@ -46,6 +46,40 @@ fn read_markdown_file_with_limit(
     relative_path: WorkspaceRelativePath,
     inline_limit: u64,
 ) -> Result<MarkdownReadResult, DesktopError> {
+    let (revision, retained) = inspect_markdown(path, Some(inline_limit))?;
+    let status = if revision.size > inline_limit {
+        MarkdownReadStatus::TooLarge
+    } else if revision.encoding == TextEncoding::Unsupported {
+        MarkdownReadStatus::UnsupportedEncoding
+    } else {
+        MarkdownReadStatus::Ready
+    };
+    let content = if status == MarkdownReadStatus::Ready {
+        let mut retained = retained.expect("ready content should have been retained");
+        if revision.encoding == TextEncoding::Utf8Bom {
+            retained.drain(..3);
+        }
+        Some(String::from_utf8(retained).expect("validated UTF-8 should decode"))
+    } else {
+        None
+    };
+
+    Ok(MarkdownReadResult {
+        relative_path,
+        status,
+        content,
+        revision,
+    })
+}
+
+pub fn inspect_markdown_revision(path: &Path) -> Result<FileRevision, DesktopError> {
+    inspect_markdown(path, None).map(|(revision, _)| revision)
+}
+
+fn inspect_markdown(
+    path: &Path,
+    retain_limit: Option<u64>,
+) -> Result<(FileRevision, Option<Vec<u8>>), DesktopError> {
     if !is_markdown_path(path) {
         return Err(
             DesktopError::new(DesktopErrorCode::UnsupportedMarkdownFile, true, false)
@@ -72,9 +106,9 @@ fn read_markdown_file_with_limit(
 
     let mut reader = BufReader::with_capacity(READ_BUFFER_BYTES, file);
     let mut buffer = vec![0_u8; READ_BUFFER_BYTES];
-    let mut retained = Vec::with_capacity(
-        usize::try_from(before.len().min(inline_limit)).unwrap_or(READ_BUFFER_BYTES),
-    );
+    let mut retained = retain_limit.map(|limit| {
+        Vec::with_capacity(usize::try_from(before.len().min(limit)).unwrap_or(READ_BUFFER_BYTES))
+    });
     let mut digest = Sha256::new();
     let mut utf8 = Utf8StreamValidator::default();
     let mut endings = LineEndingCounter::default();
@@ -97,8 +131,12 @@ fn read_markdown_file_with_limit(
             let needed = 3 - prefix.len();
             prefix.extend_from_slice(&chunk[..chunk.len().min(needed)]);
         }
-        if total <= inline_limit {
-            retained.extend_from_slice(chunk);
+        if let (Some(limit), Some(bytes)) = (retain_limit, retained.as_mut()) {
+            if total <= limit {
+                bytes.extend_from_slice(chunk);
+            } else {
+                retained = None;
+            }
         }
     }
 
@@ -120,34 +158,16 @@ fn read_markdown_file_with_limit(
     } else {
         TextEncoding::Utf8
     };
-    let status = if total > inline_limit {
-        MarkdownReadStatus::TooLarge
-    } else if !valid_utf8 {
-        MarkdownReadStatus::UnsupportedEncoding
-    } else {
-        MarkdownReadStatus::Ready
-    };
-    let content = if status == MarkdownReadStatus::Ready {
-        if has_bom {
-            retained.drain(..3);
-        }
-        Some(String::from_utf8(retained).expect("validated UTF-8 should decode"))
-    } else {
-        None
-    };
-
-    Ok(MarkdownReadResult {
-        relative_path,
-        status,
-        content,
-        revision: FileRevision {
+    Ok((
+        FileRevision {
             modified_at: modified_millis(&after),
             size: total,
             content_hash: format!("sha256:{:x}", digest.finalize()),
             encoding,
             line_ending: endings.finish(),
         },
-    })
+        retained,
+    ))
 }
 
 fn is_markdown_path(path: &Path) -> bool {

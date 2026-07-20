@@ -38,6 +38,7 @@ pub fn run() {
             commands::files::poll_workspace_watch,
             commands::files::stop_workspace_watch,
             commands::files::read_markdown_file,
+            commands::files::safe_write_markdown_file,
             commands::files::create_markdown_file,
             commands::files::create_workspace_directory,
             commands::files::rename_workspace_entry,
@@ -50,6 +51,16 @@ pub fn run() {
         ])
         .setup(|app| {
             let persistent_state = state::PersistentAppState::initialize_for_app(app.handle());
+            let cleanup_roots = persistent_state
+                .snapshot()
+                .map(|state| {
+                    state
+                        .recent_workspaces
+                        .into_iter()
+                        .map(|workspace| workspace.canonical_root)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
             if let Some(error) = persistent_state.current_error() {
                 eprintln!(
                     "Plainroot state initialization failed: {}",
@@ -57,6 +68,21 @@ pub fn run() {
                 );
             }
             app.manage(persistent_state);
+            let operation_lock = app
+                .state::<fs::mutate::WorkspaceMutationService>()
+                .operation_lock();
+            let safe_writes = fs::safe_write::WorkspaceSafeWriteService::initialize_for_app(
+                app.handle(),
+                operation_lock,
+                cleanup_roots,
+            );
+            if let Some(error) = safe_writes.current_error() {
+                eprintln!(
+                    "Plainroot safe-write initialization failed: {}",
+                    error.message_key
+                );
+            }
+            app.manage(safe_writes);
             Ok(())
         })
         .run(tauri::generate_context!())

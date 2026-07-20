@@ -412,7 +412,7 @@ impl JsonStateStore {
             );
         }
 
-        replace_file_atomically(&temp_path, &self.path).map_err(|_| {
+        crate::fs::atomic::replace_existing(&temp_path, &self.path).map_err(|_| {
             state_error(DesktopErrorCode::StateWriteFailed, true).with_path_hint(&self.path)
         })?;
         temp_guard.disarm();
@@ -451,44 +451,6 @@ fn create_temp_file(target: &Path) -> Result<(File, PathBuf), DesktopError> {
     }
 
     Err(state_error(DesktopErrorCode::StateWriteFailed, true).with_path_hint(target))
-}
-
-#[cfg(not(windows))]
-fn replace_file_atomically(source: &Path, target: &Path) -> std::io::Result<()> {
-    fs::rename(source, target)
-}
-
-#[cfg(windows)]
-fn replace_file_atomically(source: &Path, target: &Path) -> std::io::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::{
-        MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
-    };
-
-    let source = source
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    let target = target
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    // SAFETY: both buffers are owned, NUL-terminated UTF-16 strings and remain alive for the
-    // duration of the Windows API call. The flags only replace the named destination.
-    let result = unsafe {
-        MoveFileExW(
-            source.as_ptr(),
-            target.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-        )
-    };
-    if result == 0 {
-        Err(std::io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
 }
 
 #[derive(Debug)]

@@ -37,6 +37,11 @@ export const DESKTOP_ERROR_CODES = [
   "watch_not_found",
   "watch_unavailable",
   "file_changed_during_read",
+  "file_revision_conflict",
+  "unsupported_text_encoding",
+  "file_too_large",
+  "safe_write_unavailable",
+  "safe_write_failed",
   "invalid_entry_name",
   "reserved_entry_name",
   "target_already_exists",
@@ -117,6 +122,12 @@ export interface MarkdownReadResult {
   status: MarkdownReadStatus;
   content: string | null;
   revision: FileRevision;
+}
+
+export interface SafeWriteResult {
+  relativePath: WorkspaceRelativePath;
+  revision: FileRevision;
+  bytesWritten: number;
 }
 
 export interface WorkspaceScanStart {

@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type {
   MarkdownReadResult,
+  FileRevision,
+  SafeWriteResult,
   WorkspaceId,
   WorkspaceRelativePath,
   WorkspaceScanBatch,
@@ -64,6 +66,20 @@ export function readMarkdownFile(
   return invoke<MarkdownReadResult>("read_markdown_file", {
     workspaceId,
     relativePath,
+  });
+}
+
+export function safeWriteMarkdownFile(
+  workspaceId: WorkspaceId,
+  relativePath: WorkspaceRelativePath,
+  content: string,
+  expectedRevision: FileRevision,
+): Promise<SafeWriteResult> {
+  return invoke<SafeWriteResult>("safe_write_markdown_file", {
+    workspaceId,
+    relativePath,
+    content,
+    expectedRevision,
   });
 }
 

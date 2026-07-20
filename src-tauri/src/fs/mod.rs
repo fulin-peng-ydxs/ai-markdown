@@ -1,8 +1,10 @@
+pub(crate) mod atomic;
 pub mod delete;
 mod model;
 pub mod mutate;
 mod path;
 pub mod read;
+pub mod safe_write;
 pub mod scan;
 pub mod watch;
 

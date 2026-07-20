@@ -247,7 +247,7 @@ pub enum LineEnding {
     Mixed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileRevision {
     pub modified_at: u64,
