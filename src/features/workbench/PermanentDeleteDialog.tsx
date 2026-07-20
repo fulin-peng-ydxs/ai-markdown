@@ -12,6 +12,10 @@ import {
   confirmPermanentDelete,
   preparePermanentDelete,
 } from "../../services/desktop/files";
+import {
+  permanentDeleteErrorMessage,
+  type PermanentDeleteErrorPhase,
+} from "./permanentDeleteFeedback";
 
 import "./PermanentDeleteDialog.css";
 
@@ -39,9 +43,8 @@ export function PermanentDeleteDialog({
   const [status, setStatus] = useState<DialogStatus>("preparing");
   const [proposal, setProposal] = useState<PermanentDeleteProposal | null>(null);
   const [error, setError] = useState<DesktopError | null>(null);
-  const [errorPhase, setErrorPhase] = useState<"prepare" | "delete" | null>(
-    null,
-  );
+  const [errorPhase, setErrorPhase] =
+    useState<PermanentDeleteErrorPhase | null>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -163,11 +166,10 @@ export function PermanentDeleteDialog({
   }
 
   const itemName = proposal?.name ?? relativePath.split("/").at(-1) ?? relativePath;
-  const errorMessage = error
-    ? error.code === "permanent_delete_target_changed"
-      ? "项目在确认期间发生了变化。为避免删除错误内容，请关闭后重新操作。"
-      : "永久删除未能完整完成，部分内容可能已经删除。请关闭对话框并刷新文件树后再处理。"
-    : null;
+  const errorMessage =
+    error && errorPhase
+      ? permanentDeleteErrorMessage(error, errorPhase)
+      : null;
 
   return (
     <dialog

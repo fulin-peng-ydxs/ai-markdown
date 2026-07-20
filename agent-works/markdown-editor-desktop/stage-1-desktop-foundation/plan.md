@@ -416,7 +416,7 @@
 - 边界与异常：永久删除按钮写明结果；取消不改变磁盘；删除最近记录与删除工作区文件严格分离。
 - 验证方式：临时目录集成、macOS Finder/废纸篓人工冒烟、Windows CI adapter 测试；Windows 系统 UI 作为最终跨平台阶段的人工验收输入，在本阶段明确记为未验证。
 - 完成标准：默认删除进入回收站；降级路径无隐式永久删除。
-- 实际落地情况：已接入通过 T1 PoC 的 `trash` 5.2.6 与 `tauri-plugin-opener` 2.5.4。所有入口只接受 workspaceId 与相对路径，并在临近 I/O 时重新校验授权根、符号链接和支持类型；macOS 回收站使用 `NSFileManager`，避免额外申请 Finder 自动化权限。`trash_workspace_entry` 失败只返回 `trash_unavailable`，不会调用永久删除。永久删除必须先取得最多 5 分钟、最多 32 个的一次性随机提案，提案绑定工作区、根身份、相对路径、类型和文件实体身份；确认前换靶、换工作区、过期、取消或重复使用均拒绝。文件与递归目录永久删除失败时不虚报 `contentSafe`，前端提示部分删除可能并要求刷新。T7 与 T8 共用同一进程内磁盘变更闸门，避免重命名/移动与删除并发竞态；前端仅在磁盘成功后移除目标子树，过期 mutationId 不提交。已新增具体 `PermanentDeleteDialog`，消费 `DESIGN.md` token，默认焦点位于取消，Esc 等同取消，危险按钮明确写“永久删除”，错误不使用 toast；它尚未接入未开发的 P1 文件树，真实消费、焦点/E2E 和系统能力点击由 T13/T15 验证。macOS 已通过 78 个 Rust 单测、11 个前端树测试、clippy 和生产构建；真实 Finder 定位/系统废纸篓未在无 P1 入口的情况下擅自启动或写入用户废纸篓，明确作为 T15 人工冒烟；Windows 编译与系统 UI 仍由 T16 验证。详细证据见 `t8-safe-delete-reveal.md`。
+- 实际落地情况：已接入通过 T1 PoC 的 `trash` 5.2.6 与 `tauri-plugin-opener` 2.5.4。所有入口只接受 workspaceId 与相对路径，并在临近 I/O 时重新校验授权根、符号链接和支持类型；macOS 回收站使用 `NSFileManager`，避免额外申请 Finder 自动化权限。`trash_workspace_entry` 失败只返回 `trash_unavailable`，不会调用永久删除。永久删除必须先取得最多 5 分钟、最多 32 个的一次性随机提案，提案绑定工作区、根身份、相对路径、类型和文件实体身份；确认前换靶、换工作区、过期、取消或重复使用均拒绝。文件与递归目录永久删除失败时不虚报 `contentSafe`，前端只有在删除阶段且 `contentSafe=false` 时提示部分删除可能并要求刷新；prepare 失败、确认失效和换靶分别使用未执行删除的准确文案。T7 与 T8 共用同一进程内磁盘变更闸门，避免重命名/移动与删除并发竞态；前端仅在磁盘成功后移除目标子树，过期 mutationId 不提交。已新增具体 `PermanentDeleteDialog`，消费 `DESIGN.md` token，默认焦点位于取消，Esc 等同取消，危险按钮明确写“永久删除”，错误不使用 toast；它尚未接入未开发的 P1 文件树，真实消费、焦点/E2E 和系统能力点击由 T13/T15 验证。macOS 已通过 78 个 Rust 单测、11 个前端树测试、4 个永久删除反馈映射测试、clippy 和生产构建；真实 Finder 定位/系统废纸篓未在无 P1 入口的情况下擅自启动或写入用户废纸篓，明确作为 T15 人工冒烟；Windows 编译与系统 UI 仍由 T16 验证。详细证据见 `t8-safe-delete-reveal.md`。
 
 ### 6.9 任务 T9：外部变化监听与文件树一致性
 

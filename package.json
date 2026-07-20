@@ -14,6 +14,7 @@
     "licenses:check": "node scripts/check-licenses.mjs",
     "licenses:inventory": "node scripts/check-licenses.mjs --json",
     "test:licenses": "node --test scripts/check-licenses.test.mjs",
+    "test:permanent-delete-feedback": "node --test --experimental-strip-types scripts/permanent-delete-feedback.test.mjs",
     "test:workspace-tree": "node --test --experimental-strip-types scripts/workspace-tree-state.test.mjs",
     "preview": "vite preview",
     "tauri": "tauri"

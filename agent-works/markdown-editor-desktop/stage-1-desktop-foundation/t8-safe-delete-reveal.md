@@ -59,7 +59,7 @@
 | preparing | 弹窗打开，Rust 重新确认目标 | “正在重新确认文件状态…”；危险按钮禁用 | 取消 | 提案成功进入 ready；失败进入 error |
 | ready | 一次性提案有效 | 展示对象名与不可恢复后果 | 取消、永久删除 | 确认进入 deleting；取消消费令牌 |
 | deleting | 永久删除命令执行中 | 按钮显示“正在永久删除…”且禁止重复提交 | 无；Esc 不关闭 | 成功关闭并提交树；失败进入 error |
-| error | 准备失败、换靶或删除失败 | `aria-live` 错误；说明安全状态与下一步 | 准备失败可重新确认；确认/删除失败只关闭并刷新 | 用户关闭后回到文件树重新发起 |
+| error | 准备失败、换靶、确认失效或删除失败 | `aria-live` 错误；prepare 失败与安全的确认失败明确说明未执行删除，只有 `contentSafe=false` 警告可能部分删除 | 准备失败可重新确认；确认/删除失败只关闭并刷新 | 用户关闭后回到文件树重新发起 |
 | empty | 不适用 | dialog 只在明确目标上打开 | 无 | 无目标时不渲染入口 |
 
 ### 布局与交互
@@ -84,7 +84,7 @@
 ### 验证
 
 - Rust 单元/临时目录：78/78 通过，其中 T8 12 项覆盖回收站成功/失败、无隐式永久删除、令牌一次性/取消/过期/容量、目标换靶、递归目录、路径越界/内部链接、故障注入与非安全标记、定位适配、删除枚举 parity 和跨 T7/T8 串行。
-- 前端状态：11/11 通过，其中 T8 2 项覆盖删除成功后子树移除和过期结果拒绝。
+- 前端状态：11/11 通过，其中 T8 2 项覆盖删除成功后子树移除和过期结果拒绝；另有 4/4 反馈映射测试，锁定 prepare 失败、确认失效、换靶和不安全删除失败的不同文案。
 - 类型/构建：`pnpm build` 通过；具体 dialog 已被 TypeScript 编译，但因 P1 尚未建立，没有进入当前空壳运行时 bundle。
 - 真实平台：macOS `trash`/opener 生产分支已编译；未启动 Finder、未向用户系统废纸篓写入测试项目。T15 从真实 P1 入口执行 macOS 冒烟；Windows 编译/回收站/Explorer 由 T16 验证。
 
@@ -95,6 +95,7 @@
 | `cargo test --locked --manifest-path src-tauri/Cargo.toml` | 通过：78 个 Rust 测试 |
 | `cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` | 通过 |
 | `pnpm test:workspace-tree` | 通过：11 个前端状态测试 |
+| `pnpm test:permanent-delete-feedback` | 通过：4 个错误阶段与安全语义映射测试 |
 | `pnpm build` | 通过：TypeScript 与 Vite 生产构建 |
 | `pnpm test:licenses` | 通过：2/2 许可证策略测试 |
 | `pnpm licenses:check` | 通过：29 个 Node / 479 个 Rust / 0 个阻断项 |
@@ -103,6 +104,7 @@
 ## 5. 未验证与后续承接
 
 - 真实 Tauri IPC、P1 文件树入口、回收站失败后打开对话框、键盘焦点与删除成功后的完整工作台联动：T13/T15。
+- React 对话框的序列守卫、open/close/unmount/换靶令牌生命周期和焦点恢复尚无组件测试运行器；本次只验证纯反馈映射，T13 建立真实消费与组件测试基座时补齐，不能把 4 个纯函数测试表述为组件交互已验证。
 - macOS 系统废纸篓与 Finder 定位：T15 人工冒烟。本次不为证明测试而向用户废纸篓写入残留项目，也不无界面启动 Finder。
 - Windows `trash` 与 opener 分支编译、回收站/Explorer 行为：T16 CI 与最终人工清单。
 - 删除当前打开文件后的恢复副本、页签与编辑内容保护：不属于第一阶段文件树底座，必须由后续编辑/页签阶段按 R2/R5/R13 承接。
