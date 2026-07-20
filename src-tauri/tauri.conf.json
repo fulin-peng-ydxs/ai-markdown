@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "label": "main",
+        "label": "plainroot-window-1",
         "title": "Plainroot",
         "width": 1100,
         "height": 720,

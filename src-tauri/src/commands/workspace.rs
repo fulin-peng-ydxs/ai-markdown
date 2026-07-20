@@ -18,7 +18,8 @@ use crate::fs::{
     WorkspaceRootResolution,
 };
 use crate::state::{
-    PersistentAppState, PlainrootStateV1, RecentWorkspace, WorkspaceAvailability, WorkspaceRegistry,
+    PersistentAppState, PlainrootStateV1, RecentWorkspace, WorkspaceAvailability,
+    WorkspaceRegistry, MAX_RECENT_WORKSPACES,
 };
 
 const MAX_PENDING_SELECTIONS: usize = 32;
@@ -124,6 +125,14 @@ impl WorkspaceAccessService {
             return Ok(WorkspaceSelectionOutcome::Cancelled);
         };
         self.prepare_resolved(resolve_folder_selection(selected_path)?)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn prepare_folder_for_test(
+        &self,
+        selected_path: Option<PathBuf>,
+    ) -> Result<WorkspaceSelectionOutcome, DesktopError> {
+        self.prepare_folder(selected_path)
     }
 
     fn prepare_markdown_file(
@@ -293,6 +302,7 @@ impl WorkspaceAccessService {
             current
                 .recent_workspaces
                 .sort_by_key(|entry| std::cmp::Reverse(entry.last_opened_at));
+            current.recent_workspaces.truncate(MAX_RECENT_WORKSPACES);
         })
     }
 

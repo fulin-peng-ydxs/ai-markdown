@@ -308,3 +308,56 @@ export type WorkspaceSelectionOutcome =
       status: (typeof WORKSPACE_SELECTION_STATUSES)[3];
       proposal: WorkspaceSelectionProposal;
     };
+
+export const WORKSPACE_OPEN_DISPOSITIONS = [
+  "current_window",
+  "new_window",
+  "cancel",
+] as const;
+
+export type WorkspaceOpenDisposition =
+  (typeof WORKSPACE_OPEN_DISPOSITIONS)[number];
+
+export const WORKSPACE_OPEN_STATUSES = [
+  "decision_required",
+  "opened_current",
+  "opened_new",
+  "focused_existing",
+  "cancelled",
+] as const;
+
+export type WorkspaceOpenStatus = (typeof WORKSPACE_OPEN_STATUSES)[number];
+
+export type WorkspaceOpenOutcome =
+  | {
+      status: (typeof WORKSPACE_OPEN_STATUSES)[0];
+      workspace: WorkspaceDescriptor;
+      currentWorkspaceId: WorkspaceId;
+      currentWorkspaceName: string;
+    }
+  | {
+      status: (typeof WORKSPACE_OPEN_STATUSES)[1];
+      workspace: WorkspaceDescriptor;
+      windowLabel: string;
+    }
+  | {
+      status: (typeof WORKSPACE_OPEN_STATUSES)[2];
+      workspace: WorkspaceDescriptor;
+      windowLabel: string;
+    }
+  | {
+      status: (typeof WORKSPACE_OPEN_STATUSES)[3];
+      workspaceId: WorkspaceId;
+      windowLabel: string;
+    }
+  | { status: (typeof WORKSPACE_OPEN_STATUSES)[4] };
+
+export interface WindowActionResult {
+  windowLabel: string;
+}
+
+export interface SecondInstanceOpenRequest {
+  requestId: number;
+  arguments: string[];
+  workingDirectory: string;
+}

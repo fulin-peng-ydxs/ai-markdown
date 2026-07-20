@@ -1,8 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type {
+  SecondInstanceOpenRequest,
+  WindowActionResult,
   WorkspaceDescriptor,
   WorkspaceId,
+  WorkspaceOpenDisposition,
+  WorkspaceOpenOutcome,
   WorkspaceSelectionOutcome,
 } from "./contracts";
 
@@ -36,4 +40,30 @@ export function validateRecentWorkspace(
   return invoke<WorkspaceSelectionOutcome>("validate_recent_workspace", {
     workspaceId,
   });
+}
+
+export function coordinateWorkspaceOpen(
+  workspaceId: WorkspaceId,
+  disposition?: WorkspaceOpenDisposition,
+): Promise<WorkspaceOpenOutcome> {
+  return invoke<WorkspaceOpenOutcome>("coordinate_workspace_open", {
+    workspaceId,
+    disposition: disposition ?? null,
+  });
+}
+
+export function createPlainrootWindow(): Promise<WindowActionResult> {
+  return invoke<WindowActionResult>("create_plainroot_window");
+}
+
+export function closePlainrootWindow(): Promise<WindowActionResult> {
+  return invoke<WindowActionResult>("close_plainroot_window");
+}
+
+export function takeSecondInstanceOpenRequests(): Promise<
+  SecondInstanceOpenRequest[]
+> {
+  return invoke<SecondInstanceOpenRequest[]>(
+    "take_second_instance_open_requests",
+  );
 }

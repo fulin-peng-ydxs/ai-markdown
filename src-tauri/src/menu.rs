@@ -1,11 +1,12 @@
 use tauri::menu::AboutMetadata;
 use tauri::{
     menu::{Menu, MenuBuilder, MenuItem, MenuItemBuilder, SubmenuBuilder},
-    AppHandle, Runtime,
+    AppHandle, Manager, Runtime,
 };
 
+use crate::window::WorkspaceWindowCoordinator;
 use crate::window::APP_NAME;
-use crate::window::{close_focused_window, create_launcher_window};
+use crate::{commands::workspace::WorkspaceAccessService, state::PersistentAppState};
 
 pub const NEW_WINDOW_ID: &str = "file.new_window";
 pub const CLOSE_WINDOW_ID: &str = "file.close_window";
@@ -132,8 +133,34 @@ fn about_metadata<R: Runtime>(app: &AppHandle<R>) -> AboutMetadata<'static> {
 
 pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
     let result = match id {
-        NEW_WINDOW_ID => create_launcher_window(app).map(|_| ()),
-        CLOSE_WINDOW_ID => close_focused_window(app),
+        NEW_WINDOW_ID => app
+            .state::<WorkspaceWindowCoordinator>()
+            .create_launcher(app)
+            .map(|_| ()),
+        CLOSE_WINDOW_ID => {
+            let label = app
+                .webview_windows()
+                .into_values()
+                .find(|window| window.is_focused().unwrap_or(false))
+                .map(|window| window.label().to_owned())
+                .ok_or_else(|| {
+                    crate::error::DesktopError::new(
+                        crate::error::DesktopErrorCode::WindowNotFound,
+                        true,
+                        true,
+                    )
+                });
+            label.and_then(|label| {
+                app.state::<WorkspaceWindowCoordinator>()
+                    .close_window(
+                        app,
+                        &label,
+                        &app.state::<WorkspaceAccessService>(),
+                        &app.state::<PersistentAppState>(),
+                    )
+                    .map(|_| ())
+            })
+        }
         _ => return,
     };
 

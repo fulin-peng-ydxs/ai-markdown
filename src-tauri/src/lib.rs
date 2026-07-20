@@ -15,7 +15,26 @@ pub fn run() {
     let mutations = fs::mutate::WorkspaceMutationService::default();
     let deletions =
         fs::delete::WorkspaceDeleteService::with_operation_lock(mutations.operation_lock());
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(any(target_os = "macos", windows))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, arguments, cwd| {
+        if let Some(coordinator) = app.try_state::<window::WorkspaceWindowCoordinator>() {
+            if let Err(error) = coordinator.enqueue_second_instance_request(arguments, cwd) {
+                eprintln!(
+                    "Plainroot second-instance forwarding failed: {}",
+                    error.message_key
+                );
+            }
+        }
+        if let Err(error) = window::focus_any_window(app) {
+            eprintln!(
+                "Plainroot second-instance focus failed: {}",
+                error.message_key
+            );
+        }
+    }));
+
+    builder
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::workspace::WorkspaceAccessService::default())
         .manage(fs::scan::WorkspaceScanService::default())
@@ -30,6 +49,10 @@ pub fn run() {
             commands::workspace::authorize_workspace_selection,
             commands::workspace::cancel_workspace_selection,
             commands::workspace::validate_recent_workspace,
+            window::coordinate_workspace_open,
+            window::create_plainroot_window,
+            window::close_plainroot_window,
+            window::take_second_instance_open_requests,
             commands::files::start_workspace_scan,
             commands::files::poll_workspace_scan,
             commands::files::cancel_workspace_scan,
@@ -51,22 +74,31 @@ pub fn run() {
         ])
         .setup(|app| {
             let persistent_state = state::PersistentAppState::initialize_for_app(app.handle());
-            let cleanup_roots = persistent_state
-                .snapshot()
-                .map(|state| {
-                    state
-                        .recent_workspaces
-                        .into_iter()
-                        .map(|workspace| workspace.canonical_root)
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
+            let migrated_state = match window::migrate_legacy_window_labels(&persistent_state) {
+                Ok(state) => state,
+                Err(error) => {
+                    eprintln!(
+                        "Plainroot window-label migration failed: {}",
+                        error.message_key
+                    );
+                    persistent_state.snapshot().unwrap_or_default()
+                }
+            };
+            let cleanup_roots = migrated_state
+                .recent_workspaces
+                .iter()
+                .map(|workspace| workspace.canonical_root.clone())
+                .collect::<Vec<_>>();
+            let window_coordinator = window::WorkspaceWindowCoordinator::from_sessions(
+                &migrated_state.workspace_sessions,
+            );
             if let Some(error) = persistent_state.current_error() {
                 eprintln!(
                     "Plainroot state initialization failed: {}",
                     error.message_key
                 );
             }
+            app.manage(window_coordinator);
             app.manage(persistent_state);
             let operation_lock = app
                 .state::<fs::mutate::WorkspaceMutationService>()

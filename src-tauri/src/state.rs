@@ -19,6 +19,7 @@ use crate::fs::{
 pub const STATE_SCHEMA_VERSION: u32 = 1;
 pub const STATE_FILE_NAME: &str = "plainroot-state-v1.json";
 pub const MAX_STATE_FILE_BYTES: usize = 8 * 1024 * 1024;
+pub const MAX_RECENT_WORKSPACES: usize = 100;
 
 static TEMP_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
