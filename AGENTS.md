@@ -13,12 +13,12 @@
 - Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器，核心体验是目录工作区、多文档页签、所见即所得与源码无损切换、长文阅读和可编辑颜色预设。
 - T1 已建立并验证技术基线：Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以当前清单和锁文件为准。
 - Markdown 内容事实源始终是用户授权目录中的真实 `.md` 文件；首版不建立云端账号、在线协作、插件市场或私有内容数据库。
-- 当前仓库已完成 T1 工具链、T2 领域/路径安全契约、T3 原生窗口壳、T4 版本化本地状态、T5 系统选择/授权管线、T6 只读文件底座、T7 新建/重命名/移动和 T8 安全删除/系统定位底座；当前具备受控授权、后台扫描/读取、不覆盖目标的文件变更、回收站优先删除、一次性永久删除确认、系统定位命令及前端磁盘成功后提交状态，但尚无监听、工作区页面或完整窗口打开协调，也没有 Windows 实机、产品集成/E2E 与 CI，不得据此表述为 R1、R2、R14 或第一阶段整体完成。
+- 当前仓库已完成 T1 工具链、T2 领域/路径安全契约、T3 原生窗口壳、T4 版本化本地状态、T5 系统选择/授权管线、T6 只读文件底座、T7 新建/重命名/移动、T8 安全删除/系统定位和 T9 外部变化监听底座；当前具备受控授权、后台扫描/读取、不覆盖目标的文件变更、回收站优先删除、一次性永久删除确认、系统定位、事件合并/自身操作标记、根失效终止及前端磁盘成功后提交和监听重扫归并状态，但尚无安全写入 T10、工作区页面或完整窗口打开协调，也没有 Windows 实机、产品集成/E2E 与 CI，不得据此表述为 R1、R2、R5、R14 或第一阶段整体完成。
 
 ## 当前与目标代码边界
 
 - `agent-works/markdown-editor-desktop/`：本产品的需求、计划、原型和后续开发留痕；同一产品能力继续复用该目录或其语义明确的阶段子目录。
-- `src/`、`src-tauri/`：已建立前端空壳、共享桌面契约/调用封装、渐进文件树与变更状态、永久删除具体对话框和首批运行时 token、Rust/Tauri 工程、原生窗口/菜单服务、版本化本地状态仓储，以及工作区选择、扫描、读取、新建、重命名、移动、删除和系统定位命令；当前不含监听、完整窗口协调或工作区页面业务。
+- `src/`、`src-tauri/`：已建立前端空壳、共享桌面契约/调用封装、渐进文件树/变更/监听归并状态、永久删除具体对话框和首批运行时 token、Rust/Tauri 工程、原生窗口/菜单服务、版本化本地状态仓储，以及工作区选择、扫描、读取、新建、重命名、移动、删除、系统定位和外部变化监听命令；当前不含安全写入 T10、完整窗口协调或工作区页面业务。
 - `tests/`、`.github/`：仍是后续任务的目标结构，实际建立前不得作为已有测试或 CI 引用。
 - 前端只负责视图、用户意图和可观察状态；不得直接拼接任意绝对路径执行磁盘写操作。
 - Rust 命令层集中负责授权根、路径规范化、越界检查、文件扫描与 CRUD、安全写入、回收站和窗口协调。
@@ -68,7 +68,7 @@
 - 2026-07-20 已在 macOS arm64 实际验证：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm build`、`pnpm test:workspace-tree`、`pnpm test:permanent-delete-feedback`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo check --locked --manifest-path src-tauri/Cargo.toml`、`cargo test --locked --manifest-path src-tauri/Cargo.toml`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`、`pnpm tauri build --no-bundle`。
 - `pnpm tauri build --no-bundle` 已生成本机 release 可执行文件；T3 另以 `pnpm tauri build --bundles app` 生成并启动 macOS `.app`，实测原生窗口控件、标题、顶层菜单、禁用态及新建/关闭窗口链路。上述证据不证明文件、页面或 Windows 行为完成。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。Windows 编译与 CI 实际 Node 版本留给 T16 验证，当前不得标记通过。
-- 当前自动化测试覆盖许可证拒绝策略、T2 领域/路径安全、Rust↔TypeScript 契约 parity、T3 窗口/菜单、T4 状态仓储、T5 选择/授权/最近记录、T6 扫描/读取、T7 新建/重命名/移动及 T8 回收站降级/永久删除/系统定位边界，共 78 个 Rust 单元测试、11 个前端树状态测试和 4 个永久删除反馈映射测试；真实 Tauri IPC、对话框组件交互、系统废纸篓/Finder/Explorer、监听、真实选择器 UI、稳定桌面 E2E 与 CI 验证仍由后续任务建立。当前许可证扫描为 29 个 Node 包、479 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
+- 当前自动化测试覆盖许可证拒绝策略、T2 领域/路径安全、Rust↔TypeScript 契约 parity、T3 窗口/菜单、T4 状态仓储、T5 选择/授权/最近记录、T6 扫描/读取、T7 新建/重命名/移动、T8 回收站降级/永久删除/系统定位及 T9 外部变化监听/合并/重启/根失效边界，共 85 个 Rust 单元测试、18 个前端树状态测试和 4 个永久删除反馈映射测试；真实 Tauri IPC、P1 监听消费、对话框组件交互、系统废纸篓/Finder/Explorer、真实选择器 UI、Windows watcher、稳定桌面 E2E 与 CI 验证仍由后续任务建立。当前许可证扫描为 29 个 Node 包、486 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
 
 ## 文档、协作与 Git
 

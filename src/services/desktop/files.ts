@@ -9,6 +9,8 @@ import type {
   WorkspaceMutationResult,
   DeleteResult,
   PermanentDeleteProposal,
+  WorkspaceWatchBatch,
+  WorkspaceWatchStart,
 } from "./contracts";
 
 export function startWorkspaceScan(
@@ -29,6 +31,30 @@ export function pollWorkspaceScan(
 
 export function cancelWorkspaceScan(scanId: string): Promise<boolean> {
   return invoke<boolean>("cancel_workspace_scan", { scanId });
+}
+
+export function startWorkspaceWatch(
+  workspaceId: WorkspaceId,
+): Promise<WorkspaceWatchStart> {
+  return invoke<WorkspaceWatchStart>("start_workspace_watch", { workspaceId });
+}
+
+export function restartWorkspaceWatch(
+  workspaceId: WorkspaceId,
+): Promise<WorkspaceWatchStart> {
+  return invoke<WorkspaceWatchStart>("restart_workspace_watch", {
+    workspaceId,
+  });
+}
+
+export function pollWorkspaceWatch(
+  watchId: string,
+): Promise<WorkspaceWatchBatch> {
+  return invoke<WorkspaceWatchBatch>("poll_workspace_watch", { watchId });
+}
+
+export function stopWorkspaceWatch(watchId: string): Promise<boolean> {
+  return invoke<boolean>("stop_workspace_watch", { watchId });
 }
 
 export function readMarkdownFile(

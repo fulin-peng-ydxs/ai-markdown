@@ -6,7 +6,11 @@ import {
   applyWorkspaceTreeMutationFailure,
   applyWorkspaceTreeMutationSuccess,
   applyWorkspaceTreeDeleteSuccess,
+  applyWorkspaceWatchBatch,
+  acknowledgeWorkspaceWatchRescan,
   beginDirectoryScan,
+  beginWorkspaceWatch,
+  beginWorkspaceWatchRescan,
   beginWorkspaceTreeMutation,
   createWorkspaceTreeState,
 } from "../src/features/workbench/workspaceTreeState.ts";
@@ -39,6 +43,27 @@ function batch(scanId, entries = [], issues = [], complete = false) {
   };
 }
 
+function watchBatch({
+  watchId = "watch-active",
+  sequence = 1,
+  rescanDirectories = [],
+  status = "watching",
+  issue = null,
+  overflowed = false,
+  complete = false,
+} = {}) {
+  return {
+    watchId,
+    sequence,
+    events: [],
+    rescanDirectories,
+    status,
+    issue,
+    overflowed,
+    complete,
+  };
+}
+
 const issue = {
   code: "permission_denied",
   messageKey: "error.path.permissionDenied",
@@ -62,6 +87,7 @@ test("stale scan batch cannot overwrite the active directory scan", () => {
 
 test("root rescan invalidates every previous tree entry and child list", () => {
   const populated = {
+    ...createWorkspaceTreeState(),
     entries: {
       docs: entry("docs", "directory"),
       "docs/note.md": entry("docs/note.md"),
@@ -83,6 +109,7 @@ test("root rescan invalidates every previous tree entry and child list", () => {
 
 test("child rescan clears only that subtree and preserves unrelated entries", () => {
   const populated = {
+    ...createWorkspaceTreeState(),
     entries: {
       docs: entry("docs", "directory"),
       "docs/note.md": entry("docs/note.md"),
@@ -150,6 +177,7 @@ test("successful create enters the loaded parent only after the disk result", ()
 
 test("successful directory rename remaps descendants and invalidates affected scans", () => {
   const initial = {
+    ...createWorkspaceTreeState(),
     entries: {
       docs: entry("docs", "directory"),
       "docs/note.md": entry("docs/note.md"),
@@ -209,6 +237,7 @@ test("failed mutation preserves tree and exposes a retryable error", () => {
 
 test("move between parents removes the old child and adds the new child", () => {
   const initial = {
+    ...createWorkspaceTreeState(),
     entries: {
       docs: entry("docs", "directory"),
       archive: entry("archive", "directory"),
@@ -258,6 +287,7 @@ test("stale mutation result cannot commit into a newer tree operation", () => {
 
 test("successful delete removes the target subtree only after disk success", () => {
   const initial = {
+    ...createWorkspaceTreeState(),
     entries: {
       docs: entry("docs", "directory"),
       "docs/note.md": entry("docs/note.md"),
@@ -312,4 +342,175 @@ test("stale delete result cannot remove a newer tree target", () => {
   });
   assert.equal(result, active);
   assert.ok(result.entries["note.md"]);
+});
+
+test("external watch batch queues targeted rescans without clearing loaded tree", () => {
+  const populated = {
+    ...createWorkspaceTreeState(),
+    entries: {
+      docs: entry("docs", "directory"),
+      "docs/note.md": entry("docs/note.md"),
+    },
+    children: { "": ["docs"], docs: ["docs/note.md"] },
+  };
+  const watching = beginWorkspaceWatch(populated, {
+    watchId: "watch-active",
+    workspaceId,
+  });
+  const result = applyWorkspaceWatchBatch(
+    watching,
+    watchBatch({ rescanDirectories: ["docs", null] }),
+  );
+
+  assert.equal(result.entries, watching.entries);
+  assert.equal(result.children, watching.children);
+  assert.deepEqual(result.watch.rescanDirectories, ["docs", ""]);
+});
+
+test("watch rescan acknowledgment removes only the consumed directory", () => {
+  const watching = beginWorkspaceWatch(createWorkspaceTreeState(), {
+    watchId: "watch-active",
+    workspaceId,
+  });
+  const queued = applyWorkspaceWatchBatch(
+    watching,
+    watchBatch({ rescanDirectories: ["docs", "archive"] }),
+  );
+  const result = acknowledgeWorkspaceWatchRescan(queued, "docs");
+
+  assert.deepEqual(result.watch.rescanDirectories, ["archive"]);
+});
+
+test("watch reconciliation removes missing child and preserves surviving expansion", () => {
+  const populated = {
+    ...createWorkspaceTreeState(),
+    entries: {
+      docs: entry("docs", "directory"),
+      "docs/keep": entry("docs/keep", "directory"),
+      "docs/keep/note.md": entry("docs/keep/note.md"),
+      "docs/removed.md": entry("docs/removed.md"),
+    },
+    children: {
+      "": ["docs"],
+      docs: ["docs/keep", "docs/removed.md"],
+      "docs/keep": ["docs/keep/note.md"],
+    },
+  };
+  const watching = beginWorkspaceWatch(populated, {
+    watchId: "watch-active",
+    workspaceId,
+  });
+  const queued = applyWorkspaceWatchBatch(
+    watching,
+    watchBatch({ rescanDirectories: ["docs"] }),
+  );
+  const reconciling = beginWorkspaceWatchRescan(
+    queued,
+    start("scan-reconcile", "docs"),
+  );
+
+  assert.ok(reconciling.entries["docs/removed.md"]);
+  assert.deepEqual(reconciling.children["docs/keep"], ["docs/keep/note.md"]);
+  const result = applyDirectoryScanBatch(
+    reconciling,
+    "docs",
+    batch("scan-reconcile", [entry("docs/keep", "directory")], [], true),
+  );
+
+  assert.equal(result.entries["docs/removed.md"], undefined);
+  assert.ok(result.entries["docs/keep/note.md"]);
+  assert.deepEqual(result.children.docs, ["docs/keep"]);
+  assert.deepEqual(result.children["docs/keep"], ["docs/keep/note.md"]);
+  assert.deepEqual(result.watch.rescanDirectories, []);
+});
+
+test("failed watch reconciliation preserves the last tree and requeues refresh", () => {
+  const populated = {
+    ...createWorkspaceTreeState(),
+    entries: { "note.md": entry("note.md") },
+    children: { "": ["note.md"] },
+  };
+  const watching = beginWorkspaceWatch(populated, {
+    watchId: "watch-active",
+    workspaceId,
+  });
+  const queued = applyWorkspaceWatchBatch(
+    watching,
+    watchBatch({ rescanDirectories: [null] }),
+  );
+  const reconciling = beginWorkspaceWatchRescan(
+    queued,
+    start("scan-failed"),
+  );
+  const result = applyDirectoryScanBatch(
+    reconciling,
+    null,
+    batch("scan-failed", [], [issue], true),
+  );
+
+  assert.ok(result.entries["note.md"]);
+  assert.deepEqual(result.children[""], ["note.md"]);
+  assert.deepEqual(result.watch.rescanDirectories, [""]);
+});
+
+test("stale watch batch cannot replace a restarted watcher", () => {
+  const restarted = beginWorkspaceWatch(createWorkspaceTreeState(), {
+    watchId: "watch-new",
+    workspaceId,
+  });
+  const result = applyWorkspaceWatchBatch(
+    restarted,
+    watchBatch({ watchId: "watch-old", rescanDirectories: [null] }),
+  );
+
+  assert.equal(result, restarted);
+  assert.deepEqual(result.watch.rescanDirectories, []);
+});
+
+test("terminal root loss clears inaccessible tree and exposes retry state", () => {
+  const populated = {
+    ...createWorkspaceTreeState(),
+    entries: { "note.md": entry("note.md") },
+    children: { "": ["note.md"] },
+  };
+  const watching = beginWorkspaceWatch(populated, {
+    watchId: "watch-active",
+    workspaceId,
+  });
+  const result = applyWorkspaceWatchBatch(
+    watching,
+    watchBatch({
+      sequence: 2,
+      status: "root_missing",
+      issue,
+      complete: true,
+    }),
+  );
+
+  assert.deepEqual(result.entries, {});
+  assert.deepEqual(result.children, {});
+  assert.equal(result.watch.watchId, null);
+  assert.equal(result.watch.status, "root_missing");
+  assert.equal(result.watch.issue, issue);
+});
+
+test("watch backend failure preserves the last readable tree for manual refresh", () => {
+  const populated = {
+    ...createWorkspaceTreeState(),
+    entries: { "note.md": entry("note.md") },
+    children: { "": ["note.md"] },
+  };
+  const watching = beginWorkspaceWatch(populated, {
+    watchId: "watch-active",
+    workspaceId,
+  });
+  const result = applyWorkspaceWatchBatch(
+    watching,
+    watchBatch({ status: "failed", issue, complete: true }),
+  );
+
+  assert.ok(result.entries["note.md"]);
+  assert.deepEqual(result.children[""], ["note.md"]);
+  assert.equal(result.watch.watchId, null);
+  assert.equal(result.watch.status, "failed");
 });

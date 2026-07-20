@@ -7,6 +7,7 @@ use crate::fs::delete::{DeleteResult, PermanentDeleteProposal, WorkspaceDeleteSe
 use crate::fs::mutate::{WorkspaceMutationResult, WorkspaceMutationService};
 use crate::fs::read::{self, MarkdownReadResult};
 use crate::fs::scan::{WorkspaceScanBatch, WorkspaceScanService, WorkspaceScanStart};
+use crate::fs::watch::{WorkspaceWatchBatch, WorkspaceWatchService, WorkspaceWatchStart};
 use crate::fs::{resolve_existing_workspace_path, WorkspaceId, WorkspaceRelativePath};
 
 use super::workspace::WorkspaceAccessService;
@@ -55,6 +56,42 @@ pub fn cancel_workspace_scan(
 }
 
 #[tauri::command]
+pub fn start_workspace_watch(
+    workspace_id: WorkspaceId,
+    access: State<'_, WorkspaceAccessService>,
+    watches: State<'_, WorkspaceWatchService>,
+) -> Result<WorkspaceWatchStart, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    watches.start(workspace_id, workspace.canonical_root().to_path_buf())
+}
+
+#[tauri::command]
+pub fn restart_workspace_watch(
+    workspace_id: WorkspaceId,
+    access: State<'_, WorkspaceAccessService>,
+    watches: State<'_, WorkspaceWatchService>,
+) -> Result<WorkspaceWatchStart, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    watches.start(workspace_id, workspace.canonical_root().to_path_buf())
+}
+
+#[tauri::command]
+pub fn poll_workspace_watch(
+    watch_id: String,
+    watches: State<'_, WorkspaceWatchService>,
+) -> Result<WorkspaceWatchBatch, DesktopError> {
+    watches.poll(&watch_id)
+}
+
+#[tauri::command]
+pub fn stop_workspace_watch(
+    watch_id: String,
+    watches: State<'_, WorkspaceWatchService>,
+) -> Result<bool, DesktopError> {
+    watches.stop(&watch_id)
+}
+
+#[tauri::command]
 pub async fn read_markdown_file(
     workspace_id: WorkspaceId,
     relative_path: String,
@@ -75,9 +112,13 @@ pub fn create_markdown_file(
     name: String,
     access: State<'_, WorkspaceAccessService>,
     mutations: State<'_, WorkspaceMutationService>,
+    watches: State<'_, WorkspaceWatchService>,
 ) -> Result<WorkspaceMutationResult, DesktopError> {
     let workspace = access.workspace(&workspace_id)?;
-    mutations.create_markdown_file(workspace.canonical_root(), parent.as_deref(), &name)
+    let result =
+        mutations.create_markdown_file(workspace.canonical_root(), parent.as_deref(), &name)?;
+    watches.record_mutation(&workspace_id, &result);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -87,9 +128,13 @@ pub fn create_workspace_directory(
     name: String,
     access: State<'_, WorkspaceAccessService>,
     mutations: State<'_, WorkspaceMutationService>,
+    watches: State<'_, WorkspaceWatchService>,
 ) -> Result<WorkspaceMutationResult, DesktopError> {
     let workspace = access.workspace(&workspace_id)?;
-    mutations.create_directory(workspace.canonical_root(), parent.as_deref(), &name)
+    let result =
+        mutations.create_directory(workspace.canonical_root(), parent.as_deref(), &name)?;
+    watches.record_mutation(&workspace_id, &result);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -99,9 +144,12 @@ pub fn rename_workspace_entry(
     name: String,
     access: State<'_, WorkspaceAccessService>,
     mutations: State<'_, WorkspaceMutationService>,
+    watches: State<'_, WorkspaceWatchService>,
 ) -> Result<WorkspaceMutationResult, DesktopError> {
     let workspace = access.workspace(&workspace_id)?;
-    mutations.rename(workspace.canonical_root(), &relative_path, &name)
+    let result = mutations.rename(workspace.canonical_root(), &relative_path, &name)?;
+    watches.record_mutation(&workspace_id, &result);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -111,13 +159,16 @@ pub fn move_workspace_entry(
     target_directory: Option<String>,
     access: State<'_, WorkspaceAccessService>,
     mutations: State<'_, WorkspaceMutationService>,
+    watches: State<'_, WorkspaceWatchService>,
 ) -> Result<WorkspaceMutationResult, DesktopError> {
     let workspace = access.workspace(&workspace_id)?;
-    mutations.move_entry(
+    let result = mutations.move_entry(
         workspace.canonical_root(),
         &relative_path,
         target_directory.as_deref(),
-    )
+    )?;
+    watches.record_mutation(&workspace_id, &result);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -126,13 +177,17 @@ pub async fn trash_workspace_entry(
     relative_path: String,
     access: State<'_, WorkspaceAccessService>,
     deletions: State<'_, WorkspaceDeleteService>,
+    watches: State<'_, WorkspaceWatchService>,
 ) -> Result<DeleteResult, DesktopError> {
     let workspace = access.workspace(&workspace_id)?;
     let root = workspace.canonical_root().to_path_buf();
     let service = deletions.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || service.move_to_trash(&root, &relative_path))
-        .await
-        .map_err(|_| DesktopError::new(DesktopErrorCode::TrashUnavailable, true, true))?
+    let result =
+        tauri::async_runtime::spawn_blocking(move || service.move_to_trash(&root, &relative_path))
+            .await
+            .map_err(|_| DesktopError::new(DesktopErrorCode::TrashUnavailable, true, true))??;
+    watches.record_delete(&workspace_id, &result);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -152,15 +207,19 @@ pub async fn confirm_permanent_delete(
     confirmation_id: String,
     access: State<'_, WorkspaceAccessService>,
     deletions: State<'_, WorkspaceDeleteService>,
+    watches: State<'_, WorkspaceWatchService>,
 ) -> Result<DeleteResult, DesktopError> {
     let workspace = access.workspace(&workspace_id)?;
     let root = workspace.canonical_root().to_path_buf();
     let service = deletions.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        service.confirm_permanent_delete(&workspace_id, &root, &confirmation_id)
+    let delete_workspace_id = workspace_id.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        service.confirm_permanent_delete(&delete_workspace_id, &root, &confirmation_id)
     })
     .await
-    .map_err(|_| DesktopError::new(DesktopErrorCode::PermanentDeleteFailed, true, true))?
+    .map_err(|_| DesktopError::new(DesktopErrorCode::PermanentDeleteFailed, true, true))??;
+    watches.record_delete(&workspace_id, &result);
+    Ok(result)
 }
 
 #[tauri::command]

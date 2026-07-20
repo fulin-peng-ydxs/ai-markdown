@@ -4,6 +4,7 @@ pub mod mutate;
 mod path;
 pub mod read;
 pub mod scan;
+pub mod watch;
 
 pub use model::{
     FileRevision, FsChildrenState, FsEntry, FsEntryKind, LineEnding, TextEncoding,

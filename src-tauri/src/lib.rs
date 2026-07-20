@@ -19,6 +19,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::workspace::WorkspaceAccessService::default())
         .manage(fs::scan::WorkspaceScanService::default())
+        .manage(fs::watch::WorkspaceWatchService::default())
         .manage(mutations)
         .manage(deletions)
         .menu(menu::build_app_menu)
@@ -32,6 +33,10 @@ pub fn run() {
             commands::files::start_workspace_scan,
             commands::files::poll_workspace_scan,
             commands::files::cancel_workspace_scan,
+            commands::files::start_workspace_watch,
+            commands::files::restart_workspace_watch,
+            commands::files::poll_workspace_watch,
+            commands::files::stop_workspace_watch,
             commands::files::read_markdown_file,
             commands::files::create_markdown_file,
             commands::files::create_workspace_directory,

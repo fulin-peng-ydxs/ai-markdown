@@ -34,6 +34,8 @@ export const DESKTOP_ERROR_CODES = [
   "recent_workspace_not_found",
   "scan_not_found",
   "scan_unavailable",
+  "watch_not_found",
+  "watch_unavailable",
   "file_changed_during_read",
   "invalid_entry_name",
   "reserved_entry_name",
@@ -130,6 +132,60 @@ export interface WorkspaceScanBatch {
   issues: DesktopError[];
   complete: boolean;
   cancelled: boolean;
+}
+
+export const WORKSPACE_WATCH_CHANGE_KINDS = [
+  "create",
+  "modify",
+  "remove",
+  "rename",
+  "other",
+  "rescan_required",
+] as const;
+
+export type WorkspaceWatchChangeKind =
+  (typeof WORKSPACE_WATCH_CHANGE_KINDS)[number];
+
+export const WORKSPACE_WATCH_EVENT_SOURCES = [
+  "external",
+  "application",
+  "mixed",
+] as const;
+
+export type WorkspaceWatchEventSource =
+  (typeof WORKSPACE_WATCH_EVENT_SOURCES)[number];
+
+export const WORKSPACE_WATCH_STATUSES = [
+  "watching",
+  "root_missing",
+  "permission_denied",
+  "failed",
+] as const;
+
+export type WorkspaceWatchStatus =
+  (typeof WORKSPACE_WATCH_STATUSES)[number];
+
+export interface WorkspaceWatchStart {
+  watchId: string;
+  workspaceId: WorkspaceId;
+}
+
+export interface WorkspaceWatchEvent {
+  kind: WorkspaceWatchChangeKind;
+  paths: WorkspaceRelativePath[];
+  source: WorkspaceWatchEventSource;
+  operationId: string | null;
+}
+
+export interface WorkspaceWatchBatch {
+  watchId: string;
+  sequence: number;
+  events: WorkspaceWatchEvent[];
+  rescanDirectories: (WorkspaceRelativePath | null)[];
+  status: WorkspaceWatchStatus;
+  issue: DesktopError | null;
+  overflowed: boolean;
+  complete: boolean;
 }
 
 export const WORKSPACE_MUTATION_KINDS = [
