@@ -68,12 +68,12 @@
 - 2026-07-21 已在 macOS arm64 实际验证：`nvm use`、`pnpm build`、`pnpm test:ui`、`pnpm test:workspace-tree`、`pnpm test:permanent-delete-feedback`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo test --locked --manifest-path src-tauri/Cargo.toml`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`、`pnpm tauri build --no-bundle` 与 `pnpm tauri build --bundles app`。
 - `pnpm tauri build --bundles app` 已生成并启动 macOS `.app`；T12 实测 P2，T13 以临时目录实测 P1 系统选择器、真实 Markdown 读取、UI 新建后磁盘存在、新窗口打开且原窗口保持。临时文件和测试会话记录均已清理。上述证据不证明系统废纸篓/Finder、Windows 或稳定桌面 E2E 完成。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。Windows 编译与 CI 实际 Node 版本留给 T16 验证，当前不得标记通过。
-- 当前自动化测试覆盖许可证拒绝策略、T2～T11 底座、Rust↔TypeScript 契约 parity、T12 launcher，以及 T13 workbench 文件树/读取/磁盘提交/失败回退/目录决策/抽屉/键盘焦点，共 111 个 Rust 单元测试、18 个前端树状态测试、4 个永久删除反馈测试和 23 个 React UI/状态测试；双进程 single-instance、系统废纸篓/Finder/Explorer、Windows 分支、稳定桌面 E2E 与 CI 验证仍由后续任务建立。当前许可证扫描为 112 个 Node 包、487 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
+- 当前自动化测试覆盖许可证拒绝策略、T2～T11 底座、Rust↔TypeScript 契约 parity、T12 launcher，以及 T13 workbench 文件树/读取/磁盘提交/失败回退/目录决策/抽屉、roving tabindex、父子键盘导航、重试动作门禁和同目录重扫串行归并，共 111 个 Rust 单元测试、18 个前端树状态测试、4 个永久删除反馈测试和 27 个 React UI/状态测试；双进程 single-instance、系统废纸篓/Finder/Explorer、Windows 分支、稳定桌面 E2E 与 CI 验证仍由后续任务建立。当前许可证扫描为 112 个 Node 包、487 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
 
 ## 文档、协作与 Git
 
 - 除命令、代码、日志和原文外，面向用户使用简体中文。
 - 需求、计划、开发留痕、业务核查、测试证据和 SQL（若未来确有）放入 `agent-works/{feature-slug}/`；同一功能复用同一语义目录，不在根目录堆零散 Markdown。
-- 修改代码或文档前检查最近一次远端同步时间；超过 2 小时先同步并解决冲突。最近一次远端同步：2026-07-21 12:59 CST（当前分支无上游，已 fetch 并 rebase `origin/main`，确认分支基线无需更新）。
+- 修改代码或文档前检查最近一次远端同步时间；超过 2 小时先同步并解决冲突。最近一次远端同步：2026-07-21 16:36 CST（当前分支无上游，已 fetch `origin`；当前分支相对 `origin/main` 仅领先、无需 rebase）。
 - 工作区可能包含用户未提交改动；先读 `git status`，保留无关改动，不覆盖、不清理、不顺手格式化。
 - 未经用户要求不创建提交或推送。需要提交时按用户确认范围处理，提交信息使用中文语义化描述。

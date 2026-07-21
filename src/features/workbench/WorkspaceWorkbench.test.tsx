@@ -191,8 +191,132 @@ describe("WorkspaceWorkbench", () => {
     render(<WorkspaceWorkbench gateway={gateway()} initialWorkspace={workspace} onWorkspaceChanged={() => undefined} />);
     const folderRow = await screen.findByRole("treeitem", { name: /guides/ });
     const noteRow = screen.getByRole("treeitem", { name: /note\.md/ });
+    expect(folderRow.tabIndex).toBe(0);
+    expect(noteRow.tabIndex).toBe(-1);
     folderRow.focus();
     await user.keyboard("{ArrowDown}");
     expect(document.activeElement).toBe(noteRow);
+    expect(folderRow.tabIndex).toBe(-1);
+    expect(noteRow.tabIndex).toBe(0);
+  });
+
+  it("moves into an expanded directory and back to its parent with tree keys", async () => {
+    const child: FsEntry = {
+      ...note,
+      relativePath: "guides/inside.md",
+      name: "inside.md",
+    };
+    let scanSequence = 0;
+    const api = gateway({
+      scan: vi.fn().mockImplementation((_workspaceId, directory) => {
+        scanSequence += 1;
+        return Promise.resolve({ scanId: `scan-${scanSequence}`, workspaceId: workspace.id, directory });
+      }),
+      pollScan: vi.fn().mockImplementation((scanId) => Promise.resolve({
+        scanId,
+        processed: scanId === "scan-1" ? 2 : 1,
+        entries: scanId === "scan-1" ? [note, folder] : [child],
+        issues: [],
+        complete: true,
+        cancelled: false,
+      })),
+    });
+    const user = userEvent.setup();
+    render(<WorkspaceWorkbench gateway={api} initialWorkspace={workspace} onWorkspaceChanged={() => undefined} />);
+
+    const folderRow = await screen.findByRole("treeitem", { name: /guides/ });
+    await user.click(folderRow);
+    const childRow = await screen.findByRole("treeitem", { name: /inside\.md/ });
+    await user.keyboard("{ArrowRight}");
+    expect(document.activeElement).toBe(childRow);
+    await user.keyboard("{ArrowLeft}");
+    expect(document.activeElement).toBe(folderRow);
+  });
+
+  it("does not offer a no-op retry for an unsupported page error", async () => {
+    const api = gateway({
+      scan: vi.fn().mockRejectedValue({
+        code: "mutation_unavailable",
+        messageKey: "error.desktop.mutation_unavailable",
+        pathHint: null,
+        contentSafe: true,
+        retryable: true,
+      }),
+    });
+    render(<WorkspaceWorkbench gateway={api} initialWorkspace={workspace} onWorkspaceChanged={() => undefined} />);
+
+    expect(await screen.findByText(/文件操作服务当前不可用/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
+    expect(screen.getByRole("button", { name: "关闭" })).toBeTruthy();
+  });
+
+  it("repeats the selected reveal action when its retry button is used", async () => {
+    const reveal = vi.fn()
+      .mockRejectedValueOnce({
+        code: "reveal_unavailable",
+        messageKey: "error.desktop.reveal_unavailable",
+        pathHint: "note.md",
+        contentSafe: true,
+        retryable: true,
+      })
+      .mockResolvedValueOnce(undefined);
+    const api = gateway({ reveal });
+    const user = userEvent.setup();
+    render(<WorkspaceWorkbench gateway={api} initialWorkspace={workspace} onWorkspaceChanged={() => undefined} />);
+
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await user.click(screen.getByRole("button", { name: "定位" }));
+    expect(await screen.findByText(/系统文件管理器未能定位/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(reveal).toHaveBeenCalledTimes(2));
+    expect(reveal).toHaveBeenLastCalledWith("workspace-a", "note.md");
+  });
+
+  it("serializes duplicate watch rescans for the same directory", async () => {
+    let resolveInitialScan: ((batch: WorkspaceScanBatch) => void) | undefined;
+    const initialScan = new Promise<WorkspaceScanBatch>((resolve) => {
+      resolveInitialScan = resolve;
+    });
+    let scanSequence = 0;
+    const api = gateway({
+      scan: vi.fn().mockImplementation((_workspaceId, directory) => {
+        scanSequence += 1;
+        return Promise.resolve({ scanId: `scan-${scanSequence}`, workspaceId: workspace.id, directory });
+      }),
+      pollScan: vi.fn().mockImplementation((scanId) => {
+        if (scanId === "scan-1") return initialScan;
+        return Promise.resolve({
+          scanId,
+          processed: 2,
+          entries: [note, folder],
+          issues: [],
+          complete: true,
+          cancelled: false,
+        });
+      }),
+      pollWatch: vi.fn().mockResolvedValue({
+        watchId: "watch-1",
+        sequence: 1,
+        events: [],
+        rescanDirectories: [null, null],
+        status: "watching",
+        issue: null,
+        overflowed: false,
+        complete: true,
+      }),
+    });
+    render(<WorkspaceWorkbench gateway={api} initialWorkspace={workspace} onWorkspaceChanged={() => undefined} />);
+
+    await waitFor(() => expect(api.pollWatch).toHaveBeenCalled());
+    expect(api.scan).toHaveBeenCalledTimes(1);
+    resolveInitialScan?.({
+      scanId: "scan-1",
+      processed: 2,
+      entries: [note, folder],
+      issues: [],
+      complete: true,
+      cancelled: false,
+    });
+    await waitFor(() => expect(api.scan).toHaveBeenCalledTimes(2));
   });
 });

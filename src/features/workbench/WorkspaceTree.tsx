@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 
 import type { FsEntry, WorkspaceRelativePath } from "../../services/desktop/contracts";
 import type { WorkspaceTreeState } from "./workspaceTreeState";
@@ -19,6 +19,19 @@ export function WorkspaceTree({
   onToggle,
 }: WorkspaceTreeProps) {
   const rootChildren = state.children[""] ?? [];
+  const visiblePaths = collectVisiblePaths(rootChildren, state, expanded);
+  const visiblePathKey = visiblePaths.join("\u0000");
+  const [rovingPath, setRovingPath] = useState<WorkspaceRelativePath | null>(
+    selectedPath && visiblePaths.includes(selectedPath) ? selectedPath : visiblePaths[0] ?? null,
+  );
+
+  useEffect(() => {
+    setRovingPath((current) => {
+      if (current && visiblePaths.includes(current)) return current;
+      if (selectedPath && visiblePaths.includes(selectedPath)) return selectedPath;
+      return visiblePaths[0] ?? null;
+    });
+  }, [selectedPath, visiblePathKey]);
 
   if (rootChildren.length === 0 && state.scans[""]?.status === "ready") {
     return (
@@ -39,6 +52,8 @@ export function WorkspaceTree({
           key={path}
           onSelect={onSelect}
           onToggle={onToggle}
+          onRovingPathChange={setRovingPath}
+          rovingPath={rovingPath}
           selectedPath={selectedPath}
           state={state}
         />
@@ -50,6 +65,8 @@ export function WorkspaceTree({
 interface TreeItemProps extends WorkspaceTreeProps {
   depth: number;
   entry: FsEntry | undefined;
+  rovingPath: WorkspaceRelativePath | null;
+  onRovingPathChange(path: WorkspaceRelativePath): void;
 }
 
 function TreeItem({
@@ -60,6 +77,8 @@ function TreeItem({
   state,
   onSelect,
   onToggle,
+  rovingPath,
+  onRovingPathChange,
 }: TreeItemProps) {
   if (!entry) return null;
   const isDirectory = entry.kind === "directory";
@@ -71,17 +90,25 @@ function TreeItem({
     <div role="none">
       <button
         aria-expanded={isDirectory ? isExpanded : undefined}
+        aria-level={depth + 1}
         aria-selected={selectedPath === entry.relativePath}
         className="workspace-tree__row"
         data-kind={entry.kind}
         data-selected={selectedPath === entry.relativePath || undefined}
+        data-tree-depth={depth}
+        data-tree-path={entry.relativePath}
         onClick={() => {
+          onRovingPathChange(entry.relativePath);
           onSelect(entry);
           if (isDirectory) onToggle(entry);
         }}
-        onKeyDown={(event) => handleTreeKeyDown(event, entry, isExpanded, onToggle)}
+        onFocus={() => onRovingPathChange(entry.relativePath)}
+        onKeyDown={(event) =>
+          handleTreeKeyDown(event, entry, isExpanded, onToggle, onRovingPathChange)
+        }
         role="treeitem"
         style={{ paddingInlineStart: `calc(var(--space-sm) + ${depth} * 16px)` }}
+        tabIndex={rovingPath === entry.relativePath ? 0 : -1}
         title={entry.relativePath}
         type="button"
       >
@@ -114,6 +141,8 @@ function TreeItem({
               key={path}
               onSelect={onSelect}
               onToggle={onToggle}
+              onRovingPathChange={onRovingPathChange}
+              rovingPath={rovingPath}
               selectedPath={selectedPath}
               state={state}
             />
@@ -135,11 +164,29 @@ function sortedPaths(paths: WorkspaceRelativePath[], state: WorkspaceTreeState) 
   });
 }
 
+function collectVisiblePaths(
+  paths: WorkspaceRelativePath[],
+  state: WorkspaceTreeState,
+  expanded: ReadonlySet<WorkspaceRelativePath>,
+): WorkspaceRelativePath[] {
+  const visible: WorkspaceRelativePath[] = [];
+  for (const path of sortedPaths(paths, state)) {
+    const entry = state.entries[path];
+    if (!entry) continue;
+    visible.push(path);
+    if (entry.kind === "directory" && expanded.has(path)) {
+      visible.push(...collectVisiblePaths(state.children[path] ?? [], state, expanded));
+    }
+  }
+  return visible;
+}
+
 function handleTreeKeyDown(
   event: KeyboardEvent<HTMLButtonElement>,
   entry: FsEntry,
   expanded: boolean,
   onToggle: (entry: FsEntry) => void,
+  onRovingPathChange: (path: WorkspaceRelativePath) => void,
 ) {
   if (event.key === "ArrowRight" && entry.kind === "directory" && !expanded) {
     event.preventDefault();
@@ -151,14 +198,47 @@ function handleTreeKeyDown(
     onToggle(entry);
     return;
   }
-  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
   const tree = event.currentTarget.closest('[role="tree"]');
   const items = tree ? [...tree.querySelectorAll<HTMLButtonElement>('[role="treeitem"]')] : [];
   const currentIndex = items.indexOf(event.currentTarget);
-  const nextIndex = event.key === "ArrowDown" ? currentIndex + 1 : currentIndex - 1;
-  const next = items[nextIndex];
-  if (next) {
-    event.preventDefault();
-    next.focus();
+  const depth = Number(event.currentTarget.dataset.treeDepth ?? 0);
+
+  if (event.key === "ArrowRight" && entry.kind === "directory" && expanded) {
+    const firstChild = items[currentIndex + 1];
+    if (firstChild && Number(firstChild.dataset.treeDepth) === depth + 1) {
+      moveTreeFocus(event, firstChild, onRovingPathChange);
+    }
+    return;
   }
+  if (event.key === "ArrowLeft") {
+    for (let index = currentIndex - 1; index >= 0; index -= 1) {
+      const candidate = items[index];
+      if (Number(candidate.dataset.treeDepth) === depth - 1) {
+        moveTreeFocus(event, candidate, onRovingPathChange);
+        return;
+      }
+    }
+    return;
+  }
+  const target = event.key === "ArrowDown"
+    ? items[currentIndex + 1]
+    : event.key === "ArrowUp"
+      ? items[currentIndex - 1]
+      : event.key === "Home"
+        ? items[0]
+        : event.key === "End"
+          ? items.at(-1)
+          : undefined;
+  if (target) moveTreeFocus(event, target, onRovingPathChange);
+}
+
+function moveTreeFocus(
+  event: KeyboardEvent<HTMLButtonElement>,
+  target: HTMLButtonElement,
+  onRovingPathChange: (path: WorkspaceRelativePath) => void,
+) {
+  event.preventDefault();
+  const path = target.dataset.treePath as WorkspaceRelativePath;
+  onRovingPathChange(path);
+  target.focus();
 }

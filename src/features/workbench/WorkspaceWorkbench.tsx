@@ -91,6 +91,8 @@ export function WorkspaceWorkbench({
   const mountedRef = useRef(true);
   const generationRef = useRef(0);
   const activeScansRef = useRef(new Set<string>());
+  const activeDirectoryScansRef = useRef(new Set<string>());
+  const queuedDirectoryRescansRef = useRef(new Set<string>());
   const activeWatchRef = useRef<string | null>(null);
   const openInFlightRef = useRef(false);
   const mutationInFlightRef = useRef(false);
@@ -122,36 +124,56 @@ export function WorkspaceWorkbench({
     reconcile = false,
     generation = generationRef.current,
   ) => {
-    let scanId: string | null = null;
+    const directoryKey = `${generation}:${directory ?? ""}`;
+    if (activeDirectoryScansRef.current.has(directoryKey)) {
+      if (reconcile) queuedDirectoryRescansRef.current.add(directoryKey);
+      return;
+    }
+    activeDirectoryScansRef.current.add(directoryKey);
+    let nextScanReconciles = reconcile;
     try {
-      const start = await gateway.scan(targetWorkspace.id, directory);
-      scanId = start.scanId;
-      if (!mountedRef.current || generation !== generationRef.current) {
-        await gateway.cancelScan(start.scanId).catch(() => false);
-        return;
-      }
-      activeScansRef.current.add(start.scanId);
-      commitTree((current) =>
-        reconcile
-          ? beginWorkspaceWatchRescan(current, start)
-          : beginDirectoryScan(current, start),
-      );
-      while (mountedRef.current && generation === generationRef.current) {
-        const batch = await gateway.pollScan(start.scanId);
-        if (!mountedRef.current || generation !== generationRef.current) break;
-        commitTree((current) => applyDirectoryScanBatch(current, directory, batch));
-        if (batch.complete && batch.issues.length > 0) {
-          setPageError(batch.issues[0]);
+      do {
+        queuedDirectoryRescansRef.current.delete(directoryKey);
+        let scanId: string | null = null;
+        try {
+          const start = await gateway.scan(targetWorkspace.id, directory);
+          scanId = start.scanId;
+          if (!mountedRef.current || generation !== generationRef.current) {
+            await gateway.cancelScan(start.scanId).catch(() => false);
+            return;
+          }
+          activeScansRef.current.add(start.scanId);
+          commitTree((current) =>
+            nextScanReconciles
+              ? beginWorkspaceWatchRescan(current, start)
+              : beginDirectoryScan(current, start),
+          );
+          while (mountedRef.current && generation === generationRef.current) {
+            const batch = await gateway.pollScan(start.scanId);
+            if (!mountedRef.current || generation !== generationRef.current) break;
+            commitTree((current) => applyDirectoryScanBatch(current, directory, batch));
+            if (batch.complete && batch.issues.length > 0) {
+              setPageError(batch.issues[0]);
+            }
+            if (batch.complete) break;
+            await pause(45);
+          }
+        } catch (reason) {
+          if (mountedRef.current && generation === generationRef.current) {
+            setPageError(normalizeDesktopError(reason, "scan_unavailable"));
+          }
+        } finally {
+          if (scanId) activeScansRef.current.delete(scanId);
         }
-        if (batch.complete) break;
-        await pause(45);
-      }
-    } catch (reason) {
-      if (mountedRef.current && generation === generationRef.current) {
-        setPageError(normalizeDesktopError(reason, "scan_unavailable"));
-      }
+        nextScanReconciles = queuedDirectoryRescansRef.current.delete(directoryKey);
+      } while (
+        nextScanReconciles &&
+        mountedRef.current &&
+        generation === generationRef.current
+      );
     } finally {
-      if (scanId) activeScansRef.current.delete(scanId);
+      activeDirectoryScansRef.current.delete(directoryKey);
+      queuedDirectoryRescansRef.current.delete(directoryKey);
     }
   }, [commitTree, gateway]);
 
@@ -198,6 +220,7 @@ export function WorkspaceWorkbench({
       void gateway.cancelScan(scanId).catch(() => false);
     }
     activeScansRef.current.clear();
+    queuedDirectoryRescansRef.current.clear();
     if (activeWatchRef.current) {
       void gateway.stopWatch(activeWatchRef.current).catch(() => false);
       activeWatchRef.current = null;
@@ -232,6 +255,7 @@ export function WorkspaceWorkbench({
       for (const scanId of activeScansRef.current) {
         void gateway.cancelScan(scanId).catch(() => false);
       }
+      queuedDirectoryRescansRef.current.clear();
       if (activeWatchRef.current) {
         void gateway.stopWatch(activeWatchRef.current).catch(() => false);
       }
@@ -542,8 +566,20 @@ export function WorkspaceWorkbench({
       error.code === "permission_denied"
     ) {
       void startWatchLoop(workspace, generationRef.current, true);
+      return;
     }
+    if (error.code === "window_title_failed") {
+      void gateway.setTitle(activeDocumentPath).catch((reason) => {
+        setPageError(normalizeDesktopError(reason, "window_title_failed"));
+      });
+      return;
+    }
+    if (error.code === "reveal_unavailable" && selectedEntry) void revealSelected();
   }
+
+  const pageRetryAvailable = pageError
+    ? supportsPageRetry(pageError, selectedEntry !== null)
+    : false;
 
   const statusText = useMemo(() => {
     if (busyLabel) return busyLabel;
@@ -579,7 +615,7 @@ export function WorkspaceWorkbench({
       {pageError ? (
         <div className="workbench__page-error">
           <AsyncStatePanel
-            actions={<><button className="plainroot-button" onClick={() => setPageError(null)} type="button">关闭</button>{pageError.retryable ? <button className="plainroot-button" onClick={retryPageOperation} type="button">重试</button> : null}</>}
+            actions={<><button className="plainroot-button" onClick={() => setPageError(null)} type="button">关闭</button>{pageRetryAvailable ? <button className="plainroot-button" onClick={retryPageOperation} type="button">重试</button> : null}</>}
             description={`${desktopErrorMessage(pageError)}${pageError.contentSafe ? " 当前磁盘内容未被这次失败覆盖。" : " 请先刷新并核对磁盘内容。"}`}
             live="assertive"
             title="操作没有完成"
@@ -750,6 +786,20 @@ function isSameOrInside(path: string, parent: string): boolean {
 function replacePrefix(path: string, previous: string, next: string): string {
   if (path === previous) return next;
   return path.startsWith(`${previous}/`) ? `${next}${path.slice(previous.length)}` : path;
+}
+
+function supportsPageRetry(error: DesktopError, hasSelectedEntry: boolean) {
+  if (!error.retryable) return false;
+  return (
+    error.code === "scan_not_found" ||
+    error.code === "scan_unavailable" ||
+    error.code === "watch_not_found" ||
+    error.code === "watch_unavailable" ||
+    error.code === "path_not_found" ||
+    error.code === "permission_denied" ||
+    error.code === "window_title_failed" ||
+    (error.code === "reveal_unavailable" && hasSelectedEntry)
+  );
 }
 
 function pause(milliseconds: number): Promise<void> {

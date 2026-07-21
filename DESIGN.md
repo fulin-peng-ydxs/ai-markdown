@@ -203,7 +203,7 @@ Key Characteristics：
 | `AsyncStatePanel` | `src/components/AsyncStatePanel.tsx` | P1/P2 加载、错误、空态与恢复 | 持久状态标题、说明、语义 tone、aria-live 和恢复动作 |
 | `WorkspaceLauncher` | `src/features/launcher/WorkspaceLauncher.tsx` | P2 | 本地打开主入口、最近记录、授权、窗口决策与根会话恢复 |
 | `WorkspaceWorkbench` | `src/features/workbench/WorkspaceWorkbench.tsx` | P1 | 当前根工作区壳、真实文件操作、只读 Markdown 状态、窗口决策与窄窗目录抽屉 |
-| `WorkspaceTree` | `src/features/workbench/WorkspaceTree.tsx` | P1 | 渐进目录节点、磁盘提交后更新、只读标识、树语义与方向键焦点导航 |
+| `WorkspaceTree` | `src/features/workbench/WorkspaceTree.tsx` | P1 | 渐进目录节点、磁盘提交后更新、只读标识、单一 Tab 停靠点，以及上下/首尾/父子方向键导航 |
 
 布局规则：
 
