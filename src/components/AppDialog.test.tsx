@@ -44,4 +44,39 @@ describe("AppDialog", () => {
     await waitFor(() => expect(document.activeElement).toBe(trigger));
     trigger.remove();
   });
+
+  it("focuses the first action and wraps keyboard focus inside the dialog", async () => {
+    render(
+      <AppDialog labelledBy="title" onRequestClose={() => undefined} open>
+        <h2 id="title">对话框</h2>
+        <button type="button">第一项</button>
+        <button type="button">最后一项</button>
+      </AppDialog>,
+    );
+
+    const dialog = screen.getByRole("dialog");
+    const first = screen.getByRole("button", { name: "第一项" });
+    const last = screen.getByRole("button", { name: "最后一项" });
+    await waitFor(() => expect(document.activeElement).toBe(first));
+
+    last.focus();
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(document.activeElement).toBe(first);
+
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(last);
+  });
+
+  it("keeps focus on a modal status dialog without interactive controls", async () => {
+    render(
+      <AppDialog closeDisabled labelledBy="title" onRequestClose={() => undefined} open>
+        <h2 id="title">正在处理</h2>
+      </AppDialog>,
+    );
+
+    const dialog = screen.getByRole("dialog");
+    await waitFor(() => expect(document.activeElement).toBe(dialog));
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(document.activeElement).toBe(dialog);
+  });
 });

@@ -442,17 +442,16 @@ export function WorkspaceLauncher({
             <AsyncStatePanel
               actions={<><button className="plainroot-button" onClick={() => setError(null)} type="button">关闭</button><button className="plainroot-button" onClick={() => void (retryActionRef.current?.() ?? loadSnapshot())} type="button">重试</button></>}
               description={desktopErrorMessage(error)}
-              live="assertive"
+              state="error"
               title={snapshot ? "操作没有完成" : "无法读取本地工作区"}
-              tone="error"
             />
           ) : null}
 
           {currentWorkspace ? (
             <AsyncStatePanel
               description={`${currentWorkspace.canonicalRoot} 已连接。当前窗口尚未载入文件树与编辑视图。`}
+              state="ready"
               title={`已打开“${currentWorkspace.displayName}”`}
-              tone="success"
             />
           ) : null}
 

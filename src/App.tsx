@@ -32,7 +32,7 @@ export default function App() {
   if (workspace === undefined) {
     return (
       <main className="app-bootstrap" aria-label="Plainroot 正在启动">
-        <AsyncStatePanel description="正在确认当前窗口是否已经绑定本地工作区。" title="正在启动 Plainroot" />
+        <AsyncStatePanel description="正在确认当前窗口是否已经绑定本地工作区。" state="loading" title="正在启动 Plainroot" />
       </main>
     );
   }
@@ -50,7 +50,7 @@ export default function App() {
     <>
       {error ? (
         <div className="app-bootstrap app-bootstrap--error">
-          <AsyncStatePanel description={desktopErrorMessage(error)} title="无法恢复当前窗口" tone="error" />
+          <AsyncStatePanel description={desktopErrorMessage(error)} state="error" title="无法恢复当前窗口" />
         </div>
       ) : null}
       <WorkspaceLauncher onWorkspaceOpened={setWorkspace} />

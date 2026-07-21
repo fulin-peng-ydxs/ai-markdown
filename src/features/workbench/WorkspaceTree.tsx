@@ -24,6 +24,11 @@ export function WorkspaceTree({
   const [rovingPath, setRovingPath] = useState<WorkspaceRelativePath | null>(
     selectedPath && visiblePaths.includes(selectedPath) ? selectedPath : visiblePaths[0] ?? null,
   );
+  const effectiveRovingPath = rovingPath && visiblePaths.includes(rovingPath)
+    ? rovingPath
+    : selectedPath && visiblePaths.includes(selectedPath)
+      ? selectedPath
+      : visiblePaths[0] ?? null;
 
   useEffect(() => {
     setRovingPath((current) => {
@@ -53,7 +58,7 @@ export function WorkspaceTree({
           onSelect={onSelect}
           onToggle={onToggle}
           onRovingPathChange={setRovingPath}
-          rovingPath={rovingPath}
+          rovingPath={effectiveRovingPath}
           selectedPath={selectedPath}
           state={state}
         />

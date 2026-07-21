@@ -58,6 +58,9 @@ spacing:
   lg: 16px
   xl: 24px
   2xl: 32px
+effects:
+  dialog-backdrop: "rgb(34 34 38 / 24%)"
+  dialog-shadow: "0 18px 48px rgb(34 34 38 / 18%)"
 components:
   button-primary:
     backgroundColor: "{colors.accent}"
@@ -115,6 +118,7 @@ Key Characteristics：
 | 边界 | `line` / `line-strong` | 常规分隔与强调边界，不用阴影替代所有分隔 |
 | 交互强调 | `accent` / `accent-soft` | 主按钮、活动页签、焦点、当前大纲与轻选中 |
 | 状态 | `success` / `warning` / `danger` | 成功、警告、失败或破坏性动作；必须搭配文字、图标或结构语义 |
+| 遮罩与层级 | `dialog-backdrop` / `dialog-shadow` | 模态任务遮罩和公共对话框阴影；页面不得复制私有 rgba/rgb 值 |
 
 规则：
 
@@ -177,6 +181,7 @@ Key Characteristics：
 - 对话框支持 Esc、焦点圈定和关闭后焦点恢复；存在未保存草稿或破坏性结果时，Esc 行为必须与取消契约一致。
 - Toast 只报告已完成的轻量结果，不承载需要选择、重试或长期查看的错误。
 - 页面至少覆盖 ready、loading、empty、error；文件场景再按需覆盖 readonly、dirty、saving、conflict、missing 和 permission-denied，状态之间必须有明确优先级。
+- 同一区域并存多个状态时，公共状态契约按 `permission-denied > missing > conflict > error > unsupported > saving > loading > dirty > readonly > empty > ready` 选择主状态。权限、位置、冲突和错误使用 assertive alert，其余进度与稳定状态使用 polite status；颜色之外必须显示明确文字标签。
 
 ### 文档画布与主题工作室
 
@@ -199,11 +204,11 @@ Key Characteristics：
 
 | 组件 | 代码事实源 | 当前消费者 | 稳定职责 |
 |---|---|---|---|
-| `AppDialog` | `src/components/AppDialog.tsx` | P1/P2 打开流程、文件操作、永久删除 | 原生 dialog、Esc/遮罩关闭、关闭门禁、焦点返回和统一动作区 |
-| `AsyncStatePanel` | `src/components/AsyncStatePanel.tsx` | P1/P2 加载、错误、空态与恢复 | 持久状态标题、说明、语义 tone、aria-live 和恢复动作 |
+| `AppDialog` | `src/components/AppDialog.tsx` | P1/P2 打开流程、文件操作、永久删除 | 原生 dialog、初始焦点、Tab/Shift+Tab 圈定、Esc/遮罩关闭、关闭门禁、焦点返回和统一动作区 |
+| `AsyncStatePanel` | `src/components/AsyncStatePanel.tsx` | 根启动状态、P1/P2 加载、错误、阻塞与恢复 | 类型化状态与优先级、可见非颜色标签、自动 tone/role/aria-live、说明和恢复动作 |
 | `WorkspaceLauncher` | `src/features/launcher/WorkspaceLauncher.tsx` | P2 | 本地打开主入口、最近记录、授权、窗口决策与根会话恢复 |
 | `WorkspaceWorkbench` | `src/features/workbench/WorkspaceWorkbench.tsx` | P1 | 当前根工作区壳、真实文件操作、只读 Markdown 状态、窗口决策与窄窗目录抽屉 |
-| `WorkspaceTree` | `src/features/workbench/WorkspaceTree.tsx` | P1 | 渐进目录节点、磁盘提交后更新、只读标识、单一 Tab 停靠点，以及上下/首尾/父子方向键导航 |
+| `WorkspaceTree` | `src/features/workbench/WorkspaceTree.tsx` | P1 | 渐进目录节点、磁盘提交后更新、只读标识、异步刷新期间也稳定的单一 Tab 停靠点，以及上下/首尾/父子方向键导航 |
 
 布局规则：
 
@@ -281,7 +286,7 @@ Iteration Guide：
 
 ## 10. Known Gaps
 
-- P2、P1 第一阶段工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；P1 的编辑器、页签、大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
+- P2、P1 第一阶段工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；T14 已固化对话框焦点圈定、类型化状态优先级、live-region 和非颜色标签。`PathStatus`、`DesktopWindowStatus` 未形成两个同职责消费者，因此未登记为空组件。P1 的编辑器、页签、大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
 - 启动页原型危险色为 `#955252`，工作台和主题工作室为 `#9b5050`；本文已收敛为 `#9b5050`，正式实现时应统一消费 token。
 - 暗色主题尚无完整原型和 token；不得简单反转当前亮色值。R7/R15 阶段需补全明暗语义、派生状态和跨窗口预览测试。
 - `17px / 1.76`、约 `760–820px` 正文宽度及 `252/220px` 侧栏是 alpha 校准基线，仍需在不同 DPI、中英文长文和 Windows 字体渲染下验证。

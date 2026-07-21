@@ -617,9 +617,8 @@ export function WorkspaceWorkbench({
           <AsyncStatePanel
             actions={<><button className="plainroot-button" onClick={() => setPageError(null)} type="button">关闭</button>{pageRetryAvailable ? <button className="plainroot-button" onClick={retryPageOperation} type="button">重试</button> : null}</>}
             description={`${desktopErrorMessage(pageError)}${pageError.contentSafe ? " 当前磁盘内容未被这次失败覆盖。" : " 请先刷新并核对磁盘内容。"}`}
-            live="assertive"
+            state={pageError.code === "permission_denied" ? "permission_denied" : pageError.code === "path_not_found" ? "missing" : "error"}
             title="操作没有完成"
-            tone="error"
           />
         </div>
       ) : null}
@@ -649,7 +648,7 @@ export function WorkspaceWorkbench({
           ) : null}
           <div className="workbench__tree-scroll">
             {rootLoading && (tree.children[""]?.length ?? 0) === 0 ? (
-              <AsyncStatePanel compact description="文件会分批出现，不阻塞窗口操作。" title="正在读取目录" />
+              <AsyncStatePanel compact description="文件会分批出现，不阻塞窗口操作。" state="loading" title="正在读取目录" />
             ) : null}
             <WorkspaceTree
               expanded={expanded}
@@ -754,14 +753,14 @@ function DocumentView({
     return <div className="workbench__document-empty"><span aria-hidden="true">M↓</span><h1>选择一份 Markdown 文档</h1><p>当前阶段提供真实只读查看；编辑与页签将在后续阶段接入，不会用假控件占位。</p></div>;
   }
   if (state.status === "loading") {
-    return <AsyncStatePanel description={state.path} title="正在读取文档" />;
+    return <AsyncStatePanel description={state.path} state="loading" title="正在读取文档" />;
   }
   if (state.status === "error") {
-    return <AsyncStatePanel actions={<button className="plainroot-button" onClick={() => onRetry(state.path)} type="button">重试读取</button>} description={`${desktopErrorMessage(state.error)} 当前内存中没有可安全展示的旧内容。`} live="assertive" title="无法读取文档" tone="error" />;
+    return <AsyncStatePanel actions={<button className="plainroot-button" onClick={() => onRetry(state.path)} type="button">重试读取</button>} description={`${desktopErrorMessage(state.error)} 当前内存中没有可安全展示的旧内容。`} state={state.error.code === "permission_denied" ? "permission_denied" : state.error.code === "path_not_found" ? "missing" : "error"} title="无法读取文档" />;
   }
   if (state.status === "unsupported") {
     const title = state.result.status === "too_large" ? "文档超过当前查看上限" : "文档不是受支持的 UTF-8 编码";
-    return <AsyncStatePanel description="Plainroot 没有修改这个文件。请使用其他工具转换或缩小后重试。" title={title} tone="warning" />;
+    return <AsyncStatePanel description="Plainroot 没有修改这个文件。请使用其他工具转换或缩小后重试。" state="unsupported" title={title} />;
   }
   return (
     <article className="workbench__reader">

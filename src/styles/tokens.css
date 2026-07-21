@@ -18,7 +18,9 @@
   --color-warning: #8a6d3f;
   --color-danger: #9b5050;
   --color-overlay: rgb(34 34 38 / 18%);
+  --color-dialog-backdrop: rgb(34 34 38 / 24%);
   --shadow-drawer: 18px 0 44px rgb(34 34 38 / 16%);
+  --shadow-dialog: 0 18px 48px rgb(34 34 38 / 18%);
   --font-ui-sm: 400 12px/18px -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-ui-md: 400 13px/20px -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-code: 400 13px/1.65 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
