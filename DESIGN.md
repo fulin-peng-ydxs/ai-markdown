@@ -80,7 +80,7 @@ components:
 
 # Plainroot Design System
 
-> 本文是 Plainroot 前端视觉、布局和交互的长期入口。正式工程已经建立，alpha token 仍来自三份已确认原型的共同实现；T12 已将完整浅色语义 token、P2 启动页、共享对话框与异步状态面板落入运行时代码，后续页面应继续收敛同一事实源，自动化测试覆盖到的区域以代码为数值事实。
+> 本文是 Plainroot 前端视觉、布局和交互的长期入口。正式工程已经建立，alpha token 仍来自三份已确认原型的共同实现；T12/T13 已将完整浅色语义 token、P2 启动页、P1 第一阶段工作台壳、共享对话框与异步状态面板落入运行时代码，后续页面应继续收敛同一事实源，自动化测试覆盖到的区域以代码为数值事实。
 
 当前证据：
 
@@ -199,9 +199,11 @@ Key Characteristics：
 
 | 组件 | 代码事实源 | 当前消费者 | 稳定职责 |
 |---|---|---|---|
-| `AppDialog` | `src/components/AppDialog.tsx` | P2 启动流程、永久删除 | 原生 dialog、Esc/遮罩关闭、关闭门禁、焦点返回和统一动作区 |
-| `AsyncStatePanel` | `src/components/AsyncStatePanel.tsx` | P2 错误与已连接状态 | 持久状态标题、说明、语义 tone、aria-live 和恢复动作 |
+| `AppDialog` | `src/components/AppDialog.tsx` | P1/P2 打开流程、文件操作、永久删除 | 原生 dialog、Esc/遮罩关闭、关闭门禁、焦点返回和统一动作区 |
+| `AsyncStatePanel` | `src/components/AsyncStatePanel.tsx` | P1/P2 加载、错误、空态与恢复 | 持久状态标题、说明、语义 tone、aria-live 和恢复动作 |
 | `WorkspaceLauncher` | `src/features/launcher/WorkspaceLauncher.tsx` | P2 | 本地打开主入口、最近记录、授权、窗口决策与根会话恢复 |
+| `WorkspaceWorkbench` | `src/features/workbench/WorkspaceWorkbench.tsx` | P1 | 当前根工作区壳、真实文件操作、只读 Markdown 状态、窗口决策与窄窗目录抽屉 |
+| `WorkspaceTree` | `src/features/workbench/WorkspaceTree.tsx` | P1 | 渐进目录节点、磁盘提交后更新、只读标识、树语义与方向键焦点导航 |
 
 布局规则：
 
@@ -279,7 +281,7 @@ Iteration Guide：
 
 ## 10. Known Gaps
 
-- P2 与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；P1 与 P3 尚未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
+- P2、P1 第一阶段工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；P1 的编辑器、页签、大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
 - 启动页原型危险色为 `#955252`，工作台和主题工作室为 `#9b5050`；本文已收敛为 `#9b5050`，正式实现时应统一消费 token。
 - 暗色主题尚无完整原型和 token；不得简单反转当前亮色值。R7/R15 阶段需补全明暗语义、派生状态和跨窗口预览测试。
 - `17px / 1.76`、约 `760–820px` 正文宽度及 `252/220px` 侧栏是 alpha 校准基线，仍需在不同 DPI、中英文长文和 Windows 字体渲染下验证。

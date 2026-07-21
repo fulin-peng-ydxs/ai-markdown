@@ -41,6 +41,8 @@ export function desktopErrorMessage(error: DesktopError): string {
       return "未能创建新窗口，原窗口和文件仍保持不变。";
     case "window_focus_failed":
       return "未能聚焦已有窗口。可以重试，或留在当前启动页。";
+    case "window_title_failed":
+      return "窗口标题未能同步，但当前文件内容和磁盘状态没有改变。";
     case "window_close_failed":
       return "未能关闭窗口，当前工作区会话仍然保留。";
     case "state_unavailable":
@@ -52,6 +54,32 @@ export function desktopErrorMessage(error: DesktopError): string {
       return "无法更新本机工作区记录。Markdown 文件没有受到影响，请重试。";
     case "dialog_unavailable":
       return "系统文件选择器当前不可用。请稍后重试。";
+    case "scan_not_found":
+    case "scan_unavailable":
+      return "文件树读取已中断。磁盘内容没有改变，可以手动刷新后重试。";
+    case "watch_not_found":
+    case "watch_unavailable":
+      return "文件变化监听已停止。当前文件树仍可查看，请手动刷新或重启监听。";
+    case "unsupported_text_encoding":
+      return "该文件不是受支持的 UTF-8 编码，Plainroot 没有修改它。";
+    case "file_too_large":
+      return "该文件超过当前读取上限，Plainroot 没有修改它。";
+    case "invalid_entry_name":
+      return "名称包含不支持的字符、路径分隔符或空白边界，请换一个名称。";
+    case "reserved_entry_name":
+      return "该名称在 Windows 或 macOS 上属于保留名称，请换一个名称。";
+    case "target_already_exists":
+      return "目标位置已经存在同名项目，磁盘和文件树均未改变。";
+    case "cross_device_move":
+      return "不能跨磁盘移动这个项目。请在同一工作区内选择目标文件夹。";
+    case "invalid_move_target":
+      return "不能把文件夹移动到自身、子目录或原位置。";
+    case "mutation_unavailable":
+      return "文件操作服务当前不可用，磁盘和文件树均未改变。";
+    case "trash_unavailable":
+      return "系统废纸篓或回收站当前不可用。Plainroot 尚未永久删除该项目。";
+    case "reveal_unavailable":
+      return "系统文件管理器未能定位这个项目。文件本身没有改变。";
     default:
       return error.retryable
         ? "操作没有完成，现有文件和窗口保持不变。请重试。"

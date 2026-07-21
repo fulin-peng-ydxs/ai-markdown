@@ -69,6 +69,7 @@ describe("WorkspaceLauncher", () => {
   });
 
   it("shows and enforces single-file parent-directory confirmation", async () => {
+    const onWorkspaceOpened = vi.fn();
     const api = gateway({
       selectMarkdown: vi.fn().mockResolvedValue({
         status: "confirmation_required",
@@ -88,12 +89,13 @@ describe("WorkspaceLauncher", () => {
       open: vi.fn().mockResolvedValue({ status: "opened_current", workspace: { id: "workspace-demo", selectedPath: "/Users/demo", canonicalRoot: "/Users/demo", displayName: "demo", writable: true, initialFile: "note.md" }, windowLabel: "plainroot-window-1" }),
     });
     const user = userEvent.setup();
-    render(<WorkspaceLauncher gateway={api} />);
+    render(<WorkspaceLauncher gateway={api} onWorkspaceOpened={onWorkspaceOpened} />);
     await user.click(await screen.findByRole("button", { name: /打开 Markdown 文件/ }));
     expect(await screen.findByText("实际范围")).toBeTruthy();
     expect(screen.getByText("/Users/demo", { selector: "dd" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "授权并打开" }));
     await waitFor(() => expect(api.authorize).toHaveBeenCalledWith("selection-1", true));
+    await waitFor(() => expect(onWorkspaceOpened).toHaveBeenCalledWith(expect.objectContaining({ id: "workspace-demo" })));
   });
 
   it("maps the two native menu events to their real selectors", async () => {

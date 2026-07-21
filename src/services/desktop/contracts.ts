@@ -19,6 +19,7 @@ export const DESKTOP_ERROR_CODES = [
   "window_not_found",
   "window_create_failed",
   "window_focus_failed",
+  "window_title_failed",
   "window_close_failed",
   "state_unavailable",
   "state_read_failed",
@@ -367,5 +368,10 @@ export interface WorkspaceLauncherSnapshot {
   workspaceSessions: WorkspaceSessionRoot[];
   activeWorkspaceIds: WorkspaceId[];
   currentWorkspaceId: WorkspaceId | null;
+  windowLabel: string;
+}
+
+export interface WorkspaceWorkbenchSnapshot {
+  workspace: WorkspaceDescriptor;
   windowLabel: string;
 }

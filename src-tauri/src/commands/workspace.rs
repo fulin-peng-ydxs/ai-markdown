@@ -79,6 +79,13 @@ pub struct WorkspaceLauncherSnapshot {
     pub window_label: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceWorkbenchSnapshot {
+    pub workspace: WorkspaceDescriptor,
+    pub window_label: String,
+}
+
 #[derive(Debug, Clone)]
 struct ResolvedSelection {
     kind: WorkspaceSelectionKind,
@@ -441,6 +448,21 @@ pub fn get_workspace_launcher_snapshot(
 }
 
 #[tauri::command]
+pub fn get_workspace_workbench_snapshot(
+    window: WebviewWindow,
+    coordinator: State<'_, WorkspaceWindowCoordinator>,
+    access: State<'_, WorkspaceAccessService>,
+) -> Result<Option<WorkspaceWorkbenchSnapshot>, DesktopError> {
+    let Some(workspace_id) = coordinator.workspace_for_window(window.label())? else {
+        return Ok(None);
+    };
+    Ok(Some(WorkspaceWorkbenchSnapshot {
+        workspace: access.workspace(&workspace_id)?,
+        window_label: window.label().to_owned(),
+    }))
+}
+
+#[tauri::command]
 pub fn remove_recent_workspace(
     workspace_id: WorkspaceId,
     coordinator: State<'_, WorkspaceWindowCoordinator>,
@@ -620,7 +642,8 @@ mod tests {
     use super::{
         resolve_markdown_selection, workspace_id_for_root, WorkspaceAccessService,
         WorkspaceLauncherSnapshot, WorkspaceSelectionKind, WorkspaceSelectionOutcome,
-        WorkspaceSelectionProposal, MAX_PENDING_SELECTIONS, PENDING_SELECTION_LIFETIME,
+        WorkspaceSelectionProposal, WorkspaceWorkbenchSnapshot, MAX_PENDING_SELECTIONS,
+        PENDING_SELECTION_LIFETIME,
     };
 
     struct TestDirectory(PathBuf);
@@ -764,6 +787,26 @@ mod tests {
         };
 
         assert_interface_matches("WorkspaceLauncherSnapshot", &snapshot);
+    }
+
+    #[test]
+    fn workbench_snapshot_matches_typescript_contract() {
+        let directory = TestDirectory::create("workbench-contract");
+        let access = WorkspaceAccessService::default();
+        let outcome = access
+            .prepare_folder_for_test(Some(directory.path().to_path_buf()))
+            .unwrap();
+        let selection_id = match outcome {
+            WorkspaceSelectionOutcome::Ready { proposal } => proposal.selection_id,
+            other => panic!("unexpected selection outcome: {other:?}"),
+        };
+        let workspace = access.authorize(&selection_id, false).unwrap();
+        let snapshot = WorkspaceWorkbenchSnapshot {
+            workspace,
+            window_label: "plainroot-window-1".to_owned(),
+        };
+
+        assert_interface_matches("WorkspaceWorkbenchSnapshot", &snapshot);
     }
 
     #[test]

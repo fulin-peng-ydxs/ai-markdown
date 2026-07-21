@@ -5,6 +5,7 @@ import { AsyncStatePanel } from "../../components/AsyncStatePanel";
 import type {
   DesktopError,
   RecentWorkspace,
+  WorkspaceDescriptor,
   WorkspaceId,
   WorkspaceLauncherSnapshot,
   WorkspaceOpenDisposition,
@@ -50,6 +51,7 @@ interface PendingDecision {
 
 interface WorkspaceLauncherProps {
   gateway?: WorkspaceLauncherGateway;
+  onWorkspaceOpened?(workspace: WorkspaceDescriptor): void;
 }
 
 interface LoadSnapshotOptions {
@@ -59,6 +61,7 @@ interface LoadSnapshotOptions {
 
 export function WorkspaceLauncher({
   gateway = desktopWorkspaceLauncherGateway,
+  onWorkspaceOpened,
 }: WorkspaceLauncherProps) {
   const [snapshot, setSnapshot] = useState<WorkspaceLauncherSnapshot | null>(null);
   const [query, setQuery] = useState("");
@@ -235,6 +238,10 @@ export function WorkspaceLauncher({
       return;
     }
     if (outcome.status === "cancelled") return;
+    if (outcome.status === "opened_current" && onWorkspaceOpened) {
+      onWorkspaceOpened(outcome.workspace);
+      return;
+    }
     if (source.restore) markRestore(source.restore.session.workspaceId, "restored");
     if (source.recent && source.recent.workspaceId !== workspaceId) {
       await gateway.removeRecent(source.recent.workspaceId).catch(() => false);

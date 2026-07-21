@@ -7,7 +7,7 @@ use tauri::{AppHandle, Manager, Runtime, State, WebviewUrl, WebviewWindow, Webvi
 
 use crate::commands::workspace::WorkspaceAccessService;
 use crate::error::{DesktopError, DesktopErrorCode};
-use crate::fs::{WorkspaceDescriptor, WorkspaceId};
+use crate::fs::{WorkspaceDescriptor, WorkspaceId, WorkspaceRelativePath};
 use crate::state::{
     PersistentAppState, PlainrootStateV1, RecentWorkspace, WorkspaceAvailability,
     WorkspaceSessionRoot, MAX_RECENT_WORKSPACES,
@@ -476,6 +476,38 @@ pub fn document_title(workspace_name: &str, file_name: Option<&str>) -> String {
         (false, None) => format!("{workspace_name} — {APP_NAME}"),
         (true, _) => launcher_title(),
     }
+}
+
+#[tauri::command]
+pub fn set_workbench_window_title(
+    window: WebviewWindow,
+    relative_path: Option<String>,
+    coordinator: State<'_, WorkspaceWindowCoordinator>,
+    access: State<'_, WorkspaceAccessService>,
+) -> Result<WindowActionResult, DesktopError> {
+    let workspace_id = coordinator
+        .workspace_for_window(window.label())?
+        .ok_or_else(|| window_error(DesktopErrorCode::WindowNotFound))?;
+    let workspace = access.workspace(&workspace_id)?;
+    let file_name = relative_path
+        .as_deref()
+        .map(WorkspaceRelativePath::parse)
+        .transpose()?
+        .and_then(|path| {
+            std::path::Path::new(path.as_str())
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(str::to_owned)
+        });
+    window
+        .set_title(&document_title(
+            workspace.display_name(),
+            file_name.as_deref(),
+        ))
+        .map_err(|_| window_error(DesktopErrorCode::WindowTitleFailed))?;
+    Ok(WindowActionResult {
+        window_label: window.label().to_owned(),
+    })
 }
 
 fn create_window_with_label<R: Runtime>(

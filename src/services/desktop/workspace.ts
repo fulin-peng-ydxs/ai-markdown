@@ -7,6 +7,7 @@ import type {
   WorkspaceDescriptor,
   WorkspaceId,
   WorkspaceLauncherSnapshot,
+  WorkspaceWorkbenchSnapshot,
   WorkspaceOpenDisposition,
   WorkspaceOpenOutcome,
   WorkspaceSelectionOutcome,
@@ -72,6 +73,18 @@ export function takeSecondInstanceOpenRequests(): Promise<
 
 export function getWorkspaceLauncherSnapshot(): Promise<WorkspaceLauncherSnapshot> {
   return invoke<WorkspaceLauncherSnapshot>("get_workspace_launcher_snapshot");
+}
+
+export function getWorkspaceWorkbenchSnapshot(): Promise<WorkspaceWorkbenchSnapshot | null> {
+  return invoke<WorkspaceWorkbenchSnapshot | null>("get_workspace_workbench_snapshot");
+}
+
+export function setWorkbenchWindowTitle(
+  relativePath: string | null,
+): Promise<WindowActionResult> {
+  return invoke<WindowActionResult>("set_workbench_window_title", {
+    relativePath,
+  });
 }
 
 export function removeRecentWorkspace(workspaceId: WorkspaceId): Promise<boolean> {
