@@ -428,7 +428,8 @@ fn rename_without_replace(source: &Path, target: &Path) -> Result<(), DesktopErr
         );
     }
     match fs::symlink_metadata(target) {
-        Ok(target_metadata) if same_file_identity(&source_metadata, &target_metadata) => {}
+        Ok(target_metadata)
+            if same_file_identity(source, &source_metadata, target, &target_metadata) => {}
         Ok(_) => {
             return Err(
                 DesktopError::new(DesktopErrorCode::TargetAlreadyExists, true, false)
@@ -443,26 +444,31 @@ fn rename_without_replace(source: &Path, target: &Path) -> Result<(), DesktopErr
 }
 
 #[cfg(unix)]
-fn same_file_identity(source: &fs::Metadata, target: &fs::Metadata) -> bool {
+fn same_file_identity(
+    _source_path: &Path,
+    source: &fs::Metadata,
+    _target_path: &Path,
+    target: &fs::Metadata,
+) -> bool {
     use std::os::unix::fs::MetadataExt;
 
     source.dev() == target.dev() && source.ino() == target.ino()
 }
 
 #[cfg(windows)]
-fn same_file_identity(source: &fs::Metadata, target: &fs::Metadata) -> bool {
-    use std::os::windows::fs::MetadataExt;
-
-    matches!(
-        (
-            source.volume_serial_number(),
-            source.file_index(),
-            target.volume_serial_number(),
-            target.file_index(),
-        ),
-        (Some(source_volume), Some(source_index), Some(target_volume), Some(target_index))
-            if source_volume == target_volume && source_index == target_index
-    )
+fn same_file_identity(
+    source_path: &Path,
+    _source: &fs::Metadata,
+    target_path: &Path,
+    _target: &fs::Metadata,
+) -> bool {
+    let Ok(source_identity) = super::windows_file_identity(source_path) else {
+        return false;
+    };
+    let Ok(target_identity) = super::windows_file_identity(target_path) else {
+        return false;
+    };
+    source_identity == target_identity
 }
 
 #[cfg(test)]

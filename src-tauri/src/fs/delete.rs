@@ -275,16 +275,17 @@ fn inspect_delete_target(
     let metadata =
         fs::metadata(&path).map_err(|error| DesktopError::from_io(&error, &path, true))?;
     let entry_kind = supported_kind(&path, &metadata)?;
+    let entry_identity = entry_identity(&path, &metadata)?;
     Ok(InspectedDeleteTarget {
         path,
         relative_path,
         entry_kind,
-        entry_identity: entry_identity(&metadata)?,
+        entry_identity,
     })
 }
 
 #[cfg(unix)]
-fn entry_identity(metadata: &fs::Metadata) -> Result<EntryIdentity, DesktopError> {
+fn entry_identity(_path: &Path, metadata: &fs::Metadata) -> Result<EntryIdentity, DesktopError> {
     use std::os::unix::fs::MetadataExt;
 
     Ok(EntryIdentity::Unix {
@@ -294,17 +295,16 @@ fn entry_identity(metadata: &fs::Metadata) -> Result<EntryIdentity, DesktopError
 }
 
 #[cfg(windows)]
-fn entry_identity(metadata: &fs::Metadata) -> Result<EntryIdentity, DesktopError> {
-    use std::os::windows::fs::MetadataExt;
-
-    match (metadata.volume_serial_number(), metadata.file_index()) {
-        (Some(volume), Some(index)) => Ok(EntryIdentity::Windows { volume, index }),
-        _ => Err(DesktopError::new(
-            DesktopErrorCode::PermanentDeleteFailed,
-            true,
-            true,
-        )),
-    }
+fn entry_identity(path: &Path, _metadata: &fs::Metadata) -> Result<EntryIdentity, DesktopError> {
+    super::windows_file_identity(path)
+        .map(|identity| EntryIdentity::Windows {
+            volume: identity.volume_serial,
+            index: identity.file_index,
+        })
+        .map_err(|_| {
+            DesktopError::new(DesktopErrorCode::PermanentDeleteFailed, true, true)
+                .with_path_hint(path)
+        })
 }
 
 fn platform_trash(path: &Path) -> Result<(), ()> {

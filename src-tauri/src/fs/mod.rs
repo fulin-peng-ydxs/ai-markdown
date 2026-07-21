@@ -1,5 +1,7 @@
 pub(crate) mod atomic;
 pub mod delete;
+#[cfg(windows)]
+mod identity;
 mod model;
 pub mod mutate;
 mod path;
@@ -8,6 +10,8 @@ pub mod safe_write;
 pub mod scan;
 pub mod watch;
 
+#[cfg(windows)]
+pub(crate) use identity::windows_file_identity;
 pub use model::{
     FileRevision, FsChildrenState, FsEntry, FsEntryKind, LineEnding, TextEncoding,
     WorkspaceDescriptor, WorkspaceId, WorkspaceRelativePath, WorkspaceRootResolution,

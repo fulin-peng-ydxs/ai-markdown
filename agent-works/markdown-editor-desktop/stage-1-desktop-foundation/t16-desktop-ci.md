@@ -4,7 +4,7 @@
 
 - 沿用 R1、R2、R5、R8、R11、R14、R30、R31，不新增或改变需求编号。
 - 本任务建立 macOS/Windows CI 门禁、平台文件替换回归、P1 真 IPC 桌面 E2E、失败诊断和未签名测试产物。
-- 当前状态为“实现与本地验证完成，远端矩阵整改后待复跑”。分支已推送；首轮 GitHub Actions 在两个平台的 Rust 安装步骤因参数拆分错误停止，尚未进入编译或 E2E，因此 T16 不标记完成。
+- 当前状态为“macOS 远端通过，Windows 编译问题整改后待复跑”。第二轮 GitHub Actions 的 macOS 作业完整成功，Windows 作业在 Rust lint 暴露稳定 API 兼容问题后停止；修复尚需远端复验，因此 T16 不标记完成。
 - Windows 原生选择器、回收站、Explorer、菜单和辅助技术的视觉/键鼠可用性不能由 WebView 自动化替代，继续登记为人工未验证。
 
 ## 2. 实际实现
@@ -25,6 +25,8 @@
 - 共享原子适配新增替换已有目标与禁止覆盖已有目标测试，两类测试在目标平台真实调用各自平台实现。
 - Windows 条件测试通过 `OpenOptionsExt::share_mode(0)` 独占打开目标，要求 `MoveFileExW` 替换失败，并断言临时源与旧目标内容均保留。
 - 补齐 `.ico` 后，交叉检查继续到 Windows 资源编译并因本机缺少 `llvm-rc` 停止；因此 Windows 条件代码和测试仍未完成编译或运行，必须以远端 `windows-latest` 日志为准。
+- 第二轮远端编译确认稳定 Rust 1.97.1 仍不开放 `MetadataExt::volume_serial_number/file_index`。现以 `GetFileInformationByHandle` 读取卷序列号与 64 位文件索引，复用到永久删除目标防替换和大小写重命名的同文件判断；句柄只请求属性、允许读写删除共享，并用 `FILE_FLAG_BACKUP_SEMANTICS` 支持目录。
+- 同轮还发现 `menu` 与 `atomic` 的平台条件会在 Windows 产生 `unused_mut`/`unused_imports`；现改为条件遮蔽构建器和条件导入，不用 `allow` 掩盖警告。
 
 ### 2.3 P1 真 IPC E2E 与隔离
 
@@ -76,7 +78,9 @@ node scripts/collect-ci-artifact.mjs macos
 
 - 首轮 GitHub Actions：[Desktop CI #1](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29841645380) 已真实触发，但 macOS 与 Windows 均在 Rust 工具链安装步骤失败；失败原因是 workflow 的组件参数格式，不是产品代码或平台分支结论。其后编译、测试、E2E 与生产构建全部跳过，不得据此声称任何平台通过或失败。
 - 首轮还因工具链失败发生在 `artifacts/` 创建前，导致诊断上传报告无文件；现已在早期步骤建立最小诊断文件，整改提交推送后须重新观察上传行为。
+- 第二轮 GitHub Actions：[Desktop CI #2](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29842058884) 中 macOS 完整成功，包含许可证、类型、前端/Rust 测试、4 个桌面 E2E、生产构建与 artifact；Windows 已通过工具链、依赖、许可证、类型和前端门禁，在 Rust lint 因 8 处不稳定文件标识 API 与 1 处 `unused_mut` 失败。两个平台均成功上传 artifact，证明早期诊断初始化整改有效。
+- Windows 文件标识已改用稳定 Win32 API；本机用临时资源编译占位器仅绕过 Tauri `.res` 生成后，`x86_64-pc-windows-msvc` 的 `cargo check --all-features` 与 `cargo clippy --all-targets --all-features -- -D warnings` 通过。该证据验证 Rust 条件代码，但不替代真实 Windows 资源、链接、测试或运行结果。
 - 本机执行 `cargo check --target x86_64-pc-windows-msvc --tests --all-features`：首次发现并修复缺少 `.ico`；复跑停在 macOS 缺少 `llvm-rc`。该失败不计为 Windows 编译证据，也不等同远端 runner 失败。
 - 未编译/执行 Windows `MoveFileExW`、目标独占失败、Dialog/WebView2、watch、回收站或 Explorer 分支；macOS 结果不得外推。
 - 自动化验证了选择/授权服务的取消和过滤规则单测、Dialog 插件/命令编译边界及 P1/P2 IPC；Windows 原生面板的真实过滤展示、取消键鼠行为仍需人工设备。
-- 下一步推送本次 workflow 整改并复跑矩阵；两个平台全部通过并记录运行链接、artifact 哈希后，才能把 T16 改为完成并进入 T17。
+- 下一步推送 Windows 稳定 API 整改并复跑矩阵；两个平台全部通过并记录运行链接、artifact 哈希后，才能把 T16 改为完成并进入 T17。

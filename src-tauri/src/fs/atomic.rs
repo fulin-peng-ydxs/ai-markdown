@@ -1,6 +1,8 @@
-use std::fs;
 use std::io;
 use std::path::Path;
+
+#[cfg(not(windows))]
+use std::fs;
 
 #[cfg(target_os = "macos")]
 use std::ffi::CString;
@@ -20,7 +22,6 @@ fn platform_replace_existing(source: &Path, target: &Path) -> io::Result<()> {
 
 #[cfg(windows)]
 fn platform_replace_existing(source: &Path, target: &Path) -> io::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Storage::FileSystem::{
         MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
     };

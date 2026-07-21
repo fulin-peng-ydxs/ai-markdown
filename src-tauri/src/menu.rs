@@ -61,7 +61,7 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         )?)
         .build()?;
 
-    let mut view_builder = SubmenuBuilder::new(app, "显示")
+    let view_builder = SubmenuBuilder::new(app, "显示")
         .item(&custom_item(
             app,
             "view.toggle_sidebar",
@@ -75,9 +75,7 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
             Some("CmdOrCtrl+Shift+F"),
         )?);
     #[cfg(target_os = "macos")]
-    {
-        view_builder = view_builder.separator().fullscreen_with_text("进入全屏");
-    }
+    let view_builder = view_builder.separator().fullscreen_with_text("进入全屏");
     let view_menu = view_builder.build()?;
 
     let window_builder = SubmenuBuilder::new(app, "窗口")
