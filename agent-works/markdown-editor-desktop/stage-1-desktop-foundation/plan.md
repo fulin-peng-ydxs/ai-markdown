@@ -518,7 +518,7 @@
 
 ### 6.16 任务 T16：macOS/Windows CI 门禁与构建产物
 
-- 状态：进行中（实现与本地验证完成，远端矩阵待执行）。
+- 状态：进行中（实现与本地验证完成，首轮远端矩阵失败后整改待复跑）。
 - 依赖：T1、T15。
 - 涉及文件/模块：`.github/workflows/ci.yml`、`package.json`、`scripts/check-licenses.mjs`、`scripts/run-desktop-e2e.mjs`、`scripts/collect-ci-artifact.mjs`、`tests/e2e/`、`src-tauri/src/fs/atomic.rs`、`src-tauri/icons/icon.ico`、E2E-only Rust 命令与状态目录适配。
 - 目标：在没有本地 Windows 设备的情况下取得真实 Windows runner 证据。
@@ -528,7 +528,7 @@
 - 边界与异常：CI 通过不等同 Windows 人工 UX 验收；无签名产物仅用于测试，不作为正式发布。
 - 验证方式：GitHub Actions 运行链接、矩阵日志、E2E 报告和 artifact 哈希。
 - 完成标准：两个平台均编译和测试通过；失败阻止阶段完成。
-- 实际落地情况：已实现 `macos-latest`/`windows-latest` 矩阵，固定 Node 24.11.1、pnpm 11.5.1、Rust 1.97.1，缓存实际 pnpm store 与 Cargo，硬门禁覆盖许可证、类型、前端测试/构建、Rust fmt/clippy/all-features 测试、4 个桌面 E2E、默认生产构建及未签名二进制/哈希/失败日志/截图上传。新增平台原子替换测试；Windows 专项锁定目标测试只在 Windows 编译执行。交叉检查发现并补齐由现有占位 `icon.png` 生成的 `icon.ico`；之后本机检查停在 macOS 缺少 Windows `llvm-rc`，未据此宣称 Windows 编译通过。P1 E2E 只在 `e2e` feature 下使用测试命令，经正常授权、窗口协调、启动快照、树扫描与读取打开 fixture；每轮使用独立临时状态目录，失败用例最多重试一次。许可证门禁已覆盖默认与 `e2e` Cargo 图（531 Node/508 Rust/0 阻断）。macOS 本地通过 114 个 Rust、全部前端门禁、连续两轮 4/4 E2E、生产构建和测试入口泄漏检查。分支未推送，GitHub Actions、Windows 编译/E2E/MoveFileExW 锁定目标用例和 artifact 下载均未执行，因此 T16 不标完成；Windows 原生选择器视觉/键鼠、回收站与 Explorer 仍是人工验收项。详见 `t16-desktop-ci.md`。
+- 实际落地情况：已实现 `macos-latest`/`windows-latest` 矩阵，固定 Node 24.11.1、pnpm 11.5.1、Rust 1.97.1，缓存实际 pnpm store 与 Cargo，硬门禁覆盖许可证、类型、前端测试/构建、Rust fmt/clippy/all-features 测试、4 个桌面 E2E、默认生产构建及未签名二进制/哈希/失败日志/截图上传。新增平台原子替换测试；Windows 专项锁定目标测试只在 Windows 编译执行。交叉检查发现并补齐由现有占位 `icon.png` 生成的 `icon.ico`；之后本机检查停在 macOS 缺少 Windows `llvm-rc`，未据此宣称 Windows 编译通过。P1 E2E 只在 `e2e` feature 下使用测试命令，经正常授权、窗口协调、启动快照、树扫描与读取打开 fixture；每轮使用独立临时状态目录，失败用例最多重试一次。许可证门禁已覆盖默认与 `e2e` Cargo 图（531 Node/508 Rust/0 阻断）。macOS 本地通过 114 个 Rust、全部前端门禁、连续两轮 4/4 E2E、生产构建和测试入口泄漏检查。分支已推送；首轮远端运行 [Desktop CI #1](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29841645380) 的两个平台均因 Rust 组件参数误写而在安装阶段停止，未进入平台编译或测试。现已把组件改为 `rustfmt,clippy`，在工具链前初始化诊断文件，并更新已弃用运行时的 Actions 主版本；整改尚待远端复跑，因此 T16 不标完成。Windows 原生选择器视觉/键鼠、回收站与 Explorer 仍是人工验收项。详见 `t16-desktop-ci.md`。
 
 ### 6.17 任务 T17：第一阶段验收、证据和交接
 

@@ -4,7 +4,7 @@
 
 - 沿用 R1、R2、R5、R8、R11、R14、R30、R31，不新增或改变需求编号。
 - 本任务建立 macOS/Windows CI 门禁、平台文件替换回归、P1 真 IPC 桌面 E2E、失败诊断和未签名测试产物。
-- 当前状态为“实现与本地验证完成，远端验证待执行”。当前分支未推送，没有 GitHub Actions 链接或 Windows runner 结果，T16 不标记完成。
+- 当前状态为“实现与本地验证完成，远端矩阵整改后待复跑”。分支已推送；首轮 GitHub Actions 在两个平台的 Rust 安装步骤因参数拆分错误停止，尚未进入编译或 E2E，因此 T16 不标记完成。
 - Windows 原生选择器、回收站、Explorer、菜单和辅助技术的视觉/键鼠可用性不能由 WebView 自动化替代，继续登记为人工未验证。
 
 ## 2. 实际实现
@@ -13,6 +13,8 @@
 
 - 新增 `.github/workflows/ci.yml`，对 `macos-latest`、`windows-latest` 运行同一矩阵。
 - 固定 Node 24.11.1、pnpm 11.5.1、Rust 1.97.1；缓存运行时解析出的 pnpm store、Cargo registry/git/target。
+- 首轮远端运行暴露 `rustup --component rustfmt clippy` 会把 `clippy` 解析为第二个工具链；现改为逗号分隔的 `rustfmt,clippy`。同时在工具链安装前初始化最小诊断文件，确保早期失败也有可上传证据。
+- GitHub 提示旧版 JavaScript action 运行时已弃用；`setup-node`、`cache`、`upload-artifact` 已分别更新到当前主版本 v7、v6、v7，`checkout` 保持 v6。
 - 硬门禁依次覆盖许可证、TypeScript 类型、前端测试/构建、Rust fmt、clippy all-features、Rust all-features 测试、桌面 E2E 和默认生产构建。
 - E2E 失败最多重试一次；日志始终写入 artifact，失败时额外截图。成功后收集当前平台未签名二进制与 SHA-256，保留 14 天，不发布、不签名。
 - 生产构建在 E2E 构建之后重新执行，避免把带 WebDriver feature 的测试二进制误当产品产物。
@@ -70,10 +72,11 @@ node scripts/collect-ci-artifact.mjs macos
 - 本机未签名二进制 SHA-256：`cac39dcbb2182d8efe68c04d7c1e68a55ba23ed5cc04ea1273ad5ef5a84e4d32`。该本地产物已在核对后清理，不进入版本库。
 - 默认 release 二进制未发现 `prepare_e2e_workspace` 或 `PLAINROOT_E2E_DATA_DIR` 标记。
 
-## 5. 未验证与下一步
+## 5. 远端结果、未验证与下一步
 
-- 未执行 GitHub Actions：当前分支未推送，因此没有远端 macOS/Windows 状态、日志、artifact 或运行链接。
+- 首轮 GitHub Actions：[Desktop CI #1](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29841645380) 已真实触发，但 macOS 与 Windows 均在 Rust 工具链安装步骤失败；失败原因是 workflow 的组件参数格式，不是产品代码或平台分支结论。其后编译、测试、E2E 与生产构建全部跳过，不得据此声称任何平台通过或失败。
+- 首轮还因工具链失败发生在 `artifacts/` 创建前，导致诊断上传报告无文件；现已在早期步骤建立最小诊断文件，整改提交推送后须重新观察上传行为。
 - 本机执行 `cargo check --target x86_64-pc-windows-msvc --tests --all-features`：首次发现并修复缺少 `.ico`；复跑停在 macOS 缺少 `llvm-rc`。该失败不计为 Windows 编译证据，也不等同远端 runner 失败。
 - 未编译/执行 Windows `MoveFileExW`、目标独占失败、Dialog/WebView2、watch、回收站或 Explorer 分支；macOS 结果不得外推。
 - 自动化验证了选择/授权服务的取消和过滤规则单测、Dialog 插件/命令编译边界及 P1/P2 IPC；Windows 原生面板的真实过滤展示、取消键鼠行为仍需人工设备。
-- 下一步仅在用户明确授权推送后触发矩阵；两个平台全部通过并记录运行链接、artifact 哈希后，才能把 T16 改为完成并进入 T17。
+- 下一步推送本次 workflow 整改并复跑矩阵；两个平台全部通过并记录运行链接、artifact 哈希后，才能把 T16 改为完成并进入 T17。
