@@ -109,7 +109,7 @@ Key Characteristics：
 |---|---|---|
 | 原型舞台 | `stage` | 仅用于独立原型外部背景；正式原生窗口内不应出现 |
 | 应用 chrome | `chrome` / `chrome-strong` | 侧栏、工具栏、状态栏与标题栏；`strong` 用于更稳定的边界层 |
-| 文档纸面 | `paper` / `paper-deep` | 编辑器、输入面和普通对话框；`deep` 用于代码块、说明块和轻量选中 |
+| 文档纸面 | `paper` / `paper-deep` / `paper-hover` | 编辑器、输入面和普通对话框；`deep` 用于代码块、说明块和轻量选中；`hover` 只用于纸面控件悬停 |
 | 主文字 | `heading` / `text` | 标题与正文，确保长期阅读清晰 |
 | 弱文字 | `muted` / `quiet` | 路径、时间、快捷键和辅助说明；关键错误或操作不可只用 `quiet` |
 | 边界 | `line` / `line-strong` | 常规分隔与强调边界，不用阴影替代所有分隔 |

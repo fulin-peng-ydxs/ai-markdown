@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -96,16 +96,97 @@ describe("WorkspaceLauncher", () => {
     await waitFor(() => expect(api.authorize).toHaveBeenCalledWith("selection-1", true));
   });
 
-  it("maps native keyboard shortcuts to the two real selectors", async () => {
-    const api = gateway();
+  it("maps the two native menu events to their real selectors", async () => {
+    let menuListener: Parameters<WorkspaceLauncherGateway["listenMenu"]>[0] | null = null;
+    const api = gateway({
+      listenMenu: vi.fn().mockImplementation(async (listener) => {
+        menuListener = listener;
+        return () => undefined;
+      }),
+    });
     render(<WorkspaceLauncher gateway={api} />);
     await screen.findByText("Research Notes");
-    fireEvent.keyDown(window, { key: "o", metaKey: true });
-    fireEvent.keyDown(window, { key: "o", metaKey: true, shiftKey: true });
-    await waitFor(() => {
-      expect(api.selectFolder).toHaveBeenCalledTimes(1);
-      expect(api.selectMarkdown).toHaveBeenCalledTimes(1);
+    expect(menuListener).not.toBeNull();
+    await act(async () => {
+      menuListener?.("file.open_folder");
     });
+    await waitFor(() => expect(api.selectFolder).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      menuListener?.("file.open_markdown");
+    });
+    await waitFor(() => expect(api.selectMarkdown).toHaveBeenCalledTimes(1));
+  });
+
+  it("allows only one native selector while an open action is in flight", async () => {
+    let menuListener: Parameters<WorkspaceLauncherGateway["listenMenu"]>[0] | null = null;
+    const api = gateway({
+      selectFolder: vi.fn().mockImplementation(() => new Promise(() => undefined)),
+      listenMenu: vi.fn().mockImplementation(async (listener) => {
+        menuListener = listener;
+        return () => undefined;
+      }),
+    });
+    render(<WorkspaceLauncher gateway={api} />);
+    await screen.findByText("Research Notes");
+    expect(menuListener).not.toBeNull();
+    act(() => {
+      menuListener?.("file.open_folder");
+      menuListener?.("file.open_folder");
+    });
+    expect(api.selectFolder).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not replace a snapshot error with an unrelated menu-listener error", async () => {
+    const api = gateway({
+      snapshot: vi.fn().mockRejectedValue({
+        code: "state_read_failed",
+        messageKey: "error.desktop.state_read_failed",
+        pathHint: null,
+        contentSafe: true,
+        retryable: true,
+      }),
+      listenMenu: vi.fn().mockRejectedValue(new Error("event bridge unavailable")),
+    });
+    render(<WorkspaceLauncher gateway={api} />);
+    expect(await screen.findByText(/无法读取本机的最近工作区和窗口会话/)).toBeTruthy();
+    expect(screen.queryByText(/未能聚焦已有窗口/)).toBeNull();
+  });
+
+  it("reloads the launcher snapshot only once after a restore batch", async () => {
+    const restoringSnapshot = snapshot();
+    restoringSnapshot.workspaceSessions = [
+      {
+        workspaceId: "workspace-a",
+        windowLabel: "plainroot-window-1",
+        windowStateRef: null,
+        lastActiveAt: 2,
+      },
+      {
+        workspaceId: "workspace-b",
+        windowLabel: "plainroot-window-2",
+        windowStateRef: null,
+        lastActiveAt: 1,
+      },
+    ];
+    const api = gateway({
+      snapshot: vi.fn().mockResolvedValue(restoringSnapshot),
+      validateRecent: vi.fn().mockImplementation(async (workspaceId) => ({
+        status: "already_open",
+        workspaceId,
+        initialFile: null,
+      })),
+      open: vi.fn().mockImplementation(async (workspaceId) => ({
+        status: "focused_existing",
+        workspaceId,
+        windowLabel: "plainroot-window-1",
+      })),
+    });
+    const user = userEvent.setup();
+    render(<WorkspaceLauncher gateway={api} />);
+    await user.click(await screen.findByRole("button", { name: "恢复可用窗口" }));
+    await waitFor(() => expect(api.open).toHaveBeenCalledTimes(2));
+    expect(api.snapshot).toHaveBeenCalledTimes(2);
+    expect(screen.getAllByText("已恢复")).toHaveLength(2);
   });
 
   it.each([

@@ -52,6 +52,11 @@ interface WorkspaceLauncherProps {
   gateway?: WorkspaceLauncherGateway;
 }
 
+interface LoadSnapshotOptions {
+  preserveRestoreProgress?: boolean;
+  showBusy?: boolean;
+}
+
 export function WorkspaceLauncher({
   gateway = desktopWorkspaceLauncherGateway,
 }: WorkspaceLauncherProps) {
@@ -69,31 +74,48 @@ export function WorkspaceLauncher({
   const [restoreItems, setRestoreItems] = useState<RestoreItem[]>([]);
   const [restoreOpen, setRestoreOpen] = useState(false);
   const mountedRef = useRef(true);
+  const openInFlightRef = useRef(false);
   const retryActionRef = useRef<(() => Promise<void>) | null>(null);
+  const selectAndOpenRef = useRef<(kind: "folder" | "markdown") => Promise<void>>(
+    async () => undefined,
+  );
 
-  const loadSnapshot = useCallback(async () => {
-    retryActionRef.current = loadSnapshot;
-    setBusy({
-      title: "正在读取本地工作区",
-      description: "正在核对最近记录与尚未恢复的窗口会话。",
-    });
+  const loadSnapshot = useCallback(async ({
+    preserveRestoreProgress = false,
+    showBusy = true,
+  }: LoadSnapshotOptions = {}) => {
+    retryActionRef.current = () => loadSnapshot();
+    if (showBusy) {
+      setBusy({
+        title: "正在读取本地工作区",
+        description: "正在核对最近记录与尚未恢复的窗口会话。",
+      });
+    }
     setError(null);
     try {
       const next = await gateway.snapshot();
       if (!mountedRef.current) return;
       setSnapshot(next);
-      const restorable = restorableWorkspaces(next).map((item) => ({
-        ...item,
-        status: "waiting" as const,
+      const restorable = restorableWorkspaces(next);
+      setRestoreItems((current) => restorable.map((item) => {
+        const previous = preserveRestoreProgress
+          ? current.find(
+            (candidate) => candidate.session.workspaceId === item.session.workspaceId,
+          )
+          : undefined;
+        return {
+          ...item,
+          status: previous?.status ?? "waiting",
+          message: previous?.message,
+        };
       }));
-      setRestoreItems(restorable);
       setRestoreOpen(restorable.length > 0);
     } catch (reason) {
       if (mountedRef.current) {
         setError(normalizeDesktopError(reason, "state_unavailable"));
       }
     } finally {
-      if (mountedRef.current) setBusy(null);
+      if (mountedRef.current && showBusy) setBusy(null);
     }
   }, [gateway]);
 
@@ -106,15 +128,12 @@ export function WorkspaceLauncher({
   }, [loadSnapshot]);
 
   const openFolder = useCallback(() => {
-    void selectAndOpen("folder");
-    // The gateway is intentionally the sole native-dialog boundary.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gateway]);
+    void selectAndOpenRef.current("folder");
+  }, []);
 
   const openMarkdown = useCallback(() => {
-    void selectAndOpen("markdown");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gateway]);
+    void selectAndOpenRef.current("markdown");
+  }, []);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -126,23 +145,12 @@ export function WorkspaceLauncher({
       .then((next) => {
         unlisten = next;
       })
-      .catch((reason) => {
-        setError(normalizeDesktopError(reason, "window_focus_failed"));
+      .catch(() => {
+        // 页面按钮仍是完整入口；菜单订阅失败不应覆盖真实的状态仓储错误，
+        // 也不能伪装成与本次失败无关的窗口聚焦错误。
       });
     return () => unlisten?.();
   }, [gateway, openFolder, openMarkdown]);
-
-  useEffect(() => {
-    function handleShortcut(event: KeyboardEvent) {
-      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
-      if (event.key.toLocaleLowerCase() !== "o") return;
-      event.preventDefault();
-      if (event.shiftKey) openMarkdown();
-      else openFolder();
-    }
-    window.addEventListener("keydown", handleShortcut);
-    return () => window.removeEventListener("keydown", handleShortcut);
-  }, [openFolder, openMarkdown]);
 
   const visibleRecent = useMemo(
     () => filterRecentWorkspaces(snapshot?.recentWorkspaces ?? [], query),
@@ -150,6 +158,8 @@ export function WorkspaceLauncher({
   );
 
   async function selectAndOpen(kind: "folder" | "markdown") {
+    if (openInFlightRef.current) return;
+    openInFlightRef.current = true;
     retryActionRef.current = () => selectAndOpen(kind);
     setBusy({
       title: kind === "folder" ? "正在打开文件夹" : "正在打开 Markdown 文件",
@@ -163,9 +173,12 @@ export function WorkspaceLauncher({
     } catch (reason) {
       setError(normalizeDesktopError(reason, "selection_unavailable"));
     } finally {
+      openInFlightRef.current = false;
       setBusy(null);
     }
   }
+
+  selectAndOpenRef.current = selectAndOpen;
 
   async function openRecent(workspace: RecentWorkspace, restore?: RestorableWorkspace) {
     retryActionRef.current = () => openRecent(workspace, restore);
@@ -214,6 +227,7 @@ export function WorkspaceLauncher({
     workspaceId: WorkspaceId,
     disposition: WorkspaceOpenDisposition | undefined,
     source: OpenSource,
+    reloadSnapshot = true,
   ) {
     const outcome = await gateway.open(workspaceId, disposition);
     if (outcome.status === "decision_required") {
@@ -225,7 +239,7 @@ export function WorkspaceLauncher({
     if (source.recent && source.recent.workspaceId !== workspaceId) {
       await gateway.removeRecent(source.recent.workspaceId).catch(() => false);
     }
-    await loadSnapshot();
+    if (reloadSnapshot) await loadSnapshot();
   }
 
   async function authorizePending() {
@@ -343,13 +357,19 @@ export function WorkspaceLauncher({
           outcome.status === "already_open"
             ? outcome.workspaceId
             : (await gateway.authorize(outcome.proposal.selectionId, false)).id;
-        await coordinate(workspaceId, dispositionFor({ restore: item }), { restore: item });
+        await coordinate(
+          workspaceId,
+          dispositionFor({ restore: item }),
+          { restore: item },
+          false,
+        );
         markRestore(item.session.workspaceId, "restored");
       } catch (reason) {
         const nextError = normalizeDesktopError(reason, "state_unavailable");
         markRestore(item.session.workspaceId, "failed", desktopErrorMessage(nextError));
       }
     }
+    await loadSnapshot({ preserveRestoreProgress: true, showBusy: false });
   }
 
   const currentWorkspace = snapshot?.currentWorkspaceId
