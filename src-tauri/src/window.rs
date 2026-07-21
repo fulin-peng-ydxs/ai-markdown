@@ -746,8 +746,7 @@ fn window_error(code: DesktopErrorCode) -> DesktopError {
 mod tests {
     use std::collections::HashSet;
     use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::path::Path;
 
     use tauri::test::mock_app;
     use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
@@ -762,33 +761,7 @@ mod tests {
     use crate::error::DesktopErrorCode;
     use crate::fs::WorkspaceId;
     use crate::state::{PersistentAppState, WorkspaceSessionRoot};
-
-    struct TestDirectory(PathBuf);
-
-    impl TestDirectory {
-        fn create(label: &str) -> Self {
-            let nonce = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
-            let path = std::env::temp_dir().join(format!(
-                "plainroot-window-{label}-{}-{nonce}",
-                std::process::id()
-            ));
-            fs::create_dir_all(&path).unwrap();
-            Self(path)
-        }
-
-        fn path(&self) -> &Path {
-            &self.0
-        }
-    }
-
-    impl Drop for TestDirectory {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
+    use crate::test_support::TestDirectory;
 
     fn authorize_root(
         access: &WorkspaceAccessService,

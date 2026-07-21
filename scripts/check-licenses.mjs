@@ -7,7 +7,18 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const virtualStore = join(projectRoot, "node_modules", ".pnpm");
 export const LICENSE_FILE_REVIEW = "SEE LICENSE FILE";
 
-function readPackage(packageDirectory) {
+const REVIEWED_NODE_LICENSES = new Map([
+  [
+    "css-value@0.0.1",
+    {
+      license: "MIT",
+      evidenceFile: "Readme.md",
+      evidenceText: "(The MIT License)",
+    },
+  ],
+]);
+
+export function readPackage(packageDirectory) {
   try {
     const packageJson = JSON.parse(
       readFileSync(join(packageDirectory, "package.json"), "utf8"),
@@ -20,10 +31,30 @@ function readPackage(packageDirectory) {
             .filter(Boolean)
             .join(" OR ");
 
+    const packageIdentity = `${packageJson.name}@${packageJson.version}`;
+    const reviewedLicense = REVIEWED_NODE_LICENSES.get(packageIdentity);
+    let reviewedEvidence = null;
+    if (reviewedLicense) {
+      try {
+        reviewedEvidence = readFileSync(
+          join(packageDirectory, reviewedLicense.evidenceFile),
+          "utf8",
+        );
+      } catch {
+        // Keep the package in the inventory with a missing license so policy fails closed.
+      }
+    }
+    const resolvedReviewedLicense = reviewedEvidence?.includes(reviewedLicense.evidenceText)
+      ? reviewedLicense.license
+      : null;
+
     return {
       name: packageJson.name,
       version: packageJson.version,
-      license: license || null,
+      license: license || resolvedReviewedLicense,
+      ...(resolvedReviewedLicense
+        ? { licenseSource: `reviewed:${reviewedLicense.evidenceFile}` }
+        : {}),
     };
   } catch {
     return null;
@@ -144,7 +175,9 @@ export function findLicenseProblems(packages) {
     (packageInfo) =>
       !packageInfo.license ||
       packageInfo.license === LICENSE_FILE_REVIEW ||
-      deniedLicense.test(packageInfo.license),
+      packageInfo.license
+        .split(/\s+OR\s+/i)
+        .every((choice) => deniedLicense.test(choice)),
   );
 }
 

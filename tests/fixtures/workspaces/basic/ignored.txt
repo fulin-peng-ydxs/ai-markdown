@@ -1,0 +1,1 @@
+Plainroot should not expose this non-Markdown file in the workspace tree.

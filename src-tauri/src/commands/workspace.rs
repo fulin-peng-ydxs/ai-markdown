@@ -628,8 +628,8 @@ fn selection_error(code: DesktopErrorCode, retryable: bool) -> DesktopError {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    use std::path::PathBuf;
+    use std::time::Duration;
 
     use crate::contract_test::{assert_interface_matches, typescript_string_constant_values};
     use crate::error::DesktopErrorCode;
@@ -638,6 +638,7 @@ mod tests {
         PersistentAppState, RecentWorkspace, StateRepositoryStatus, WorkspaceAvailability,
         WorkspaceSessionRoot,
     };
+    use crate::test_support::TestDirectory;
 
     use super::{
         resolve_markdown_selection, workspace_id_for_root, WorkspaceAccessService,
@@ -645,33 +646,6 @@ mod tests {
         WorkspaceSelectionProposal, WorkspaceWorkbenchSnapshot, MAX_PENDING_SELECTIONS,
         PENDING_SELECTION_LIFETIME,
     };
-
-    struct TestDirectory(PathBuf);
-
-    impl TestDirectory {
-        fn create(label: &str) -> Self {
-            let nonce = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
-            let path = std::env::temp_dir().join(format!(
-                "plainroot-selection-{label}-{}-{nonce}",
-                std::process::id()
-            ));
-            fs::create_dir_all(&path).unwrap();
-            Self(path)
-        }
-
-        fn path(&self) -> &Path {
-            &self.0
-        }
-    }
-
-    impl Drop for TestDirectory {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
 
     fn proposal_id(outcome: &WorkspaceSelectionOutcome) -> String {
         match outcome {

@@ -398,7 +398,7 @@ impl CleanupStore {
         }
         journal
             .pending_paths
-            .retain(|path| remove_authorized_temp_candidate(path, authorized_roots).is_err());
+            .retain(|path| cleanup_still_requires_retry(path, authorized_roots));
         self.persist(&journal)?;
         Ok(journal)
     }
@@ -430,7 +430,16 @@ impl CleanupStore {
 fn retry_authorized_pending_paths(journal: &mut CleanupJournal, authorized_roots: &[PathBuf]) {
     journal
         .pending_paths
-        .retain(|path| remove_authorized_temp_candidate(path, authorized_roots).is_err());
+        .retain(|path| cleanup_still_requires_retry(path, authorized_roots));
+}
+
+fn cleanup_still_requires_retry(path: &Path, authorized_roots: &[PathBuf]) -> bool {
+    if !authorized_roots.iter().any(|root| path.starts_with(root)) {
+        // A root can legitimately age out of recent workspaces. The orphaned file must remain on
+        // disk, but its unactionable journal entry must not consume the global cleanup budget.
+        return false;
+    }
+    remove_authorized_temp_candidate(path, authorized_roots).is_err()
 }
 
 fn validated_cleanup_roots(roots: Vec<PathBuf>) -> Vec<PathBuf> {
@@ -626,6 +635,7 @@ mod tests {
     use crate::error::DesktopErrorCode;
     use crate::fs::read::inspect_markdown_revision;
     use crate::fs::{LineEnding, TextEncoding, WorkspaceRelativePath};
+    use crate::test_support::TestDirectory;
 
     use super::{
         content_exceeds_write_limit, encode_content, validate_expected_revision,
@@ -962,13 +972,12 @@ mod tests {
     }
 
     #[test]
-    fn startup_cleanup_never_deletes_a_candidate_outside_authorized_roots() {
+    fn startup_cleanup_drops_unauthorized_journal_entry_without_deleting_candidate() {
         let fixture = Fixture::new(b"original\n");
-        let outside = std::env::temp_dir().join(format!(
-            ".outside.plainroot-save-{}-{}.tmp",
-            std::process::id(),
-            rand_suffix()
-        ));
+        let outside_root = TestDirectory::create("stale-cleanup-root");
+        let outside = outside_root
+            .path()
+            .join(".outside.plainroot-save-stale.tmp");
         fs::write(&outside, b"must remain").unwrap();
         let journal = serde_json::json!({
             "schemaVersion": 1,
@@ -982,9 +991,41 @@ mod tests {
 
         let service = fixture.service();
         assert!(service.current_error().is_none());
-        assert_eq!(service.pending_cleanup_count(), 1);
+        assert_eq!(service.pending_cleanup_count(), 0);
         assert_eq!(fs::read(&outside).unwrap(), b"must remain");
-        fs::remove_file(outside).unwrap();
+    }
+
+    #[test]
+    fn stale_roots_cannot_fill_cleanup_budget_and_disable_safe_write() {
+        let fixture = Fixture::new(b"original\n");
+        let outside_root = TestDirectory::create("stale-cleanup-budget");
+        let pending_paths = (0..32)
+            .map(|index| {
+                let path = outside_root
+                    .path()
+                    .join(format!(".note.md.plainroot-save-stale-{index}.tmp"));
+                fs::write(&path, b"must remain").unwrap();
+                path
+            })
+            .collect::<Vec<_>>();
+        let journal = serde_json::json!({
+            "schemaVersion": 1,
+            "pendingPaths": pending_paths,
+        });
+        fs::write(
+            fixture.app_data.join(SAFE_WRITE_CLEANUP_FILE_NAME),
+            serde_json::to_vec(&journal).unwrap(),
+        )
+        .unwrap();
+
+        let service = fixture.service();
+        assert!(service.current_error().is_none());
+        assert_eq!(service.pending_cleanup_count(), 0);
+        let result = write_with_fault(&service, &fixture.root, "replacement\n", WriteFault::None)
+            .expect("stale roots must not disable future safe writes");
+
+        assert_eq!(result.bytes_written, b"replacement\n".len() as u64);
+        assert_eq!(fs::read_dir(outside_root.path()).unwrap().count(), 32);
     }
 
     #[test]

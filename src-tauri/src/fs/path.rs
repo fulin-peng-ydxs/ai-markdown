@@ -195,38 +195,12 @@ pub fn native_path_identity(canonical_path: &Path) -> Result<String, DesktopErro
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     use crate::error::DesktopErrorCode;
+    use crate::test_support::TestDirectory;
 
     use super::{inspect_workspace_root, resolve_existing_workspace_path, windows_path_identity};
     use crate::fs::WorkspaceRelativePath;
-
-    struct TestDirectory(PathBuf);
-
-    impl TestDirectory {
-        fn create(label: &str) -> Self {
-            let nonce = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("clock should be after epoch")
-                .as_nanos();
-            let path = std::env::temp_dir()
-                .join(format!("plainroot-{label}-{}-{nonce}", std::process::id()));
-            fs::create_dir_all(&path).expect("test directory should be created");
-            Self(path)
-        }
-
-        fn path(&self) -> &Path {
-            &self.0
-        }
-    }
-
-    impl Drop for TestDirectory {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
 
     #[test]
     fn windows_identity_normalizes_extended_prefix_separator_and_case() {

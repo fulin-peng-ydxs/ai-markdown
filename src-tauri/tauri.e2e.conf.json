@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Plainroot E2E",
+  "identifier": "com.plainroot.desktop.e2e",
+  "build": {
+    "beforeBuildCommand": "pnpm build --mode e2e"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "security": {
+      "capabilities": [
+        {
+          "identifier": "e2e",
+          "description": "Test-only WebDriver access for the isolated Plainroot E2E flavor",
+          "windows": ["plainroot-window-*"],
+          "permissions": [
+            "core:default",
+            "core:window:allow-set-size",
+            "wdio:default"
+          ]
+        }
+      ]
+    }
+  }
+}

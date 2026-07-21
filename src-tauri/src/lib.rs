@@ -9,6 +9,8 @@ pub mod window;
 
 #[cfg(test)]
 mod contract_test;
+#[cfg(test)]
+pub(crate) mod test_support;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -33,6 +35,12 @@ pub fn run() {
             );
         }
     }));
+    // The embedded WebDriver is compiled only for the dedicated E2E flavor. It is registered
+    // after single-instance so test builds preserve the production plugin-order invariant.
+    #[cfg(feature = "e2e")]
+    let builder = builder
+        .plugin(tauri_plugin_wdio::init())
+        .plugin(tauri_plugin_wdio_webdriver::init());
 
     builder
         .plugin(tauri_plugin_dialog::init())
