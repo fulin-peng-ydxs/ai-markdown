@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
 use crate::error::{DesktopError, DesktopErrorCode};
 
@@ -65,7 +65,7 @@ impl WorkspaceSafeWriteService {
         operation_lock: Arc<Mutex<()>>,
         authorized_roots: Vec<PathBuf>,
     ) -> Self {
-        match app.path().app_data_dir() {
+        match crate::app_data_directory(app) {
             Ok(app_data_dir) => Self::initialize_at(app_data_dir, operation_lock, authorized_roots),
             Err(_) => Self::unavailable(operation_lock, safe_write_unavailable()),
         }

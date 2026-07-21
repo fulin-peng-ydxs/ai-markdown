@@ -1,4 +1,15 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+
+function platformPathIdentity(path) {
+  if (process.platform !== "win32") return path;
+  return path
+    .replace(/^\\\\\?\\UNC\\/i, "\\\\")
+    .replace(/^\\\\\?\\/i, "")
+    .replaceAll("/", "\\")
+    .toLocaleLowerCase("en-US");
+}
 
 async function resizeApp(width, height) {
   const result = await browser.executeAsync((nextWidth, nextHeight, done) => {
@@ -89,5 +100,50 @@ describe("Plainroot desktop shell", () => {
       { label: "打开文件夹", focused: true, tabIndex: 0 },
       { label: "打开 Markdown 文件", focused: true, tabIndex: 0 },
     ]);
+  });
+
+  it("opens a fixture workspace through real IPC and reads its initial Markdown", async () => {
+    const fixtureRoot = resolve("tests/fixtures/workspaces/basic");
+    const outcome = await browser.executeAsync((root, done) => {
+      const invoke = window.__TAURI_INTERNALS__?.invoke;
+      if (typeof invoke !== "function") {
+        done({ error: "missing-invoke" });
+        return;
+      }
+      void (async () => {
+        const selection = await invoke("prepare_e2e_workspace", { root });
+        if (selection.status !== "ready") throw new Error(`unexpected selection: ${selection.status}`);
+        const workspace = await invoke("authorize_workspace_selection", {
+          selectionId: selection.proposal.selectionId,
+          confirmed: true,
+        });
+        const opened = await invoke("coordinate_workspace_open", {
+          workspaceId: workspace.id,
+          disposition: null,
+        });
+        done({ opened, workspace });
+      })().catch((error) => done({ error: String(error) }));
+    }, fixtureRoot);
+
+    assert.equal(outcome.error, undefined, JSON.stringify(outcome));
+    assert.equal(outcome.opened.status, "opened_current");
+    assert.equal(platformPathIdentity(outcome.workspace.canonicalRoot), platformPathIdentity(fixtureRoot));
+
+    // The IPC call commits the native window binding behind the current React tree. Reloading
+    // exercises the real bootstrap snapshot instead of injecting frontend state from the test.
+    await browser.refresh();
+    const workbench = await $('main[aria-label="Plainroot Markdown 工作台"]');
+    await workbench.waitForDisplayed();
+    const fixtureEntry = await $('[role="treeitem"][data-tree-path="note.md"]');
+    await fixtureEntry.waitForDisplayed();
+    await fixtureEntry.click();
+    await browser.waitUntil(
+      async () => (await $(".workbench__document pre").getText()).includes("# Plainroot fixture"),
+      { timeout: 10_000, timeoutMsg: "fixture Markdown was not read through the workbench IPC" },
+    );
+    assert.equal(
+      await $(".workbench__document pre").getText(),
+      await readFile(resolve(fixtureRoot, "note.md"), "utf8"),
+    );
   });
 });

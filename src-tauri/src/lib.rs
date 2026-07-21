@@ -1,5 +1,17 @@
 use tauri::Manager;
 
+pub(crate) fn app_data_directory<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<std::path::PathBuf, tauri::Error> {
+    #[cfg(feature = "e2e")]
+    if let Some(path) = std::env::var_os("PLAINROOT_E2E_DATA_DIR") {
+        // The WebDriver runner creates and removes this directory for every suite. Production
+        // builds compile this branch out and always use the operating-system application path.
+        return Ok(std::path::PathBuf::from(path));
+    }
+    app.path().app_data_dir()
+}
+
 pub mod commands;
 pub mod error;
 pub mod fs;
@@ -54,6 +66,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::workspace::select_workspace_folder,
             commands::workspace::select_markdown_file,
+            #[cfg(feature = "e2e")]
+            commands::workspace::prepare_e2e_workspace,
             commands::workspace::authorize_workspace_selection,
             commands::workspace::cancel_workspace_selection,
             commands::workspace::validate_recent_workspace,

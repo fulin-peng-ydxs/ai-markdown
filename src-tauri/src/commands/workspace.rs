@@ -380,6 +380,19 @@ pub async fn select_markdown_file(
     access.prepare_markdown_file(dialog_path(selected)?)
 }
 
+/// Bypasses the native picker only in the isolated WebDriver build.
+///
+/// Production builds do not compile or register this command. The normal authorization and
+/// window-coordination commands still enforce the same canonical-root and persistence rules.
+#[cfg(feature = "e2e")]
+#[tauri::command]
+pub fn prepare_e2e_workspace(
+    root: PathBuf,
+    access: State<'_, WorkspaceAccessService>,
+) -> Result<WorkspaceSelectionOutcome, DesktopError> {
+    access.prepare_folder(Some(root))
+}
+
 #[tauri::command]
 pub fn authorize_workspace_selection(
     selection_id: String,

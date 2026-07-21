@@ -111,3 +111,60 @@ fn wide_path(path: &Path) -> Vec<u16> {
         .chain(std::iter::once(0))
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use crate::test_support::TestDirectory;
+
+    #[test]
+    fn replacing_an_existing_file_commits_the_source_bytes() {
+        let root = TestDirectory::create("atomic-replace");
+        let source = root.path().join("source.tmp");
+        let target = root.path().join("target.md");
+        fs::write(&source, b"new").unwrap();
+        fs::write(&target, b"old").unwrap();
+
+        super::replace_existing(&source, &target).unwrap();
+
+        assert_eq!(fs::read(&target).unwrap(), b"new");
+        assert!(!source.exists());
+    }
+
+    #[test]
+    fn rename_without_replace_preserves_an_existing_target() {
+        let root = TestDirectory::create("atomic-no-replace");
+        let source = root.path().join("source.md");
+        let target = root.path().join("target.md");
+        fs::write(&source, b"source").unwrap();
+        fs::write(&target, b"target").unwrap();
+
+        assert!(super::rename_without_replace(&source, &target).is_err());
+        assert_eq!(fs::read(&source).unwrap(), b"source");
+        assert_eq!(fs::read(&target).unwrap(), b"target");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_replace_failure_preserves_source_and_locked_target() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let root = TestDirectory::create("atomic-locked-target");
+        let source = root.path().join("source.tmp");
+        let target = root.path().join("target.md");
+        fs::write(&source, b"new").unwrap();
+        fs::write(&target, b"old").unwrap();
+        // share_mode(0) prevents MoveFileExW from deleting/replacing the open destination.
+        let locked_target = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&target)
+            .unwrap();
+
+        assert!(super::replace_existing(&source, &target).is_err());
+        assert_eq!(fs::read(&source).unwrap(), b"new");
+        drop(locked_target);
+        assert_eq!(fs::read(&target).unwrap(), b"old");
+    }
+}

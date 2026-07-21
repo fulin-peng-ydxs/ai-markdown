@@ -10,6 +10,8 @@ import {
   findLicenseProblems,
   LICENSE_FILE_REVIEW,
   readPackage,
+  RUST_LICENSE_FEATURE_SETS,
+  rustMetadataArguments,
 } from "./check-licenses.mjs";
 
 const scriptsDirectory = dirname(fileURLToPath(import.meta.url));
@@ -77,4 +79,9 @@ test("reviewed package metadata fails closed when its evidence disappears", asyn
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("Rust license inventory includes the optional E2E dependency graph", () => {
+  assert.deepEqual(RUST_LICENSE_FEATURE_SETS, [[], ["e2e"]]);
+  assert.deepEqual(rustMetadataArguments(["e2e"]).slice(-2), ["--features", "e2e"]);
 });

@@ -1,6 +1,10 @@
+import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
-const appBinary = resolve("src-tauri/target/release/plainroot");
+const appBinary = resolve(
+  "src-tauri/target/release",
+  process.platform === "win32" ? "plainroot.exe" : "plainroot",
+);
 
 export const config = {
   runner: "local",
@@ -23,6 +27,8 @@ export const config = {
         windowLabel: "plainroot-window-1",
         startTimeout: 60_000,
         statusPollTimeout: 5_000,
+        captureBackendLogs: true,
+        captureFrontendLogs: true,
       },
     ],
   ],
@@ -36,5 +42,13 @@ export const config = {
   mochaOpts: {
     ui: "bdd",
     timeout: 60_000,
+    retries: 1,
+  },
+  afterTest: async (test, _context, { error }) => {
+    if (!error) return;
+    const outputDirectory = resolve("artifacts/e2e");
+    mkdirSync(outputDirectory, { recursive: true });
+    const safeTitle = test.title.replace(/[^a-z0-9_-]+/gi, "-").toLowerCase();
+    await browser.saveScreenshot(resolve(outputDirectory, `${safeTitle}.png`));
   },
 };

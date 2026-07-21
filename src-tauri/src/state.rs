@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
 use crate::error::{DesktopError, DesktopErrorCode};
 use crate::fs::{
@@ -129,7 +129,7 @@ pub struct PersistentAppState {
 
 impl PersistentAppState {
     pub fn initialize_for_app<R: Runtime>(app: &AppHandle<R>) -> Self {
-        match app.path().app_data_dir() {
+        match crate::app_data_directory(app) {
             Ok(app_data_dir) => Self::initialize_at(app_data_dir.join(STATE_FILE_NAME)),
             Err(_) => Self::unavailable(state_error(DesktopErrorCode::StateUnavailable, true)),
         }

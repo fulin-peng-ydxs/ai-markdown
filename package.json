@@ -19,8 +19,9 @@
     "test:workspace-tree": "node --test --experimental-strip-types scripts/workspace-tree-state.test.mjs",
     "test:fixtures": "node --test tests/support/workspace-fixture.test.mjs",
     "test": "pnpm test:licenses && pnpm test:permanent-delete-feedback && pnpm test:workspace-tree && pnpm test:fixtures && pnpm test:ui",
+    "typecheck": "tsc -b --pretty false",
     "test:e2e:build": "tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json",
-    "test:e2e": "pnpm test:e2e:build && wdio run tests/e2e/wdio.conf.mjs",
+    "test:e2e": "pnpm test:e2e:build && node scripts/run-desktop-e2e.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },

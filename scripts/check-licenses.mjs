@@ -128,25 +128,40 @@ function collectNodePackages() {
     );
 }
 
-function collectRustPackages() {
-  const metadata = JSON.parse(
-    execFileSync(
-      "cargo",
-      [
-        "metadata",
-        "--locked",
-        "--format-version",
-        "1",
-        "--manifest-path",
-        join(projectRoot, "src-tauri", "Cargo.toml"),
-      ],
-      { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
-    ),
-  );
-  const workspacePackages = new Set(metadata.workspace_members);
+export const RUST_LICENSE_FEATURE_SETS = [[], ["e2e"]];
 
-  return metadata.packages
-    .filter((packageInfo) => !workspacePackages.has(packageInfo.id))
+export function rustMetadataArguments(features = []) {
+  return [
+    "metadata",
+    "--locked",
+    "--format-version",
+    "1",
+    "--manifest-path",
+    join(projectRoot, "src-tauri", "Cargo.toml"),
+    ...(features.length > 0 ? ["--features", features.join(",")] : []),
+  ];
+}
+
+function collectRustPackages() {
+  const packages = new Map();
+
+  // The optional E2E driver never ships in production, but it is still executable development
+  // tooling. Scan the union of the production and E2E dependency graphs so license failures
+  // cannot hide behind a disabled-by-default Cargo feature.
+  for (const features of RUST_LICENSE_FEATURE_SETS) {
+    const metadata = JSON.parse(
+      execFileSync("cargo", rustMetadataArguments(features), {
+        encoding: "utf8",
+        maxBuffer: 16 * 1024 * 1024,
+      }),
+    );
+    const workspacePackages = new Set(metadata.workspace_members);
+    for (const packageInfo of metadata.packages) {
+      if (!workspacePackages.has(packageInfo.id)) packages.set(packageInfo.id, packageInfo);
+    }
+  }
+
+  return [...packages.values()]
     .map((packageInfo) => ({
       name: packageInfo.name,
       version: packageInfo.version,
