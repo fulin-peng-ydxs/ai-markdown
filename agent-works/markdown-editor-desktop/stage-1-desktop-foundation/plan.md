@@ -518,7 +518,7 @@
 
 ### 6.16 任务 T16：macOS/Windows CI 门禁与构建产物
 
-- 状态：进行中（macOS 远端通过，Windows MockRuntime 装载隔离整改后待复跑）。
+- 状态：进行中（macOS 远端通过，Windows 状态错误码统一整改后待复跑）。
 - 依赖：T1、T15。
 - 涉及文件/模块：`.github/workflows/ci.yml`、`package.json`、`scripts/check-licenses.mjs`、`scripts/run-desktop-e2e.mjs`、`scripts/collect-ci-artifact.mjs`、`tests/e2e/`、`src-tauri/src/fs/atomic.rs`、`src-tauri/src/fs/identity.rs`、`src-tauri/src/fs/delete.rs`、`src-tauri/src/fs/mutate.rs`、`src-tauri/src/menu.rs`、`src-tauri/icons/icon.ico`、E2E-only Rust 命令与状态目录适配。
 - 目标：在没有本地 Windows 设备的情况下取得真实 Windows runner 证据。
@@ -528,7 +528,7 @@
 - 边界与异常：CI 通过不等同 Windows 人工 UX 验收；无签名产物仅用于测试，不作为正式发布。
 - 验证方式：GitHub Actions 运行链接、矩阵日志、E2E 报告和 artifact 哈希。
 - 完成标准：两个平台均编译和测试通过；失败阻止阶段完成。
-- 实际落地情况：已实现 `macos-latest`/`windows-latest` 矩阵，固定 Node 24.11.1、pnpm 11.5.1、Rust 1.97.1，缓存实际 pnpm store 与 Cargo，硬门禁覆盖许可证、类型、前端测试/构建、Rust fmt、all-features clippy、114 个 MockRuntime 库测试、4 个桌面 E2E、默认生产构建及未签名二进制/哈希/失败日志/截图上传。新增平台原子替换测试；Windows 专项锁定目标测试只在 Windows 执行。P1 E2E 只在 `e2e` feature 下使用测试命令，经正常授权、窗口协调、启动快照、树扫描与读取打开 fixture；每轮使用独立临时状态目录，失败用例最多重试一次。许可证门禁覆盖默认与 `e2e` Cargo 图（531 Node/508 Rust/0 阻断）。首轮远端运行 [Desktop CI #1](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29841645380) 暴露并修复 Rust 组件参数和早期诊断问题；第二轮 [Desktop CI #2](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29842058884) 的 macOS 全部通过，Windows 暴露的稳定文件标识 API 与平台警告已用 `GetFileInformationByHandle` 和条件代码修复；第三轮 [Desktop CI #3](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29843694120) 再次确认 macOS 全绿，并确认 Windows all-features lint/测试链接通过，但测试进程在首个用例前命中 Tauri 官方未关闭的 `0xc0000139` MockRuntime/`wry` 装载缺陷。现把默认生产运行时显式建模为 `desktop-runtime`，E2E 强制消费该 feature，114 个库测试用无 `wry` 的 MockRuntime 图执行并由依赖图断言防回退；本机无运行时与 all-features 两条测试路径均为 114/114，生产构建及 531 Node/508 Rust/0 阻断许可证门禁通过。真实 Windows 测试、E2E、生产构建和 artifact 仍待下一轮远端复跑，因此 T16 不标完成；Windows 原生选择器视觉/键鼠、回收站与 Explorer 仍是人工验收项。详见 `t16-desktop-ci.md`。
+- 实际落地情况：已实现 `macos-latest`/`windows-latest` 矩阵，固定 Node 24.11.1、pnpm 11.5.1、Rust 1.97.1，缓存实际 pnpm store 与 Cargo，硬门禁覆盖许可证、类型、前端测试/构建、Rust fmt、all-features clippy、MockRuntime 库测试、4 个桌面 E2E、默认生产构建及未签名二进制/哈希/失败日志/截图上传。新增平台原子替换测试；Windows 专项锁定目标测试只在 Windows 执行。P1 E2E 只在 `e2e` feature 下使用测试命令，经正常授权、窗口协调、启动快照、树扫描与读取打开 fixture；每轮使用独立临时状态目录，失败用例最多重试一次。许可证门禁覆盖默认与 `e2e` Cargo 图（531 Node/508 Rust/0 阻断）。首轮远端运行 [Desktop CI #1](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29841645380) 暴露并修复 Rust 组件参数和早期诊断问题；第二轮 [Desktop CI #2](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29842058884) 的 macOS 全部通过，Windows 暴露的稳定文件标识 API 与平台警告已用 `GetFileInformationByHandle` 和条件代码修复；第三轮 [Desktop CI #3](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29843694120) 确认 Windows all-features lint/测试链接通过，但命中 Tauri 官方未关闭的 `0xc0000139` MockRuntime/`wry` 装载缺陷；第四轮 [Desktop CI #4](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29845608511) 证明隔离生效，Windows 测试进程真实执行 105 个平台适用用例，104 个通过，唯一失败为不可用状态父路径的跨平台错误码差异。现统一 `NotFound`/`NotADirectory` 为初始化写入失败 `StateWriteFailed`；本机 MockRuntime 114/114 与 all-features clippy 通过，下一轮仍需完成 Windows 测试、E2E、生产构建和有效 artifact 后才能完成 T16。Windows 原生选择器视觉/键鼠、回收站与 Explorer 仍是人工验收项。详见 `t16-desktop-ci.md`。
 
 ### 6.17 任务 T17：第一阶段验收、证据和交接
 

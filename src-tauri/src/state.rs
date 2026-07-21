@@ -305,7 +305,15 @@ impl JsonStateStore {
                     })?;
                 bytes
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+                ) =>
+            {
+                // Windows reports a child of a file as NotFound while POSIX reports
+                // NotADirectory. Both mean the state file cannot exist yet; attempting the
+                // initialization write gives callers one stable StateWriteFailed contract.
                 let state = PlainrootStateV1::default();
                 self.save(&state).map_err(StateLoadFailure::Unavailable)?;
                 return Ok(StateLoadOutcome::Initialized(state));
@@ -918,7 +926,7 @@ mod tests {
         let StateRepositoryStatus::Unavailable { error } = repository.status().unwrap() else {
             panic!("unusable path should mark the repository unavailable");
         };
-        assert_eq!(error.code, DesktopErrorCode::StateReadFailed);
+        assert_eq!(error.code, DesktopErrorCode::StateWriteFailed);
         assert_eq!(repository.snapshot().unwrap(), PlainrootStateV1::default());
 
         fs::remove_dir_all(root).unwrap();
