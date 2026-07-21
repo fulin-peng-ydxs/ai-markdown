@@ -1,6 +1,6 @@
 # Plainroot
 
-Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。当前已完成第一阶段 T1～T11：具备 Tauri/React 工程、受控工作区授权、文件扫描与安全读写、文件操作/监听、原生窗口菜单和工作区窗口协调底座；P1/P2 正式页面、编辑器、Windows 实机与完整 E2E 尚未完成。
+Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。当前已完成第一阶段 T1～T12：具备 Tauri/React 工程、受控工作区授权、文件扫描与安全读写、文件操作/监听、原生窗口菜单、工作区窗口协调底座和真实 P2 启动页；P1 工作台、编辑器、Windows 实机与完整 E2E 尚未完成。
 
 ## 工具链
 
@@ -16,6 +16,7 @@ nvm use
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build
+pnpm test:ui
 pnpm test:workspace-tree
 pnpm test:permanent-delete-feedback
 pnpm test:licenses
@@ -33,4 +34,4 @@ pnpm tauri build --no-bundle
 pnpm tauri dev
 ```
 
-需求、阶段计划和验证边界见 `agent-works/markdown-editor-desktop/`。当前底座不等于 P1/P2 页面、完整 R1/R2/R5/R14 或第一阶段整体已经验收。
+需求、阶段计划和验证边界见 `agent-works/markdown-editor-desktop/`。当前 P2 与文件/窗口底座不等于 P1 工作台、完整 R1/R2/R5/R14 或第一阶段整体已经验收。

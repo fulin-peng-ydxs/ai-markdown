@@ -1,7 +1,7 @@
 use tauri::menu::AboutMetadata;
 use tauri::{
     menu::{Menu, MenuBuilder, MenuItem, MenuItemBuilder, SubmenuBuilder},
-    AppHandle, Manager, Runtime,
+    AppHandle, Emitter, Manager, Runtime,
 };
 
 use crate::window::WorkspaceWindowCoordinator;
@@ -13,6 +13,7 @@ pub const CLOSE_WINDOW_ID: &str = "file.close_window";
 pub const OPEN_FOLDER_ID: &str = "file.open_folder";
 pub const OPEN_MARKDOWN_ID: &str = "file.open_markdown";
 pub const HELP_ID: &str = "help.plainroot";
+pub const LAUNCHER_MENU_EVENT: &str = "plainroot://launcher-menu";
 
 pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let open_folder = custom_item(app, OPEN_FOLDER_ID, "打开文件夹…", Some("CmdOrCtrl+O"))?;
@@ -161,6 +162,26 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
                     .map(|_| ())
             })
         }
+        OPEN_FOLDER_ID | OPEN_MARKDOWN_ID => app
+            .webview_windows()
+            .into_values()
+            .find(|window| window.is_focused().unwrap_or(false))
+            .ok_or_else(|| {
+                crate::error::DesktopError::new(
+                    crate::error::DesktopErrorCode::WindowNotFound,
+                    true,
+                    true,
+                )
+            })
+            .and_then(|window| {
+                window.emit(LAUNCHER_MENU_EVENT, id).map_err(|_| {
+                    crate::error::DesktopError::new(
+                        crate::error::DesktopErrorCode::WindowFocusFailed,
+                        true,
+                        true,
+                    )
+                })
+            }),
         _ => return,
     };
 
@@ -183,18 +204,24 @@ fn custom_item<R: Runtime>(
 }
 
 fn custom_menu_enabled(id: &str) -> bool {
-    matches!(id, NEW_WINDOW_ID | CLOSE_WINDOW_ID)
+    matches!(
+        id,
+        NEW_WINDOW_ID | CLOSE_WINDOW_ID | OPEN_FOLDER_ID | OPEN_MARKDOWN_ID
+    )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{custom_menu_enabled, CLOSE_WINDOW_ID, NEW_WINDOW_ID, OPEN_FOLDER_ID};
+    use super::{
+        custom_menu_enabled, CLOSE_WINDOW_ID, NEW_WINDOW_ID, OPEN_FOLDER_ID, OPEN_MARKDOWN_ID,
+    };
 
     #[test]
     fn only_implemented_custom_menu_actions_are_enabled() {
         assert!(custom_menu_enabled(NEW_WINDOW_ID));
         assert!(custom_menu_enabled(CLOSE_WINDOW_ID));
-        assert!(!custom_menu_enabled(OPEN_FOLDER_ID));
+        assert!(custom_menu_enabled(OPEN_FOLDER_ID));
+        assert!(custom_menu_enabled(OPEN_MARKDOWN_ID));
         assert!(!custom_menu_enabled("edit.copy"));
         assert!(!custom_menu_enabled("view.search"));
     }

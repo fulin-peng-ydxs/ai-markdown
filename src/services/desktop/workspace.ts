@@ -1,10 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
   SecondInstanceOpenRequest,
   WindowActionResult,
   WorkspaceDescriptor,
   WorkspaceId,
+  WorkspaceLauncherSnapshot,
   WorkspaceOpenDisposition,
   WorkspaceOpenOutcome,
   WorkspaceSelectionOutcome,
@@ -66,4 +68,31 @@ export function takeSecondInstanceOpenRequests(): Promise<
   return invoke<SecondInstanceOpenRequest[]>(
     "take_second_instance_open_requests",
   );
+}
+
+export function getWorkspaceLauncherSnapshot(): Promise<WorkspaceLauncherSnapshot> {
+  return invoke<WorkspaceLauncherSnapshot>("get_workspace_launcher_snapshot");
+}
+
+export function removeRecentWorkspace(workspaceId: WorkspaceId): Promise<boolean> {
+  return invoke<boolean>("remove_recent_workspace", { workspaceId });
+}
+
+export function removeWorkspaceSession(workspaceId: WorkspaceId): Promise<boolean> {
+  return invoke<boolean>("remove_workspace_session", { workspaceId });
+}
+
+export type LauncherMenuAction = "file.open_folder" | "file.open_markdown";
+
+export function listenForLauncherMenu(
+  listener: (action: LauncherMenuAction) => void,
+): Promise<UnlistenFn> {
+  return listen<LauncherMenuAction>("plainroot://launcher-menu", (event) => {
+    if (
+      event.payload === "file.open_folder" ||
+      event.payload === "file.open_markdown"
+    ) {
+      listener(event.payload);
+    }
+  });
 }

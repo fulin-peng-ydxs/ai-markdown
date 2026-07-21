@@ -21,6 +21,7 @@ use crate::state::{
     PersistentAppState, PlainrootStateV1, RecentWorkspace, WorkspaceAvailability,
     WorkspaceRegistry, MAX_RECENT_WORKSPACES,
 };
+use crate::window::WorkspaceWindowCoordinator;
 
 const MAX_PENDING_SELECTIONS: usize = 32;
 const PENDING_SELECTION_LIFETIME: Duration = Duration::from_secs(10 * 60);
@@ -66,6 +67,16 @@ pub enum WorkspaceSelectionOutcome {
     ConfirmationRequired {
         proposal: WorkspaceSelectionProposal,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceLauncherSnapshot {
+    pub recent_workspaces: Vec<RecentWorkspace>,
+    pub workspace_sessions: Vec<crate::state::WorkspaceSessionRoot>,
+    pub active_workspace_ids: Vec<WorkspaceId>,
+    pub current_workspace_id: Option<WorkspaceId>,
+    pub window_label: String,
 }
 
 #[derive(Debug, Clone)]
@@ -385,7 +396,66 @@ pub fn validate_recent_workspace(
     access: State<'_, WorkspaceAccessService>,
     state: State<'_, PersistentAppState>,
 ) -> Result<WorkspaceSelectionOutcome, DesktopError> {
-    access.prepare_recent_workspace(&workspace_id, &state)
+    let result = access.prepare_recent_workspace(&workspace_id, &state);
+    let availability = match &result {
+        Ok(_) => Some(WorkspaceAvailability::Available),
+        Err(error) if error.code == DesktopErrorCode::PathNotFound => {
+            Some(WorkspaceAvailability::Missing)
+        }
+        Err(error) if error.code == DesktopErrorCode::PermissionDenied => {
+            Some(WorkspaceAvailability::PermissionDenied)
+        }
+        _ => None,
+    };
+    if let Some(availability) = availability {
+        let _ = state.update(|current| {
+            if let Some(recent) = current
+                .recent_workspaces
+                .iter_mut()
+                .find(|recent| recent.workspace_id == workspace_id)
+            {
+                recent.availability = availability;
+            }
+        });
+    }
+    result
+}
+
+#[tauri::command]
+pub fn get_workspace_launcher_snapshot(
+    window: WebviewWindow,
+    coordinator: State<'_, WorkspaceWindowCoordinator>,
+    state: State<'_, PersistentAppState>,
+) -> Result<WorkspaceLauncherSnapshot, DesktopError> {
+    if let Some(error) = state.current_error() {
+        return Err(error);
+    }
+    let snapshot = state.snapshot()?;
+    Ok(WorkspaceLauncherSnapshot {
+        recent_workspaces: snapshot.recent_workspaces,
+        workspace_sessions: snapshot.workspace_sessions,
+        active_workspace_ids: coordinator.active_workspace_ids()?,
+        current_workspace_id: coordinator.workspace_for_window(window.label())?,
+        window_label: window.label().to_owned(),
+    })
+}
+
+#[tauri::command]
+pub fn remove_recent_workspace(
+    workspace_id: WorkspaceId,
+    coordinator: State<'_, WorkspaceWindowCoordinator>,
+    state: State<'_, PersistentAppState>,
+) -> Result<bool, DesktopError> {
+    coordinator.discard_recent_workspace(&workspace_id, &state)
+}
+
+#[tauri::command]
+pub fn remove_workspace_session(
+    workspace_id: WorkspaceId,
+    coordinator: State<'_, WorkspaceWindowCoordinator>,
+    state: State<'_, PersistentAppState>,
+) -> Result<bool, DesktopError> {
+    coordinator.discard_restorable_session(&workspace_id, &state)
 }
 
 fn dialog_path(selected: Option<FilePath>) -> Result<Option<PathBuf>, DesktopError> {
@@ -542,12 +612,15 @@ mod tests {
     use crate::contract_test::{assert_interface_matches, typescript_string_constant_values};
     use crate::error::DesktopErrorCode;
     use crate::fs::{WorkspaceId, WorkspaceRelativePath};
-    use crate::state::{PersistentAppState, StateRepositoryStatus};
+    use crate::state::{
+        PersistentAppState, RecentWorkspace, StateRepositoryStatus, WorkspaceAvailability,
+        WorkspaceSessionRoot,
+    };
 
     use super::{
         resolve_markdown_selection, workspace_id_for_root, WorkspaceAccessService,
-        WorkspaceSelectionKind, WorkspaceSelectionOutcome, WorkspaceSelectionProposal,
-        MAX_PENDING_SELECTIONS, PENDING_SELECTION_LIFETIME,
+        WorkspaceLauncherSnapshot, WorkspaceSelectionKind, WorkspaceSelectionOutcome,
+        WorkspaceSelectionProposal, MAX_PENDING_SELECTIONS, PENDING_SELECTION_LIFETIME,
     };
 
     struct TestDirectory(PathBuf);
@@ -666,6 +739,31 @@ mod tests {
         assert!(serialized[2].get("proposal").is_some());
         assert_eq!(serialized[3]["status"], "confirmation_required");
         assert!(serialized[3].get("proposal").is_some());
+    }
+
+    #[test]
+    fn launcher_snapshot_matches_typescript_contract() {
+        let workspace_id = WorkspaceId::parse("workspace-v1-launcher").unwrap();
+        let snapshot = WorkspaceLauncherSnapshot {
+            recent_workspaces: vec![RecentWorkspace {
+                workspace_id: workspace_id.clone(),
+                canonical_root: PathBuf::from("contract-root"),
+                display_name: "contract-root".to_owned(),
+                last_opened_at: 10,
+                availability: WorkspaceAvailability::Available,
+            }],
+            workspace_sessions: vec![WorkspaceSessionRoot {
+                workspace_id: workspace_id.clone(),
+                window_label: "plainroot-window-1".to_owned(),
+                window_state_ref: None,
+                last_active_at: 10,
+            }],
+            active_workspace_ids: vec![workspace_id.clone()],
+            current_workspace_id: Some(workspace_id),
+            window_label: "plainroot-window-1".to_owned(),
+        };
+
+        assert_interface_matches("WorkspaceLauncherSnapshot", &snapshot);
     }
 
     #[test]

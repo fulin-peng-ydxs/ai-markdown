@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { AppDialog } from "../../components/AppDialog";
+
 import type {
   DeleteResult,
   DesktopError,
@@ -16,6 +18,7 @@ import {
   permanentDeleteErrorMessage,
   type PermanentDeleteErrorPhase,
 } from "./permanentDeleteFeedback";
+import { normalizeDesktopError } from "../../services/desktop/errors";
 
 import "./PermanentDeleteDialog.css";
 
@@ -36,8 +39,6 @@ export function PermanentDeleteDialog({
   onDeleted,
   onClose,
 }: PermanentDeleteDialogProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const returnFocusRef = useRef<HTMLElement | null>(null);
   const requestSequenceRef = useRef(0);
   const proposalRef = useRef<PermanentDeleteProposal | null>(null);
   const [status, setStatus] = useState<DialogStatus>("preparing");
@@ -47,10 +48,6 @@ export function PermanentDeleteDialog({
     useState<PermanentDeleteErrorPhase | null>(null);
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) {
-      return;
-    }
     if (!open) {
       requestSequenceRef.current += 1;
       if (proposalRef.current) {
@@ -59,16 +56,7 @@ export function PermanentDeleteDialog({
         );
         storeProposal(null);
       }
-      if (dialog.open) {
-        dialog.close();
-      }
-      queueMicrotask(() => returnFocusRef.current?.focus());
       return;
-    }
-
-    if (!dialog.open) {
-      returnFocusRef.current = document.activeElement as HTMLElement | null;
-      dialog.showModal();
     }
     void loadProposal();
 
@@ -135,9 +123,7 @@ export function PermanentDeleteDialog({
       );
       storeProposal(null);
     }
-    dialogRef.current?.close();
     onClose();
-    queueMicrotask(() => returnFocusRef.current?.focus());
   }
 
   async function deletePermanently() {
@@ -153,10 +139,8 @@ export function PermanentDeleteDialog({
         proposal.confirmationId,
       );
       storeProposal(null);
-      dialogRef.current?.close();
       onDeleted(result);
       onClose();
-      queueMicrotask(() => returnFocusRef.current?.focus());
     } catch (reason) {
       storeProposal(null);
       setError(asDesktopError(reason));
@@ -172,20 +156,47 @@ export function PermanentDeleteDialog({
       : null;
 
   return (
-    <dialog
-      aria-describedby="permanent-delete-description"
-      aria-labelledby="permanent-delete-title"
+    <AppDialog
       className="permanent-delete-dialog"
-      data-state={status}
-      onCancel={(event) => {
-        event.preventDefault();
-        if (status !== "deleting") {
-          closeSafely();
-        }
-      }}
-      ref={dialogRef}
+      closeDisabled={status === "deleting"}
+      describedBy="permanent-delete-description"
+      labelledBy="permanent-delete-title"
+      onRequestClose={closeSafely}
+      open={open}
+      state={status}
+      actions={
+        <>
+          <button
+            autoFocus
+            className="plainroot-button plainroot-button--secondary"
+            disabled={status === "deleting"}
+            onClick={closeSafely}
+            type="button"
+          >
+            {status === "error" && errorPhase === "delete" ? "关闭" : "取消"}
+          </button>
+          {status === "error" && errorPhase === "prepare" ? (
+            <button
+              className="plainroot-button plainroot-button--secondary"
+              onClick={() => void loadProposal()}
+              type="button"
+            >
+              重新确认
+            </button>
+          ) : (
+            <button
+              className="plainroot-button plainroot-button--danger"
+              disabled={status !== "ready"}
+              onClick={() => void deletePermanently()}
+              type="button"
+            >
+              {status === "deleting" ? "正在永久删除…" : "永久删除"}
+            </button>
+          )}
+        </>
+      }
     >
-      <div className="permanent-delete-dialog__body">
+      <div>
         <p className="permanent-delete-dialog__eyebrow">回收站不可用</p>
         <h2 id="permanent-delete-title">永久删除“{itemName}”？</h2>
         <p id="permanent-delete-description">
@@ -206,53 +217,10 @@ export function PermanentDeleteDialog({
           </p>
         ) : null}
       </div>
-      <div className="permanent-delete-dialog__actions">
-        <button
-          autoFocus
-          className="plainroot-button plainroot-button--secondary"
-          disabled={status === "deleting"}
-          onClick={closeSafely}
-          type="button"
-        >
-          {status === "error" && errorPhase === "delete" ? "关闭" : "取消"}
-        </button>
-        {status === "error" && errorPhase === "prepare" ? (
-          <button
-            className="plainroot-button plainroot-button--secondary"
-            onClick={() => void loadProposal()}
-            type="button"
-          >
-            重新确认
-          </button>
-        ) : (
-          <button
-            className="plainroot-button plainroot-button--danger"
-            disabled={status !== "ready"}
-            onClick={() => void deletePermanently()}
-            type="button"
-          >
-            {status === "deleting" ? "正在永久删除…" : "永久删除"}
-          </button>
-        )}
-      </div>
-    </dialog>
+    </AppDialog>
   );
 }
 
 function asDesktopError(reason: unknown): DesktopError {
-  if (
-    typeof reason === "object" &&
-    reason !== null &&
-    "code" in reason &&
-    "messageKey" in reason
-  ) {
-    return reason as DesktopError;
-  }
-  return {
-    code: "permanent_delete_failed",
-    messageKey: "error.file.permanentDeleteFailed",
-    pathHint: null,
-    contentSafe: true,
-    retryable: true,
-  };
+  return normalizeDesktopError(reason, "permanent_delete_failed");
 }

@@ -13,12 +13,12 @@
 - Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器，核心体验是目录工作区、多文档页签、所见即所得与源码无损切换、长文阅读和可编辑颜色预设。
 - T1 已建立并验证技术基线：Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以当前清单和锁文件为准。
 - Markdown 内容事实源始终是用户授权目录中的真实 `.md` 文件；首版不建立云端账号、在线协作、插件市场或私有内容数据库。
-- 当前仓库已完成 T1～T11 的工程、领域/路径、原生窗口、状态、授权、文件读写管理、监听、安全写入和工作区窗口协调底座；当前具备受控授权、后台扫描/读取、文件 CRUD/回收站/定位、外部事件合并与树归并、安全写入、同目录聚焦、当前/新窗口/取消决策、根会话提交和有界第二实例请求转交，但尚无自动保存、恢复快照、完整外部冲突状态机、工作区页面、可见目录决策流程或逐根恢复，也没有 Windows 实机、产品集成/E2E 与 CI，不得据此表述为 R1、R2、R5、R14 或第一阶段整体完成。
+- 当前仓库已完成 T1～T12 的工程、领域/路径、原生窗口、状态、授权、文件读写管理、监听、安全写入、窗口协调与 P2 启动页；当前具备真实系统选择器、目录/单文件授权确认、最近记录、过滤/安全移除、当前/新窗口/取消决策和根会话恢复入口，但尚无自动保存、恢复快照、完整外部冲突状态机或 P1 工作区页面，也没有 Windows 实机、稳定桌面 E2E 与 CI，不得据此表述为 R1、R2、R5、R14 或第一阶段整体完成。
 
 ## 当前与目标代码边界
 
 - `agent-works/markdown-editor-desktop/`：本产品的需求、计划、原型和后续开发留痕；同一产品能力继续复用该目录或其语义明确的阶段子目录。
-- `src/`、`src-tauri/`：已建立前端空壳、共享桌面契约/调用封装、渐进文件树/变更/监听归并状态、永久删除具体对话框和首批运行时 token、Rust/Tauri 工程、原生窗口/菜单与工作区窗口协调服务、版本化本地状态仓储，以及工作区选择、扫描、读取、CRUD、删除、系统定位、外部监听和安全写入命令；当前不含自动保存/恢复/完整冲突状态机、可见目录决策、逐根窗口恢复或工作区页面业务。
+- `src/`、`src-tauri/`：已建立 P2 启动页、共享 `AppDialog`/`AsyncStatePanel`、完整浅色运行时 token、桌面契约/调用封装、渐进文件树/变更/监听归并状态、永久删除对话框、Rust/Tauri 工程、原生窗口/菜单与工作区窗口协调服务、版本化本地状态仓储，以及工作区选择、扫描、读取、CRUD、删除、系统定位、外部监听和安全写入命令；当前不含自动保存/恢复/完整冲突状态机或 P1 工作区页面业务。
 - `tests/`、`.github/`：仍是后续任务的目标结构，实际建立前不得作为已有测试或 CI 引用。
 - 前端只负责视图、用户意图和可观察状态；不得直接拼接任意绝对路径执行磁盘写操作。
 - Rust 命令层集中负责授权根、路径规范化、越界检查、文件扫描与 CRUD、安全写入、回收站和窗口协调。
@@ -65,15 +65,15 @@
 
 ## 命令与验证状态
 
-- 2026-07-20 已在 macOS arm64 实际验证：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm build`、`pnpm test:workspace-tree`、`pnpm test:permanent-delete-feedback`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo check --locked --manifest-path src-tauri/Cargo.toml`、`cargo test --locked --manifest-path src-tauri/Cargo.toml`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`、`pnpm tauri build --no-bundle`。
-- `pnpm tauri build --no-bundle` 已生成本机 release 可执行文件；T3 另以 `pnpm tauri build --bundles app` 生成并启动 macOS `.app`，实测原生窗口控件、标题、顶层菜单、禁用态及新建/关闭窗口链路。上述证据不证明文件、页面或 Windows 行为完成。
+- 2026-07-21 已在 macOS arm64 实际验证：`nvm use`、`pnpm build`、`pnpm test:ui`、`pnpm test:workspace-tree`、`pnpm test:permanent-delete-feedback`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo test --locked --manifest-path src-tauri/Cargo.toml`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`、`pnpm tauri build --no-bundle` 与 `pnpm tauri build --bundles app`。
+- `pnpm tauri build --bundles app` 已生成并启动 macOS `.app`；T12 实测 P2 可访问树、原生打开菜单、系统目录/Markdown 选择器、临时目录授权、最近记录、过滤/清除、安全移除且磁盘文件不变，以及单文件父目录授权确认/取消。上述证据不证明 P1、Windows 或稳定桌面 E2E 完成。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。Windows 编译与 CI 实际 Node 版本留给 T16 验证，当前不得标记通过。
-- 当前自动化测试覆盖许可证拒绝策略、T2 领域/路径安全、Rust↔TypeScript 契约 parity、T3 窗口/菜单、T4 状态仓储、T5 选择/授权/最近记录、T6 扫描/读取、T7 新建/重命名/移动、T8 删除/定位、T9 外部监听、T10 安全写入及 T11 窗口协调/会话/标签迁移/第二实例队列边界，共 107 个 Rust 单元测试、18 个前端树状态测试和 4 个永久删除反馈映射测试；真实 Tauri IPC、P1/P2 消费、可见目录决策、逐根恢复、双进程 single-instance、系统废纸篓/Finder/Explorer、真实选择器 UI、Windows 分支、稳定桌面 E2E 与 CI 验证仍由后续任务建立。当前许可证扫描为 29 个 Node 包、487 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
+- 当前自动化测试覆盖许可证拒绝策略、T2～T11 底座、Rust↔TypeScript 契约 parity，以及 T12 launcher 状态/组件/四类窗口错误/焦点与键盘边界，共 110 个 Rust 单元测试、18 个前端树状态测试、4 个永久删除反馈测试和 14 个 React UI/状态测试；P1 消费、双进程 single-instance、系统废纸篓/Finder/Explorer、Windows 分支、稳定桌面 E2E 与 CI 验证仍由后续任务建立。当前许可证扫描为 112 个 Node 包、487 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
 
 ## 文档、协作与 Git
 
 - 除命令、代码、日志和原文外，面向用户使用简体中文。
 - 需求、计划、开发留痕、业务核查、测试证据和 SQL（若未来确有）放入 `agent-works/{feature-slug}/`；同一功能复用同一语义目录，不在根目录堆零散 Markdown。
-- 修改代码或文档前检查最近一次远端同步时间；超过 2 小时先同步并解决冲突。最近一次远端同步：2026-07-20 22:04 CST（当前分支无上游，已 fetch 并 rebase `origin/main`，确认分支基线无需更新）。
+- 修改代码或文档前检查最近一次远端同步时间；超过 2 小时先同步并解决冲突。最近一次远端同步：2026-07-21 12:59 CST（当前分支无上游，已 fetch 并 rebase `origin/main`，确认分支基线无需更新）。
 - 工作区可能包含用户未提交改动；先读 `git status`，保留无关改动，不覆盖、不清理、不顺手格式化。
 - 未经用户要求不创建提交或推送。需要提交时按用户确认范围处理，提交信息使用中文语义化描述。

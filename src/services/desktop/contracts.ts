@@ -361,3 +361,11 @@ export interface SecondInstanceOpenRequest {
   arguments: string[];
   workingDirectory: string;
 }
+
+export interface WorkspaceLauncherSnapshot {
+  recentWorkspaces: RecentWorkspace[];
+  workspaceSessions: WorkspaceSessionRoot[];
+  activeWorkspaceIds: WorkspaceId[];
+  currentWorkspaceId: WorkspaceId | null;
+  windowLabel: string;
+}

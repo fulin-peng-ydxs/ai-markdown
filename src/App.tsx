@@ -1,3 +1,5 @@
+import { WorkspaceLauncher } from "./features/launcher/WorkspaceLauncher";
+
 export default function App() {
-  return <main aria-label="Plainroot" />;
+  return <WorkspaceLauncher />;
 }

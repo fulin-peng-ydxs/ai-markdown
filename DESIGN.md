@@ -80,7 +80,7 @@ components:
 
 # Plainroot Design System
 
-> 本文是 Plainroot 前端视觉、布局和交互的长期入口。正式工程已经建立，alpha token 仍来自三份已确认原型的共同实现；T8 已将首批 token 落入运行时代码并由永久删除对话框消费，后续页面应继续收敛同一事实源，自动化测试覆盖到的区域以代码为数值事实。
+> 本文是 Plainroot 前端视觉、布局和交互的长期入口。正式工程已经建立，alpha token 仍来自三份已确认原型的共同实现；T12 已将完整浅色语义 token、P2 启动页、共享对话框与异步状态面板落入运行时代码，后续页面应继续收敛同一事实源，自动化测试覆盖到的区域以代码为数值事实。
 
 当前证据：
 
@@ -195,6 +195,14 @@ Key Characteristics：
 | 工作区启动 P2 | launcher | 打开本地目录或文件 | 欢迎与主入口 + 最近工作区列表 |
 | 颜色主题工作室 P3 | settings studio | 编辑、验证、预览并保存主题 | 设置导航 + 预设库 + token 编辑 + 实时预览 + 固定提交区 |
 
+已登记运行时组件：
+
+| 组件 | 代码事实源 | 当前消费者 | 稳定职责 |
+|---|---|---|---|
+| `AppDialog` | `src/components/AppDialog.tsx` | P2 启动流程、永久删除 | 原生 dialog、Esc/遮罩关闭、关闭门禁、焦点返回和统一动作区 |
+| `AsyncStatePanel` | `src/components/AsyncStatePanel.tsx` | P2 错误与已连接状态 | 持久状态标题、说明、语义 tone、aria-live 和恢复动作 |
+| `WorkspaceLauncher` | `src/features/launcher/WorkspaceLauncher.tsx` | P2 | 本地打开主入口、最近记录、授权、窗口决策与根会话恢复 |
+
 布局规则：
 
 - 主内容区必须获得剩余空间；使用 `minmax(0, 1fr)`、`min-width: 0` 和 `min-height: 0` 处理真实溢出，不靠随意硬编码视口高度。
@@ -271,7 +279,7 @@ Iteration Guide：
 
 ## 10. Known Gaps
 
-- 正式 React/Tauri 工程与 `src/styles/tokens.css` 已建立；当前运行时 token 只被 T8 永久删除对话框消费，P1/P2 完整页面和通用组件尚未落地，不能把这一局部实现表述为完整代码级设计系统。
+- P2 与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；P1 与 P3 尚未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
 - 启动页原型危险色为 `#955252`，工作台和主题工作室为 `#9b5050`；本文已收敛为 `#9b5050`，正式实现时应统一消费 token。
 - 暗色主题尚无完整原型和 token；不得简单反转当前亮色值。R7/R15 阶段需补全明暗语义、派生状态和跨窗口预览测试。
 - `17px / 1.76`、约 `760–820px` 正文宽度及 `252/220px` 侧栏是 alpha 校准基线，仍需在不同 DPI、中英文长文和 Windows 字体渲染下验证。

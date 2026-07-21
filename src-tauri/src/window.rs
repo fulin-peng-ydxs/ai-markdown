@@ -116,13 +116,102 @@ impl WorkspaceWindowCoordinator {
         app: &AppHandle<R>,
     ) -> Result<WindowActionResult, DesktopError> {
         let label = {
-            let state = self.state.lock().map_err(|_| coordinator_unavailable())?;
-            next_window_label(app, &state.reserved_labels)
+            let mut state = self.state.lock().map_err(|_| coordinator_unavailable())?;
+            let label = next_window_label(app, &state.reserved_labels);
+            state.reserved_labels.insert(label.clone());
+            label
         };
-        let window = create_window_with_label(app, &label, &launcher_title())?;
+        let window = match create_window_with_label(app, &label, &launcher_title()) {
+            Ok(window) => window,
+            Err(error) => {
+                if let Ok(mut state) = self.state.lock() {
+                    state.reserved_labels.remove(&label);
+                }
+                return Err(error);
+            }
+        };
         Ok(WindowActionResult {
             window_label: window.label().to_owned(),
         })
+    }
+
+    pub fn workspace_for_window(&self, label: &str) -> Result<Option<WorkspaceId>, DesktopError> {
+        self.state
+            .lock()
+            .map(|state| state.window_workspaces.get(label).cloned())
+            .map_err(|_| coordinator_unavailable())
+    }
+
+    pub fn active_workspace_ids(&self) -> Result<Vec<WorkspaceId>, DesktopError> {
+        self.state
+            .lock()
+            .map(|state| state.workspace_windows.keys().cloned().collect())
+            .map_err(|_| coordinator_unavailable())
+    }
+
+    pub fn discard_restorable_session(
+        &self,
+        workspace_id: &WorkspaceId,
+        persistent_state: &PersistentAppState,
+    ) -> Result<bool, DesktopError> {
+        self.discard_auxiliary_workspace_state(workspace_id, persistent_state, false)
+    }
+
+    pub fn discard_recent_workspace(
+        &self,
+        workspace_id: &WorkspaceId,
+        persistent_state: &PersistentAppState,
+    ) -> Result<bool, DesktopError> {
+        self.discard_auxiliary_workspace_state(workspace_id, persistent_state, true)
+    }
+
+    fn discard_auxiliary_workspace_state(
+        &self,
+        workspace_id: &WorkspaceId,
+        persistent_state: &PersistentAppState,
+        include_recent: bool,
+    ) -> Result<bool, DesktopError> {
+        let restorable_label = {
+            let state = self.state.lock().map_err(|_| coordinator_unavailable())?;
+            state.restorable_labels.get(workspace_id).cloned()
+        };
+        let snapshot = persistent_state.snapshot()?;
+        let had_session = snapshot
+            .workspace_sessions
+            .iter()
+            .any(|session| session.workspace_id == *workspace_id);
+        let had_recent = include_recent
+            && snapshot
+                .recent_workspaces
+                .iter()
+                .any(|recent| recent.workspace_id == *workspace_id);
+        if !had_session && !had_recent {
+            return Ok(false);
+        }
+        persistent_state.update(|current| {
+            current
+                .workspace_sessions
+                .retain(|session| session.workspace_id != *workspace_id);
+            if include_recent {
+                current
+                    .recent_workspaces
+                    .retain(|recent| recent.workspace_id != *workspace_id);
+            }
+        })?;
+
+        let mut state = self.state.lock().map_err(|_| coordinator_unavailable())?;
+        if state.workspace_windows.contains_key(workspace_id) {
+            // Removing auxiliary history is allowed while the workspace remains open. Keep the
+            // live in-memory authority and window label, but respect the user's choice not to
+            // restore this root after a crash or restart.
+            return Ok(true);
+        }
+        if let Some(label) = state.restorable_labels.remove(workspace_id) {
+            state.reserved_labels.remove(&label);
+        } else if let Some(label) = restorable_label {
+            state.reserved_labels.remove(&label);
+        }
+        Ok(true)
     }
 
     fn coordinate_open<R: Runtime>(
@@ -209,7 +298,22 @@ impl WorkspaceWindowCoordinator {
                 state
                     .workspace_windows
                     .insert(workspace_id.clone(), source_window_label.to_owned());
-                state.restorable_labels.remove(workspace_id);
+                let stale_for_source = state
+                    .restorable_labels
+                    .iter()
+                    .filter(|(candidate_id, label)| {
+                        *candidate_id != workspace_id && label.as_str() == source_window_label
+                    })
+                    .map(|(candidate_id, _)| candidate_id.clone())
+                    .collect::<Vec<_>>();
+                for candidate_id in stale_for_source {
+                    state.restorable_labels.remove(&candidate_id);
+                }
+                if let Some(previous_label) = state.restorable_labels.remove(workspace_id) {
+                    if previous_label != source_window_label {
+                        state.reserved_labels.remove(&previous_label);
+                    }
+                }
                 state.reserved_labels.insert(source_window_label.to_owned());
 
                 Ok(WorkspaceOpenOutcome::OpenedCurrent {
@@ -1019,6 +1123,68 @@ mod tests {
         create_initial_window(app.handle());
         let launcher = coordinator.create_launcher(app.handle()).unwrap();
         assert_eq!(launcher.window_label, "plainroot-window-3");
+    }
+
+    #[test]
+    fn discarding_a_restorable_session_releases_its_label_once() {
+        let app_data = TestDirectory::create("discard-session");
+        let persistent = PersistentAppState::initialize_at(app_data.path().join("state.json"));
+        let workspace_id = WorkspaceId::parse("workspace-discard").unwrap();
+        persistent
+            .update(|state| {
+                state.workspace_sessions.push(WorkspaceSessionRoot {
+                    workspace_id: workspace_id.clone(),
+                    window_label: "plainroot-window-2".to_owned(),
+                    window_state_ref: None,
+                    last_active_at: 10,
+                });
+            })
+            .unwrap();
+        let coordinator = WorkspaceWindowCoordinator::from_sessions(
+            &persistent.snapshot().unwrap().workspace_sessions,
+        );
+
+        assert!(coordinator
+            .discard_restorable_session(&workspace_id, &persistent)
+            .unwrap());
+        assert!(!coordinator
+            .discard_restorable_session(&workspace_id, &persistent)
+            .unwrap());
+        let app = mock_app();
+        create_initial_window(app.handle());
+        let launcher = coordinator.create_launcher(app.handle()).unwrap();
+        assert_eq!(launcher.window_label, "plainroot-window-2");
+    }
+
+    #[test]
+    fn removing_active_history_keeps_live_authority_but_disables_restore() {
+        let root = TestDirectory::create("active-history");
+        let app_data = TestDirectory::create("state-active-history");
+        let app = mock_app();
+        create_initial_window(app.handle());
+        let access = WorkspaceAccessService::default();
+        let workspace = authorize_root(&access, root.path());
+        let persistent = PersistentAppState::initialize_at(app_data.path().join("state.json"));
+        let coordinator = WorkspaceWindowCoordinator::default();
+        coordinator
+            .coordinate_open(
+                open_context(app.handle(), INITIAL_WINDOW_LABEL, &access, &persistent, 10),
+                workspace.id(),
+                None,
+            )
+            .unwrap();
+
+        assert!(coordinator
+            .discard_recent_workspace(workspace.id(), &persistent)
+            .unwrap());
+        let snapshot = persistent.snapshot().unwrap();
+        assert!(snapshot.workspace_sessions.is_empty());
+        assert!(snapshot.recent_workspaces.is_empty());
+        assert_eq!(
+            coordinator.active_window_for(workspace.id()).as_deref(),
+            Some(INITIAL_WINDOW_LABEL)
+        );
+        assert!(access.workspace(workspace.id()).is_ok());
     }
 
     #[test]
