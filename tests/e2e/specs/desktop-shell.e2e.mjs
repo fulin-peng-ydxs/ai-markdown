@@ -11,6 +11,10 @@ function platformPathIdentity(path) {
     .toLocaleLowerCase("en-US");
 }
 
+function isTrustedTauriAppUrl(url) {
+  return /^(?:tauri:\/\/localhost|http:\/\/tauri\.localhost)(?:\/|$)/.test(url);
+}
+
 async function resizeApp(width, height) {
   const result = await browser.executeAsync((nextWidth, nextHeight, done) => {
     const tauriWindow = window.__TAURI__?.window;
@@ -62,7 +66,11 @@ describe("Plainroot desktop shell", () => {
     assert.equal(await $(".launcher__empty h3").getText(), "还没有最近工作区");
 
     const state = await layoutSnapshot();
-    assert.match(state.href, /^tauri:\/\/localhost/);
+    assert.equal(
+      isTrustedTauriAppUrl(state.href),
+      true,
+      `desktop shell must use a trusted Tauri app URL, received ${state.href}`,
+    );
     assert.equal(state.hasTauriInvoke, true);
     assert.equal(state.firstOpenVisible, true);
   });
