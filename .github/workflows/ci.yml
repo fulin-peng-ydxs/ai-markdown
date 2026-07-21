@@ -101,7 +101,15 @@ jobs:
           cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
 
       - name: Rust tests
-        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --all-features
+        # Tauri's wry runtime currently prevents MockRuntime library test binaries from loading
+        # on Windows (upstream tauri-apps/tauri#14580). Production/E2E still compile and run wry.
+        run: |
+          cargo tree --locked --manifest-path src-tauri/Cargo.toml --no-default-features > artifacts/mockruntime-rust-tree-${{ matrix.platform }}.txt
+          if grep -q 'tauri-runtime-wry' artifacts/mockruntime-rust-tree-${{ matrix.platform }}.txt; then
+            echo 'MockRuntime test graph must not contain tauri-runtime-wry.' >&2
+            exit 1
+          fi
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --no-default-features
 
       - name: Desktop E2E
         run: |

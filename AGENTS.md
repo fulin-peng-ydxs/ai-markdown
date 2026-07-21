@@ -13,13 +13,13 @@
 - Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器，核心体验是目录工作区、多文档页签、所见即所得与源码无损切换、长文阅读和可编辑颜色预设。
 - T1 已建立并验证技术基线：Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以当前清单和锁文件为准。
 - Markdown 内容事实源始终是用户授权目录中的真实 `.md` 文件；首版不建立云端账号、在线协作、插件市场或私有内容数据库。
-- 当前仓库已完成 T1～T15，T16 已建立 macOS/Windows CI、平台原子替换回归、P1 真 IPC E2E 和测试工具许可证门禁；第二轮远端矩阵的 macOS 已通过，Windows 稳定 API 编译问题已整改待复跑。当前具备真实系统选择器、最近记录、根目录决策、渐进文件树、只读 Markdown、文件 CRUD/删除/定位入口、窄窗目录抽屉、多窗口打开和可重复隔离的 P1/P2 桌面测试，但尚无自动保存、恢复快照、完整外部冲突状态机、编辑器/页签/大纲，也没有 Windows runner 全量测试/E2E 通过结果，不得据此表述为 R1、R2、R5、R14、T16 或第一阶段整体完成。
+- 当前仓库已完成 T1～T15，T16 已建立 macOS/Windows CI、平台原子替换回归、P1 真 IPC E2E 和测试工具许可证门禁；前三轮远端矩阵已确认 macOS 完整通过、Windows all-features lint 与测试链接通过，Windows 测试进程命中的 Tauri MockRuntime/`wry` 上游装载缺陷已完成本地隔离整改并待复跑。当前具备真实系统选择器、最近记录、根目录决策、渐进文件树、只读 Markdown、文件 CRUD/删除/定位入口、窄窗目录抽屉、多窗口打开和可重复隔离的 P1/P2 桌面测试，但尚无自动保存、恢复快照、完整外部冲突状态机、编辑器/页签/大纲，也没有 Windows runner 全量测试/E2E 通过结果，不得据此表述为 R1、R2、R5、R14、T16 或第一阶段整体完成。
 
 ## 当前与目标代码边界
 
 - `agent-works/markdown-editor-desktop/`：本产品的需求、计划、原型和后续开发留痕；同一产品能力继续复用该目录或其语义明确的阶段子目录。
 - `src/`、`src-tauri/`：已建立 P1/P2、共享 `AppDialog`/类型化 `AsyncStatePanel`、`WorkspaceTree`、完整浅色运行时 token、桌面契约/调用封装、渐进文件树/变更/监听状态、永久删除对话框、窗口协调、版本化状态仓储，以及工作区选择、扫描、读取、CRUD、删除、定位、监听和安全写入命令；公共对话框负责焦点圈定与返回，公共状态组件负责状态优先级、非颜色标签和 live-region。当前 P1 中央区仅真实只读查看，不含自动保存/恢复/完整冲突状态机、编辑器、页签、大纲或搜索。
-- `tests/`：已建立脱敏工作区 fixture、Node 临时目录工厂和隔离的 P1/P2 Tauri E2E；`.github/workflows/ci.yml` 已实现 T16 双平台门禁。macOS 远端已完整通过；Windows 在 Rust lint 失败后的整改尚待复跑，不得表述为双平台 CI 已通过。
+- `tests/`：已建立脱敏工作区 fixture、Node 临时目录工厂和隔离的 P1/P2 Tauri E2E；`.github/workflows/ci.yml` 已实现 T16 双平台门禁。macOS 远端已完整通过；Windows 已通过 Rust lint 与测试链接，MockRuntime 装载隔离整改尚待复跑，不得表述为双平台 CI 已通过。
 - 前端只负责视图、用户意图和可观察状态；不得直接拼接任意绝对路径执行磁盘写操作。
 - Rust 命令层集中负责授权根、路径规范化、越界检查、文件扫描与 CRUD、安全写入、回收站和窗口协调。
 - 跨平台能力必须通过适配层表达。不得用 macOS 原型外观替代 Windows 原生窗口控制、菜单、快捷键和文件系统语义。
@@ -65,10 +65,10 @@
 
 ## 命令与验证状态
 
-- 2026-07-21 已在 macOS arm64 实际验证：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm typecheck`、`pnpm test`、`pnpm build`、`pnpm test:ui`、`pnpm test:workspace-tree`、`pnpm test:permanent-delete-feedback`、`pnpm test:fixtures`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo test --locked --manifest-path src-tauri/Cargo.toml --all-features`、`cargo check --locked --manifest-path src-tauri/Cargo.toml --features e2e`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`、`pnpm test:e2e`、`pnpm tauri build --no-bundle` 与 `pnpm tauri build --bundles app`。
+- 2026-07-21 已在 macOS arm64 实际验证：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm typecheck`、`pnpm test`、`pnpm build`、`pnpm test:ui`、`pnpm test:workspace-tree`、`pnpm test:permanent-delete-feedback`、`pnpm test:fixtures`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --no-default-features`、`cargo test --locked --manifest-path src-tauri/Cargo.toml --all-features`、`cargo check --locked --manifest-path src-tauri/Cargo.toml --features e2e`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`、`pnpm test:e2e`、`pnpm tauri build --no-bundle` 与 `pnpm tauri build --bundles app`。
 - `pnpm test:e2e` 每次使用独立临时状态目录，已连续两轮在真实 macOS Tauri/WebKit 中 4/4 通过：P2 IPC、1100/740px 布局、入口焦点顺序，以及 fixture 工作区经真实授权/窗口绑定/启动快照/文件树扫描读取 P1 Markdown。默认生产依赖图、前端产物和 release 二进制均确认不含 WDIO/WebDriver 或测试命令。T15 另从正式 P2 实测文件夹/Markdown 文件原生面板、过滤、取消和父目录授权；上述证据不证明系统废纸篓/Finder、双进程转发或 Windows 完成。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。Windows 编译与 CI 实际 Node 版本留给 T16 验证，当前不得标记通过。
-- 当前自动化测试覆盖许可证策略、T2～T11 底座、Rust↔TypeScript 契约 parity、T12 launcher、T13 workbench、T14 公共组件、临时 fixture、失效清理日志满额回归、平台原子替换和 P1/P2 桌面 E2E，共 114 个 Rust 单元测试、18 个前端树状态测试、4 个永久删除反馈测试、32 个 React UI/状态测试、1 个 fixture 测试、4 个许可证策略测试和 4 个桌面 E2E；双进程 single-instance、系统废纸篓/Finder/Explorer、Windows runner 与 CI 结果仍未验证。许可证扫描覆盖默认与 `e2e` Cargo feature，为 531 个 Node 包、508 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
+- 当前自动化测试覆盖许可证策略、T2～T11 底座、Rust↔TypeScript 契约 parity、T12 launcher、T13 workbench、T14 公共组件、临时 fixture、失效清理日志满额回归、平台原子替换和 P1/P2 桌面 E2E，共 114 个 Rust 单元测试、18 个前端树状态测试、4 个永久删除反馈测试、32 个 React UI/状态测试、1 个 fixture 测试、4 个许可证策略测试和 4 个桌面 E2E；Windows runner 已取得 all-features 编译/链接证据，但完整测试/E2E/生产构建仍待 MockRuntime 隔离复跑，双进程 single-instance 与系统废纸篓/Finder/Explorer 仍未验证。许可证扫描覆盖默认与 `e2e` Cargo feature，为 531 个 Node 包、508 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
 
 ## 文档、协作与 Git
 

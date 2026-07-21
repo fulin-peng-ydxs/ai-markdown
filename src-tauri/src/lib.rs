@@ -25,6 +25,7 @@ mod contract_test;
 pub(crate) mod test_support;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[cfg(feature = "desktop-runtime")]
 pub fn run() {
     let mutations = fs::mutate::WorkspaceMutationService::default();
     let deletions =

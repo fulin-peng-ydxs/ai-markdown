@@ -479,8 +479,8 @@ pub fn document_title(workspace_name: &str, file_name: Option<&str>) -> String {
 }
 
 #[tauri::command]
-pub fn set_workbench_window_title(
-    window: WebviewWindow,
+pub fn set_workbench_window_title<R: Runtime>(
+    window: WebviewWindow<R>,
     relative_path: Option<String>,
     coordinator: State<'_, WorkspaceWindowCoordinator>,
     access: State<'_, WorkspaceAccessService>,

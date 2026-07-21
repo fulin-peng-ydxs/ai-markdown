@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use tauri::{State, WebviewWindow};
+use tauri::{Runtime, State, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
 use crate::error::{DesktopError, DesktopErrorCode};
@@ -352,8 +352,8 @@ impl WorkspaceAccessService {
 }
 
 #[tauri::command]
-pub async fn select_workspace_folder(
-    window: WebviewWindow,
+pub async fn select_workspace_folder<R: Runtime>(
+    window: WebviewWindow<R>,
     access: State<'_, WorkspaceAccessService>,
 ) -> Result<WorkspaceSelectionOutcome, DesktopError> {
     let selected = window
@@ -366,8 +366,8 @@ pub async fn select_workspace_folder(
 }
 
 #[tauri::command]
-pub async fn select_markdown_file(
-    window: WebviewWindow,
+pub async fn select_markdown_file<R: Runtime>(
+    window: WebviewWindow<R>,
     access: State<'_, WorkspaceAccessService>,
 ) -> Result<WorkspaceSelectionOutcome, DesktopError> {
     let selected = window
@@ -442,8 +442,8 @@ pub fn validate_recent_workspace(
 }
 
 #[tauri::command]
-pub fn get_workspace_launcher_snapshot(
-    window: WebviewWindow,
+pub fn get_workspace_launcher_snapshot<R: Runtime>(
+    window: WebviewWindow<R>,
     coordinator: State<'_, WorkspaceWindowCoordinator>,
     state: State<'_, PersistentAppState>,
 ) -> Result<WorkspaceLauncherSnapshot, DesktopError> {
@@ -461,8 +461,8 @@ pub fn get_workspace_launcher_snapshot(
 }
 
 #[tauri::command]
-pub fn get_workspace_workbench_snapshot(
-    window: WebviewWindow,
+pub fn get_workspace_workbench_snapshot<R: Runtime>(
+    window: WebviewWindow<R>,
     coordinator: State<'_, WorkspaceWindowCoordinator>,
     access: State<'_, WorkspaceAccessService>,
 ) -> Result<Option<WorkspaceWorkbenchSnapshot>, DesktopError> {

@@ -31,7 +31,7 @@
 
 ### 2.1 仓库与工具链事实
 
-- 当前仓库已完成 T1～T15；T16 已实现双平台 CI、平台原子替换测试、P1 真 IPC E2E、失败诊断和 E2E 依赖许可证覆盖，本地 macOS 门禁通过，但分支尚未推送，Windows runner 与远端 CI 仍无证据。产品仍无自动保存、恢复快照、完整外部冲突状态机、编辑器/页签/大纲或数据库。
+- 当前仓库已完成 T1～T15；T16 已实现并推送双平台 CI、平台原子替换测试、P1 真 IPC E2E、失败诊断和 E2E 依赖许可证覆盖。前三轮远端运行均取得可追溯证据：macOS 已连续完整通过，Windows 已推进至 all-features lint 与测试链接通过，但测试进程受 Tauri 上游 MockRuntime/`wry` 装载缺陷阻断；隔离整改已完成本地验证，仍待下一轮远端矩阵确认。产品仍无自动保存、恢复快照、完整外部冲突状态机、编辑器/页签/大纲或数据库。
 - 本机 NVM 已安装 Node `v24.11.1`、npm `11.6.2`、Corepack `0.34.2` 和 pnpm `11.5.1`；当前默认 Node 仍为 18，因此项目必须用 `.nvmrc` 和 `packageManager` 固定工具链，所有本地命令先执行 `nvm use`。
 - 本机已安装 macOS Command Line Tools、Apple Clang 16，以及由 T1 安装并锁定的 Rust/Cargo 1.97.1、rustfmt 与 clippy；完整 Xcode 未安装且移动端不在本阶段范围。
 - Windows 实机无法由用户提供。第一阶段使用 GitHub Actions `windows-latest` 完成真实 Windows 编译、Rust/前端测试和 WebdriverIO 桌面 E2E；原生文件选择器、系统回收站、文件管理器定位等不适合稳定无人值守验证的交互，保留为最终跨平台/发布前 Windows 人工验收，不虚假标记为已通过。
@@ -65,11 +65,11 @@
 
 | 需求编号 | 需求内容 | 当前阶段覆盖 | 开发状态 | 第一阶段任务编号 | 当前阶段验证方式 |
 | --- | --- | --- | --- | --- | --- |
-| R1 | Windows + macOS 桌面应用与本地优先工作区 | 桌面壳、真实选择器、授权根、离线启动、原生窗口和菜单；Windows 原生 UI 人工项不在本阶段伪称通过 | 进行中 | T1、T3、T5、T6、T11～T17 | T1～T15 已验证 macOS 工具链、窗口、授权、P1/P2 和真实选择器；T16 已实现 macOS/Windows CI 与 P1 真 IPC E2E，本地 macOS 连续两轮 4/4 通过。分支尚未推送，Windows runner、双进程转发与 Windows 原生窗口行为仍无证据 |
-| R2 | Markdown 文件与文件夹目录管理 | 扫描、读取、文件树、CRUD、回收站、系统定位和外部变化；不含编辑会话联动 | 进行中 | T2、T5～T10、T12～T17 | T2～T15 已完成文件底座、P1 消费和 macOS 实机链路；T16 本地以 fixture 真 IPC 锁定扫描/读取并把原子文件测试纳入双平台矩阵。系统废纸篓/Finder、watch 长时行为及 Windows runner 仍无证据 |
+| R1 | Windows + macOS 桌面应用与本地优先工作区 | 桌面壳、真实选择器、授权根、离线启动、原生窗口和菜单；Windows 原生 UI 人工项不在本阶段伪称通过 | 进行中 | T1、T3、T5、T6、T11～T17 | T1～T15 已验证 macOS 工具链、窗口、授权、P1/P2 和真实选择器；T16 已取得 macOS 远端全绿与 Windows all-features 编译/链接证据，Windows 测试进程装载隔离整改待复跑。双进程转发与 Windows 原生窗口行为仍无证据 |
+| R2 | Markdown 文件与文件夹目录管理 | 扫描、读取、文件树、CRUD、回收站、系统定位和外部变化；不含编辑会话联动 | 进行中 | T2、T5～T10、T12～T17 | T2～T15 已完成文件底座、P1 消费和 macOS 实机链路；T16 已取得 Windows 条件代码编译/链接证据，但测试进程未进入用例。系统废纸篓/Finder、watch 长时行为及 Windows 运行结果仍无证据 |
 | R3 | Markdown 所见即所得查看与编辑 | 阶段外，需另立阶段计划 | 跳过 | - | 后续计划必须逐项承接需求 §11 的 R3 验收，不得复用第一阶段任务号 |
 | R4 | 当前文档标题大纲 | 阶段外，需另立阶段计划 | 跳过 | - | 后续计划必须覆盖 H1～H6、空态、联动和异常验收 |
-| R5 | 自动保存、恢复与外部修改冲突处理 | 仅安全写入与修订原语；不含自动保存、恢复快照和冲突 UI | 进行中 | T10、T15～T17 | T10/T15 已验证安全写与残件预算；T16 新增共享原子替换测试及 Windows 独占目标失败条件测试，但后者尚待 runner 执行。完整自动保存、恢复和冲突状态机后续另验 |
+| R5 | 自动保存、恢复与外部修改冲突处理 | 仅安全写入与修订原语；不含自动保存、恢复快照和冲突 UI | 进行中 | T10、T15～T17 | T10/T15 已验证安全写与残件预算；T16 新增共享原子替换测试及 Windows 独占目标失败条件测试，Windows 已编译/链接但尚未进入用例。完整自动保存、恢复和冲突状态机后续另验 |
 | R6 | 图片粘贴、拖放与相对路径资源管理 | 阶段外，需另立阶段计划 | 跳过 | - | 后续计划必须覆盖资源目录、相对链接、失败回滚和跨平台验收 |
 | R7 | 克制中性主题与颜色语义 | 只消费现有 `DESIGN.md` alpha token，不实现主题能力 | 跳过 | - | T12～T15 的设计合规检查不计为 R7 产品验收；完整 R7 后续按需求 §11 验收 |
 | R8 | 自适应与区域拖动调宽；含按工作区记忆优化 | 仅保证 P1/P2 阶段壳在关键宽度不溢出，并实现 P1 窄窗文件树抽屉与 P2 约 760px 单列退化；拖动和偏好阶段外 | 进行中 | T12～T17 | T12～T15 已完成 P1/P2 关键断点；T16 已把 1100/740px 真实窗口用例纳入双平台矩阵，本地 macOS 通过、Windows 待远端。拖动、右大纲与偏好仍由后续布局阶段完成 |
@@ -269,8 +269,8 @@
 
 | 范围类别 | 需求编号 | 需求内容/来源 | 第一阶段开发内容 | 第一阶段任务 | 状态 | 偏差判断 | 验证与后续约束 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 必须实现 | R1 | 双平台桌面应用与授权工作区 | 桌面壳、授权、窗口、菜单、P1/P2 与双平台 CI | T1、T3、T5、T6、T11～T17 | 进行中 | 部分覆盖 | T1～T15 已完成 macOS 底座与实机链路；T16 已实现双平台 workflow、P1/P2 E2E 和产物收集，本地 macOS 通过。分支未推送，Windows runner、双进程与 Windows 原生 UI 未取得证据前不标完整完成 |
-| 必须实现 | R2 | 文件与文件夹目录管理 | 文件层扫描、读取、CRUD、删除、定位与监听 | T2、T5～T10、T12～T17 | 进行中 | 部分覆盖 | T2～T15 已完成文件底座和 P1 消费；T16 新增 P1 真 IPC 扫描/读取及平台原子回归并纳入矩阵，本地 macOS 通过。系统废纸篓/Finder、Windows runner 与编辑会话耦合仍由 T16/T17 及后续计划承接 |
+| 必须实现 | R1 | 双平台桌面应用与授权工作区 | 桌面壳、授权、窗口、菜单、P1/P2 与双平台 CI | T1、T3、T5、T6、T11～T17 | 进行中 | 部分覆盖 | T1～T15 已完成 macOS 底座与实机链路；T16 已推送双平台 workflow、P1/P2 E2E 和产物收集，macOS 远端完整通过，Windows 已通过 all-features 编译/链接但测试装载整改待复跑。双进程与 Windows 原生 UI 未取得证据前不标完整完成 |
+| 必须实现 | R2 | 文件与文件夹目录管理 | 文件层扫描、读取、CRUD、删除、定位与监听 | T2、T5～T10、T12～T17 | 进行中 | 部分覆盖 | T2～T15 已完成文件底座和 P1 消费；T16 新增 P1 真 IPC 扫描/读取及平台原子回归，macOS 已通过，Windows 条件代码已编译/链接但测试未运行。系统废纸篓/Finder、Windows 运行结果与编辑会话耦合仍由 T16/T17 及后续计划承接 |
 | 必须实现 | R3 | 所见即所得编辑 | 阶段外 | - | 跳过 | 未覆盖 | 后续独立计划按需求 §11 验收 |
 | 必须实现 | R4 | 当前文档大纲 | 阶段外 | - | 跳过 | 未覆盖 | 后续独立计划按需求 §11 验收 |
 | 必须实现 | R5 | 自动保存、恢复与冲突 | 仅安全写入与修订底座 | T10、T15～T17 | 进行中 | 部分覆盖 | T10/T15 已完成安全写、修订与清理预算；T16 新增共享原子替换测试和 Windows 独占目标失败条件测试，远端 Windows 尚未执行。自动保存、恢复、冲突 UI 与完整状态机后续另立计划 |
@@ -518,7 +518,7 @@
 
 ### 6.16 任务 T16：macOS/Windows CI 门禁与构建产物
 
-- 状态：进行中（macOS 远端通过，Windows 编译问题整改后待复跑）。
+- 状态：进行中（macOS 远端通过，Windows MockRuntime 装载隔离整改后待复跑）。
 - 依赖：T1、T15。
 - 涉及文件/模块：`.github/workflows/ci.yml`、`package.json`、`scripts/check-licenses.mjs`、`scripts/run-desktop-e2e.mjs`、`scripts/collect-ci-artifact.mjs`、`tests/e2e/`、`src-tauri/src/fs/atomic.rs`、`src-tauri/src/fs/identity.rs`、`src-tauri/src/fs/delete.rs`、`src-tauri/src/fs/mutate.rs`、`src-tauri/src/menu.rs`、`src-tauri/icons/icon.ico`、E2E-only Rust 命令与状态目录适配。
 - 目标：在没有本地 Windows 设备的情况下取得真实 Windows runner 证据。
@@ -528,7 +528,7 @@
 - 边界与异常：CI 通过不等同 Windows 人工 UX 验收；无签名产物仅用于测试，不作为正式发布。
 - 验证方式：GitHub Actions 运行链接、矩阵日志、E2E 报告和 artifact 哈希。
 - 完成标准：两个平台均编译和测试通过；失败阻止阶段完成。
-- 实际落地情况：已实现 `macos-latest`/`windows-latest` 矩阵，固定 Node 24.11.1、pnpm 11.5.1、Rust 1.97.1，缓存实际 pnpm store 与 Cargo，硬门禁覆盖许可证、类型、前端测试/构建、Rust fmt/clippy/all-features 测试、4 个桌面 E2E、默认生产构建及未签名二进制/哈希/失败日志/截图上传。新增平台原子替换测试；Windows 专项锁定目标测试只在 Windows 编译执行。交叉检查发现并补齐由现有占位 `icon.png` 生成的 `icon.ico`；之后本机检查停在 macOS 缺少 Windows `llvm-rc`，未据此宣称 Windows 编译通过。P1 E2E 只在 `e2e` feature 下使用测试命令，经正常授权、窗口协调、启动快照、树扫描与读取打开 fixture；每轮使用独立临时状态目录，失败用例最多重试一次。许可证门禁已覆盖默认与 `e2e` Cargo 图（531 Node/508 Rust/0 阻断）。macOS 本地通过 114 个 Rust、全部前端门禁、连续两轮 4/4 E2E、生产构建和测试入口泄漏检查。首轮远端运行 [Desktop CI #1](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29841645380) 因 Rust 组件参数格式错误在安装阶段停止，已整改。第二轮 [Desktop CI #2](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29842058884) 的 macOS 全部通过；Windows 通过前端门禁后在 Rust lint 暴露 8 处不稳定文件标识 API 和 1 处条件可变警告。现已用稳定 `GetFileInformationByHandle` 收敛删除/移动同文件判断并修复平台条件警告；本机 Windows 目标 check/clippy 通过，但真实 Windows 测试、E2E、生产构建和 artifact 仍待远端复跑，因此 T16 不标完成。Windows 原生选择器视觉/键鼠、回收站与 Explorer 仍是人工验收项。详见 `t16-desktop-ci.md`。
+- 实际落地情况：已实现 `macos-latest`/`windows-latest` 矩阵，固定 Node 24.11.1、pnpm 11.5.1、Rust 1.97.1，缓存实际 pnpm store 与 Cargo，硬门禁覆盖许可证、类型、前端测试/构建、Rust fmt、all-features clippy、114 个 MockRuntime 库测试、4 个桌面 E2E、默认生产构建及未签名二进制/哈希/失败日志/截图上传。新增平台原子替换测试；Windows 专项锁定目标测试只在 Windows 执行。P1 E2E 只在 `e2e` feature 下使用测试命令，经正常授权、窗口协调、启动快照、树扫描与读取打开 fixture；每轮使用独立临时状态目录，失败用例最多重试一次。许可证门禁覆盖默认与 `e2e` Cargo 图（531 Node/508 Rust/0 阻断）。首轮远端运行 [Desktop CI #1](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29841645380) 暴露并修复 Rust 组件参数和早期诊断问题；第二轮 [Desktop CI #2](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29842058884) 的 macOS 全部通过，Windows 暴露的稳定文件标识 API 与平台警告已用 `GetFileInformationByHandle` 和条件代码修复；第三轮 [Desktop CI #3](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29843694120) 再次确认 macOS 全绿，并确认 Windows all-features lint/测试链接通过，但测试进程在首个用例前命中 Tauri 官方未关闭的 `0xc0000139` MockRuntime/`wry` 装载缺陷。现把默认生产运行时显式建模为 `desktop-runtime`，E2E 强制消费该 feature，114 个库测试用无 `wry` 的 MockRuntime 图执行并由依赖图断言防回退；本机无运行时与 all-features 两条测试路径均为 114/114，生产构建及 531 Node/508 Rust/0 阻断许可证门禁通过。真实 Windows 测试、E2E、生产构建和 artifact 仍待下一轮远端复跑，因此 T16 不标完成；Windows 原生选择器视觉/键鼠、回收站与 Explorer 仍是人工验收项。详见 `t16-desktop-ci.md`。
 
 ### 6.17 任务 T17：第一阶段验收、证据和交接
 
@@ -617,7 +617,7 @@
   - Windows GitHub runner：Rust/前端测试、Tauri 构建、稳定 WDIO 桌面 E2E 和测试产物；
   - Windows 人工：系统选择器、回收站、Explorer 定位、窗口菜单和安装包交互登记为最终跨平台阶段输入。
 - 波动预案：编译、单元、集成和核心命令链路始终是硬门禁；单个 WDIO 用例最多重试一次并上传日志/截图。重复波动用例必须登记原因、隔离并保留人工清单，不能通过增加重试次数把失败写成通过。
-- 具体完成情况：T16 工作流、产物收集与失败诊断已本地实现；macOS arm64 的全部门禁、连续两轮 4/4 E2E、生产二进制及 SHA-256 生成通过，生产二进制未发现 E2E 命令/状态变量。当前分支未推送，远端 macOS/Windows 矩阵、Windows `MoveFileExW`/Dialog 编译、Windows E2E 和 artifact 均未执行；Windows 原生系统界面继续保持人工未验证。
+- 具体完成情况：T16 工作流、产物收集与失败诊断已推送并完成三轮远端复核；macOS 连续完整通过，第三轮 artifact 摘要为 `sha256:0955b7ade3eabf3183e4b5c9915ba7cedd5df20da1345e45f7c9b169566697d9`。Windows 已真实完成 all-features lint 与测试链接，测试进程因 Tauri 上游 `0xc0000139` 装载缺陷未进入用例；隔离整改待下一轮验证，Windows E2E、生产构建和有效二进制 artifact 仍未取得。Windows 原生系统界面继续保持人工未验证。
 
 ### 8.8 建议执行命令
 
