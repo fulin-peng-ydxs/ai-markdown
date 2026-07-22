@@ -12,13 +12,3 @@
 .app-bootstrap > .async-state-panel {
   width: min(520px, 100%);
 }
-
-.app-bootstrap--error {
-  position: fixed;
-  z-index: 80;
-  inset: var(--space-md) var(--space-md) auto auto;
-  min-height: 0;
-  padding: 0;
-  background: transparent;
-  pointer-events: none;
-}

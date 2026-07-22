@@ -3,15 +3,13 @@ import { useEffect, useState } from "react";
 import { AsyncStatePanel } from "./components/AsyncStatePanel";
 import { WorkspaceLauncher } from "./features/launcher/WorkspaceLauncher";
 import { WorkspaceWorkbench } from "./features/workbench/WorkspaceWorkbench";
-import type { DesktopError, WorkspaceDescriptor } from "./services/desktop/contracts";
-import { desktopErrorMessage, normalizeDesktopError } from "./services/desktop/errors";
+import type { WorkspaceDescriptor } from "./services/desktop/contracts";
 import { getWorkspaceWorkbenchSnapshot } from "./services/desktop/workspace";
 
 import "./App.css";
 
 export default function App() {
   const [workspace, setWorkspace] = useState<WorkspaceDescriptor | null | undefined>(undefined);
-  const [error, setError] = useState<DesktopError | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -19,9 +17,10 @@ export default function App() {
       .then((snapshot) => {
         if (active) setWorkspace(snapshot?.workspace ?? null);
       })
-      .catch((reason) => {
+      .catch(() => {
         if (!active) return;
-        setError(normalizeDesktopError(reason, "state_unavailable"));
+        // The launcher reads the same versioned state and owns its actionable retry panel.
+        // Falling back here avoids announcing the same persistent error twice.
         setWorkspace(null);
       });
     return () => {
@@ -46,14 +45,5 @@ export default function App() {
     );
   }
 
-  return (
-    <>
-      {error ? (
-        <div className="app-bootstrap app-bootstrap--error">
-          <AsyncStatePanel description={desktopErrorMessage(error)} state="error" title="无法恢复当前窗口" />
-        </div>
-      ) : null}
-      <WorkspaceLauncher onWorkspaceOpened={setWorkspace} />
-    </>
-  );
+  return <WorkspaceLauncher onWorkspaceOpened={setWorkspace} />;
 }

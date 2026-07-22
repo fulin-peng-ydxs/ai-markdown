@@ -542,7 +542,7 @@
 - 边界与异常：所有子集 R 项保持部分覆盖，直至后续独立阶段完成；不得用底层测试替代产品整体验收。
 - 验证方式：逐项证据链接、命令输出、截图/录屏和失败清单。
 - 完成标准：阶段 1 里程碑成立，无未解释的超范围或虚假完成状态。
-- 实际落地情况：已完成页面、设计 token、响应式、焦点、平台快捷键、原生菜单和第一阶段状态的整体复核。修复 P2 私有渐变、永久删除对话框私有阴影/遮罩、Windows 快捷键提示错误、P1 窄窗抽屉隐藏态仍可聚焦与缺少焦点圈定、关闭窗口快捷键占用未来页签语义等 5 项问题；`AppDialog` 与抽屉共用焦点生命周期后抽取 `focusContainment`，页面业务状态仍保持独立。全量通过 115 个 Rust、18 个树 reducer、4 个删除反馈、34 个 React、1 个 fixture、4 个许可证策略和 4 个真实桌面 E2E；类型、构建、fmt、clippy、许可证和 macOS `.app` 构建均通过。macOS 生产应用已人工验证真实选择器、P1/P2、约 740px 抽屉焦点闭环、原生多窗口与关闭快捷键、Finder、系统废纸篓、外部监听和单实例。提交 `9a1690a` 的 macOS/Windows CI 均已通过；Windows 原生系统 UI 仍保持人工未验证。详见 `t17-stage-acceptance.md`。
+- 实际落地情况：已完成页面、设计 token、响应式、焦点、平台快捷键、原生菜单和第一阶段状态的整体复核。修复 P2 私有渐变、永久删除对话框私有阴影/遮罩、Windows 快捷键提示错误、P1 窄窗抽屉隐藏态仍可聚焦与缺少焦点圈定、关闭窗口快捷键占用未来页签语义等 5 项问题；`AppDialog` 与抽屉共用焦点生命周期后抽取 `focusContainment`，页面业务状态仍保持独立。后续页面复核又移除 App 根层不可操作的重复启动错误，让同一状态仓库故障只由 P2 既有 `AsyncStatePanel` 提供关闭与重试。全量通过 115 个 Rust、18 个树 reducer、4 个删除反馈、35 个 React、1 个 fixture、4 个许可证策略和 4 个真实桌面 E2E；类型、构建、fmt、clippy、许可证和 macOS `.app` 构建均通过。macOS 生产应用已人工验证真实选择器、P1/P2、约 740px 抽屉焦点闭环、原生多窗口与关闭快捷键、Finder、系统废纸篓、外部监听和单实例。提交 `9a1690a` 的 macOS/Windows CI 均已通过；页面错误去重为该提交后的本地改动，Windows 原生系统 UI 仍保持人工未验证。详见 `t17-stage-acceptance.md`。
 
 ## 7. 数据库、配置、菜单与初始化计划
 
@@ -583,7 +583,7 @@
 ### 8.1 单元测试
 
 - 计划：Rust 覆盖路径规范化、根内判定、文件名校验、文件修订、安全写入、状态 schema 迁移和窗口去重；TypeScript 覆盖 view model、过滤、状态 reducer 和组件契约。
-- 具体完成情况：本地共 115 个 Rust 单测、18 个前端树状态测试、4 个永久删除反馈测试、34 个 React UI/状态测试、4 个许可证策略测试和 1 个 Node fixture 测试通过。T17 新增原生菜单加速键契约和 P1 抽屉初始焦点/正反向圈定回归；既有 snapshot parity、状态优先级、对话框焦点、文件树键盘、真实重试和磁盘成功后提交继续全量通过。T16 基线 Windows runner 已执行 105 个平台适用 Rust 测试。
+- 具体完成情况：本地共 115 个 Rust 单测、18 个前端树状态测试、4 个永久删除反馈测试、35 个 React UI/状态测试、4 个许可证策略测试和 1 个 Node fixture 测试通过。T17 新增原生菜单加速键契约和 P1 抽屉初始焦点/正反向圈定回归；页面复核新增根启动与 P2 同源错误去重回归；既有 snapshot parity、状态优先级、对话框焦点、文件树键盘、真实重试和磁盘成功后提交继续全量通过。T16 基线 Windows runner 已执行 105 个平台适用 Rust 测试。
 
 ### 8.2 接口与集成测试
 
@@ -598,12 +598,12 @@
 ### 8.4 组件资产闭环测试
 
 - 计划：验证 AppDialog、AsyncStatePanel 等被 P1/P2 真实消费；检查状态优先级、焦点圈定、Esc、焦点恢复、aria-live、reduced-motion 和非颜色状态；扫描页面只消费 `DESIGN.md` 语义 token，组件清单与代码一致。候选组件只有形成第二个同职责消费者才进入公共层。
-- 具体完成情况：`AppDialog`、P1 抽屉与永久删除流程继续消费既有公共组件；T17 在 `AppDialog` 和抽屉出现第二处相同焦点职责后抽取 `focusContainment`，统一初始焦点、Tab/Shift+Tab 圈定与焦点恢复。React 测试增至 34 个；页面样式扫描确认不再包含私有 hex/rgb/渐变。`PathStatus`、`DesktopWindowStatus`、`RecentWorkspaceList` 仍未形成两个同职责消费者，不提前创建。
+- 具体完成情况：`AppDialog`、P1 抽屉与永久删除流程继续消费既有公共组件；T17 在 `AppDialog` 和抽屉出现第二处相同焦点职责后抽取 `focusContainment`，统一初始焦点、Tab/Shift+Tab 圈定与焦点恢复。P2 状态仓库错误继续复用既有 `AsyncStatePanel`，根应用不再维护第二套固定错误面；React 测试增至 35 个，页面样式扫描确认不再包含私有 hex/rgb/渐变。`PathStatus`、`DesktopWindowStatus`、`RecentWorkspaceList` 仍未形成两个同职责消费者，不提前创建。
 
 ### 8.5 回归测试
 
 - 计划：把 T15 的路径安全、扫描/CRUD、安全写、状态仓储、窗口去重、P1/P2 ready/loading/empty/error、键盘/焦点和关键宽度用例作为后续阶段不可删除的第一阶段回归基线；任何后续编辑、页签、搜索或主题改动都必须先运行受影响基线。对修复过的缺陷新增最小复现用例，不以改快照掩盖行为回归。
-- 具体完成情况：已建立 `pnpm test`（4 个许可证策略、4 个删除反馈、18 个树 reducer、1 个 fixture、34 个 React）和隔离的 `pnpm test:e2e`（4 个真实桌面用例），Rust 为 115/115；`pnpm typecheck`、生产构建、fmt、clippy 和许可证门禁继续通过。WDIO 每次使用临时状态目录，失败最多重试一次并保留日志/截图。
+- 具体完成情况：已建立 `pnpm test`（4 个许可证策略、4 个删除反馈、18 个树 reducer、1 个 fixture、35 个 React）和隔离的 `pnpm test:e2e`（4 个真实桌面用例），Rust 为 115/115；`pnpm typecheck`、生产构建、fmt、clippy 和许可证门禁继续通过。WDIO 每次使用临时状态目录，失败最多重试一次并保留日志/截图。
 
 ### 8.6 异常与边界测试
 

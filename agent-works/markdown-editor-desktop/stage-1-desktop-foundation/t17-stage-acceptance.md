@@ -70,7 +70,7 @@ T17 提交 `9a1690a` 已取得 GitHub Actions 双平台绿灯，第一阶段具�
 ### 5.1 本地自动化与构建
 
 - `pnpm typecheck`：通过。
-- `pnpm test`：通过，包含 4 个许可证策略测试、4 个永久删除反馈测试、18 个文件树 reducer 测试、1 个 fixture 测试和 34 个 React UI/状态测试。
+- `pnpm test`：通过，包含 4 个许可证策略测试、4 个永久删除反馈测试、18 个文件树 reducer 测试、1 个 fixture 测试和 35 个 React UI/状态测试。
 - `pnpm build`：通过，生产前端产物约 247.89 kB JS / 22.42 kB CSS。
 - `cargo test --locked --manifest-path src-tauri/Cargo.toml --all-features`：115/115 通过。
 - `cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --no-default-features`：115/115 通过。
@@ -86,6 +86,14 @@ T17 提交 `9a1690a` 已取得 GitHub Actions 双平台绿灯，第一阶段具�
 
 - macOS 生产 `.app`：系统选择器、P1/P2、740px 抽屉焦点链、原生多窗口、关闭窗口快捷键、Finder 定位、系统废纸篓、外部变化监听和单实例均已人工实测通过。
 - T17 GitHub Actions：[Desktop CI 29889538719](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29889538719) 的 macOS/Windows 矩阵均为 Success；macOS artifact SHA-256 为 `24e306da5e1abc40eb7d644df09a8a5a1cebe737f915bf3c78e5340366806b37`，Windows artifact SHA-256 为 `b31ffc8cccb97256c1c49863d0b442a40943c3fbfe33f276c3d4498c045f2f1d`。
+
+## 页面复核后的 P2 错误态收口
+
+- 复核发现：根应用恢复当前窗口与 P2 最近工作区加载访问同一版本化状态仓库；仓库不可读时，页面曾同时渲染一个不可操作的固定错误面和一个可关闭、可重试的内联错误面。
+- 修改结果：根应用恢复失败后只安全回落 P2，不再渲染第二套固定错误。P2 继续复用既有 `AsyncStatePanel`、`loadSnapshot` 和重试动作，保留“关闭/重试”恢复路径；未新增私有错误组件或颜色 token。
+- 自动化证据：新增根级 React 回归，锁定同源双失败时仅有一个 `role=alert`、不存在“无法恢复当前窗口”，并保留“重试”和“打开文件夹”。React UI/状态测试由 34 个增至 35 个。
+- 浏览器证据：在 1280×820 与 740×760 两个桌面窗口宽度真实渲染原生能力不可用的错误态，均只有一条错误面板、无 `.app-bootstrap--error`、无横向溢出；关闭后错误面消失且主打开入口保留，重试失败后仍只保留一条可重试错误。
+- 范围与回滚：该修改只收敛 P2/R11 的错误反馈，不改变需求编号、状态仓库、IPC、窗口协调、文件权限、配置或用户 Markdown；回滚对应 App 根层与回归测试改动即可。
 
 ### 5.3 未验证边界
 
