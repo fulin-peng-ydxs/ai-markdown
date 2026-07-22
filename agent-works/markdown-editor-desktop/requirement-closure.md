@@ -1,7 +1,7 @@
 # Plainroot Markdown 桌面编辑器需求闭环分析
 
 > 产品名称：Plainroot  
-> 闭环状态：本整改版本待外部复核确认；上一轮外部复审已确认主体闭环可进入开发计划<br>
+> 闭环状态：产品范围与业务闭环已确认；第一阶段桌面底座已落地，后续完整闭环仍按正式需求推进<br>
 > 目标平台：Windows + macOS  
 > 品牌表达：A calm, local-first Markdown editor. Write clearly. Keep it yours.
 
@@ -312,7 +312,7 @@ Plainroot 是一款本地优先的桌面 Markdown 查看与编辑工具。产品
 - R24 保留上游“固定页签与预览页签”组合表述的追溯关系，不直接进入开发或验收；原子能力分别由 R33、R34 承接。
 - “PC 端窗口”解释为 Windows 与 macOS 桌面应用，并按平台使用原生控制、菜单、快捷键、全屏和窗口恢复。
 - 页面整体和各区域可拖动继续解释为操作系统窗口可缩放、三栏主工作区可横向调宽；标题栏、页签栏和状态栏保持稳定高度。
-- 正式需求中的 Tauri、React、Milkdown/ProseMirror、CodeMirror、SQLite/FTS5 仅是基于上述约束形成的推断候选，不属于本闭环已确认事实；依赖锁定前必须验证并记录结论。
+- Tauri 2 + React + TypeScript + Vite 桌面基线已经第一阶段实现和双平台 CI 验证；Milkdown/ProseMirror、CodeMirror 6 与 SQLite/FTS5 仍只是编辑器、源码模式和搜索阶段的候选，必须在对应依赖锁定前验证并记录结论。
 
 ## 11. 开发前高风险项
 

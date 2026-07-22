@@ -12,6 +12,7 @@
 
 - 需求文档：`agent-works/markdown-editor-desktop/requirement.md`。
 - 上游闭环：`agent-works/markdown-editor-desktop/requirement-closure.md`。
+- 当前实现架构：`agent-works/markdown-editor-desktop/architecture/desktop-foundation.md`。
 - 页面原型：
   - `agent-works/markdown-editor-desktop/prototypes/markdown-workbench.html`；
   - `agent-works/markdown-editor-desktop/prototypes/workspace-launcher.html`；
@@ -31,7 +32,7 @@
 
 ### 2.1 仓库与工具链事实
 
-- 当前仓库已完成 T1～T17 的本地开发、macOS 实机与 macOS/Windows 双平台 CI 验收；提交 `9a1690a` 已确认许可证、类型、前端/Rust 测试、4/4 桌面 E2E、未签名生产构建和 artifact 上传全部通过。Windows 原生系统交互仍保留为人工未验证项。产品仍无自动保存、恢复快照、完整外部冲突状态机、编辑器/页签/大纲或数据库。
+- 当前仓库已完成 T1～T17 的本地开发、macOS 实机与 macOS/Windows 双平台 CI 验收；提交 `9a1690a` 已确认许可证、类型、前端/Rust 测试、4/4 桌面 E2E、未签名生产构建和 artifact 上传全部通过。其后的根启动错误去重和工作区路径复用已通过本地回归，设计文档登记修正已通过静态一致性核对；尚无覆盖这些增量提交的新一轮远端 CI 证据。Windows 原生系统交互仍保留为人工未验证项。产品仍无自动保存、恢复快照、完整外部冲突状态机、编辑器/页签/大纲或数据库。
 - 本机 NVM 已安装 Node `v24.11.1`、npm `11.6.2`、Corepack `0.34.2` 和 pnpm `11.5.1`；当前默认 Node 仍为 18，因此项目必须用 `.nvmrc` 和 `packageManager` 固定工具链，所有本地命令先执行 `nvm use`。
 - 本机已安装 macOS Command Line Tools、Apple Clang 16，以及由 T1 安装并锁定的 Rust/Cargo 1.97.1、rustfmt 与 clippy；完整 Xcode 未安装且移动端不在本阶段范围。
 - Windows 实机无法由用户提供。第一阶段使用 GitHub Actions `windows-latest` 完成真实 Windows 编译、Rust/前端测试和 WebdriverIO 桌面 E2E；原生文件选择器、系统回收站、文件管理器定位等不适合稳定无人值守验证的交互，保留为最终跨平台/发布前 Windows 人工验收，不虚假标记为已通过。
@@ -260,6 +261,7 @@
 | P1/P2 异步与阻塞状态 | T12 新增、T14 固化类型化 `AsyncStatePanel`；窗口身份仍由各页面标题/状态栏消费 | 不涉及配置化布局 | 窗口标签和标题由 desktop service 注入 | `DESIGN.md` 已登记共享状态、优先级、非颜色文字和 live-region 职责 | P1/P2 已真实消费并有组件测试；`DesktopWindowStatus` 因无第二个独立消费者不建立；T15 已建立真实 Tauri P2 E2E | T3、T12～T15 |
 | P1/P2 对话框与窄窗抽屉 | T8 先实现具体 `PermanentDeleteDialog`；T12 出现第二个真实消费后抽取可访问 `AppDialog`；T17 抽取共享 `focusContainment` | 不涉及 | 初始焦点、Tab 圈定、Esc、返回触发点 | `DESIGN.md` 已登记公共组件、焦点工具与真实消费者 | P1/P2 目录决策、文件操作、失效记录、永久删除和 P1 抽屉均已消费；T17 已实测 macOS 系统删除与抽屉焦点闭环 | T8、T11～T17 |
 | P1 文件树 | 新增 `WorkspaceTree` | 不涉及 | 消费 `FsEntry`，不自行执行磁盘乐观提交 | 登记数据/事件契约 | P1 真实目录消费；集成与 E2E | T6～T9、T13 |
+| P1 工作区相对路径状态 | `workspacePath` 统一父路径、段边界判断和前缀重映射 | 不涉及 | 文件树 reducer 与工作台页面共同消费；树层仅适配 `ROOT_KEY` | `DESIGN.md` 已登记纯路径代数和两个真实消费者 | 3 个独立路径测试覆盖根、嵌套、段边界和前缀替换；P1 组件与树 reducer 回归保持通过 | T13、T17 |
 | P2 最近工作区 | 由 `WorkspaceLauncher` 内部列表承载 | 不涉及 | 消费状态仓储 view model | 登记空/错/加载状态 | 当前只有 P2 一个消费者，不抽取 `RecentWorkspaceList`/`PathStatus`；P2 已真实消费 | T4、T12、T14、T15 |
 | 阶段外三栏拖动、页签、编辑器、主题 | 本阶段不创建 | 本阶段不创建 | 不预注册无消费资产 | 否，避免空抽象 | 后续独立计划基于届时代码重新做复用检查 | - |
 
@@ -624,16 +626,19 @@
 ```bash
 nvm use
 corepack pnpm install --frozen-lockfile
+pnpm typecheck
 pnpm test
+pnpm test:workspace-path
 pnpm test:workspace-tree
 pnpm test:permanent-delete-feedback
+pnpm test:fixtures
 pnpm test:ui
 pnpm test:licenses
 pnpm licenses:check
 pnpm build
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-cargo test --locked --manifest-path src-tauri/Cargo.toml
+cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+cargo test --locked --manifest-path src-tauri/Cargo.toml --all-features
 pnpm test:e2e
 pnpm tauri build --no-bundle
 ```
@@ -685,5 +690,5 @@ pnpm tauri build --no-bundle
 ### 10.4 待确认项
 
 - 无阻塞计划启动的问题。
-- 非阻塞：正式应用 bundle identifier、图标和签名主体在首次可分发构建前确认；阶段 1 暂使用可替换的开发标识，但必须集中配置，不能散落硬编码。
+- 非阻塞：正式应用 bundle identifier、品牌图标和签名主体在首次可分发构建前确认；阶段 1 的开发标识 `com.plainroot.desktop` 与占位图标集中在 Tauri 配置/资源中，不代表正式发布身份。
 - 非阻塞：Windows 人工验收的具体渠道可在最终跨平台阶段选择临时 Windows 设备、云桌面或受托测试者；在取得证据前 R1 不标记最终已完成。

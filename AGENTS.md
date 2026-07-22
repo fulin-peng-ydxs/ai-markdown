@@ -5,6 +5,7 @@
 - 本文件是仓库级 AI 协作权威入口；`CLAUDE.md` 仅是 Claude Code 薄入口，不复制完整规则。
 - 产品范围、状态机和验收口径以 `agent-works/markdown-editor-desktop/requirement.md` 为准；需求闭环理由见同目录 `requirement-closure.md`。
 - 当前阶段做什么、暂不做什么，以对应阶段目录中的 `plan.md` 为准。阶段计划不得改变需求编号含义或把后续能力伪装为当前已完成。
+- 当前已落地桌面底座的模块边界、数据流和运行约束见 `agent-works/markdown-editor-desktop/architecture/desktop-foundation.md`；代码、清单、配置和自动化测试是更高优先级的技术事实源。
 - 前端视觉、布局和交互规范以 `DESIGN.md` 为准；页面开发步骤以 `agent-works/markdown-editor-desktop/page-development-workflow.md` 为准。
 - `agent-works/markdown-editor-desktop/prototypes/` 是交互与视觉证据，不是生产实现。原型中的固定路径、计时器、假数据和说明控件不得进入正式产品。
 - 工程建立后，代码、清单、锁文件、脚本和自动化测试是技术事实源。它们与计划中的候选路径或命令冲突时，先核实当前实现并同步文档。

@@ -19,8 +19,10 @@ pnpm typecheck
 pnpm test
 pnpm build
 pnpm test:ui
+pnpm test:workspace-path
 pnpm test:workspace-tree
 pnpm test:permanent-delete-feedback
+pnpm test:fixtures
 pnpm test:licenses
 pnpm licenses:check
 cargo check --locked --manifest-path src-tauri/Cargo.toml
@@ -40,4 +42,11 @@ pnpm tauri build --bundles app
 pnpm tauri dev
 ```
 
-需求、阶段计划和验证边界见 `agent-works/markdown-editor-desktop/`。第一阶段验收只代表 P1/P2 与文件/窗口底座达到当前阶段里程碑，不等于完整 R1/R2/R5/R14 或编辑器产品完成。Windows 原生选择器、回收站、Explorer、菜单与辅助技术仍缺人工实机证据。
+## 文档入口
+
+- 产品范围与验收：`agent-works/markdown-editor-desktop/requirement.md`
+- 第一阶段计划与实际状态：`agent-works/markdown-editor-desktop/stage-1-desktop-foundation/plan.md`
+- 当前桌面底座架构：`agent-works/markdown-editor-desktop/architecture/desktop-foundation.md`
+- 视觉与交互规范：`DESIGN.md`
+
+第一阶段验收只代表 P1/P2 与文件/窗口底座达到当前阶段里程碑，不等于完整 R1/R2/R5/R14 或编辑器产品完成。Windows 原生选择器、回收站、Explorer、菜单与辅助技术仍缺人工实机证据。
