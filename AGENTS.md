@@ -18,7 +18,7 @@
 ## 当前与目标代码边界
 
 - `agent-works/markdown-editor-desktop/`：本产品的需求、计划、原型和后续开发留痕；同一产品能力继续复用该目录或其语义明确的阶段子目录。
-- `src/`、`src-tauri/`：已建立 P1/P2、共享 `AppDialog`/类型化 `AsyncStatePanel`/`focusContainment`、`WorkspaceTree`、完整浅色运行时 token、桌面契约/调用封装、渐进文件树/变更/监听状态、永久删除对话框、窗口协调、版本化状态仓储，以及工作区选择、扫描、读取、CRUD、删除、定位、监听和安全写入命令；公共焦点工具由对话框和窄窗抽屉共同消费，公共状态组件负责状态优先级、非颜色标签和 live-region，启动页快捷键提示按平台展示。当前 P1 中央区仅真实只读查看，不含自动保存/恢复/完整冲突状态机、编辑器、页签、大纲或搜索。
+- `src/`、`src-tauri/`：已建立 P1/P2、共享 `AppDialog`/类型化 `AsyncStatePanel`/`focusContainment`、`WorkspaceTree`、工作区相对路径工具 `workspacePath`、完整浅色运行时 token、桌面契约/调用封装、渐进文件树/变更/监听状态、永久删除对话框、窗口协调、版本化状态仓储，以及工作区选择、扫描、读取、CRUD、删除、定位、监听和安全写入命令；公共焦点工具由对话框和窄窗抽屉共同消费，路径工具由树 reducer 和 P1 页面共同消费，公共状态组件负责状态优先级、非颜色标签和 live-region，启动页快捷键提示按平台展示。当前 P1 中央区仅真实只读查看，不含自动保存/恢复/完整冲突状态机、编辑器、页签、大纲或搜索。
 - `tests/`：已建立脱敏工作区 fixture、Node 临时目录工厂和隔离的 P1/P2 Tauri E2E；`.github/workflows/ci.yml` 已实现并跑通 T16 双平台门禁。macOS 与 Windows 均已通过 Rust lint、平台适用测试、4/4 桌面 E2E、未签名生产构建和 artifact 上传；该自动化证据不替代 Windows 原生系统交互的人工验收。
 - 前端只负责视图、用户意图和可观察状态；不得直接拼接任意绝对路径执行磁盘写操作。
 - Rust 命令层集中负责授权根、路径规范化、越界检查、文件扫描与 CRUD、安全写入、回收站和窗口协调。
@@ -65,16 +65,16 @@
 
 ## 命令与验证状态
 
-- 2026-07-22 已在 macOS arm64 实际验证：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm typecheck`、`pnpm test`、`pnpm build`、`pnpm test:ui`、`pnpm test:workspace-tree`、`pnpm test:permanent-delete-feedback`、`pnpm test:fixtures`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --no-default-features`、`cargo test --locked --manifest-path src-tauri/Cargo.toml --all-features`、`cargo check --locked --manifest-path src-tauri/Cargo.toml --features e2e`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`、`pnpm test:e2e`、`pnpm tauri build --no-bundle` 与 `pnpm tauri build --bundles app`。
+- 2026-07-22 已在 macOS arm64 实际验证：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm typecheck`、`pnpm test`、`pnpm build`、`pnpm test:ui`、`pnpm test:workspace-path`、`pnpm test:workspace-tree`、`pnpm test:permanent-delete-feedback`、`pnpm test:fixtures`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --no-default-features`、`cargo test --locked --manifest-path src-tauri/Cargo.toml --all-features`、`cargo check --locked --manifest-path src-tauri/Cargo.toml --features e2e`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`、`pnpm test:e2e`、`pnpm tauri build --no-bundle` 与 `pnpm tauri build --bundles app`。
 - `pnpm test:e2e` 每次使用独立临时状态目录，真实 macOS Tauri/WebKit 4/4 通过：P2 IPC、1100/740px 布局、入口焦点顺序，以及 fixture 工作区经真实授权/窗口绑定/启动快照/文件树扫描读取 P1 Markdown。默认生产依赖图、前端产物和 release 二进制均确认不含 WDIO/WebDriver 或测试命令。T17 另在生产 `.app` 实测 P1/P2、窄窗抽屉焦点链、原生多窗口、Finder、系统废纸篓、外部监听和同状态目录第二实例退出；这些 macOS 证据不替代 Windows 原生人工验收。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。T16 已在 GitHub `windows-latest` 上验证锁定的 Node/Rust 工具链、Windows 编译、测试、WebView2 E2E 和未签名生产构建；原生系统交互仍保留人工未验证状态。
-- 当前自动化测试覆盖许可证策略、T2～T11 底座、Rust↔TypeScript 契约 parity、T12 launcher、T13 workbench、T14 公共组件、T17 焦点/快捷键契约、根启动错误去重、临时 fixture、失效清理日志满额回归、平台原子替换和 P1/P2 桌面 E2E，共 115 个 Rust 单元测试、18 个前端树状态测试、4 个永久删除反馈测试、35 个 React UI/状态测试、1 个 fixture 测试、4 个许可证策略测试和 4 个桌面 E2E；提交 `9a1690a` 的 Windows runner 已通过 105 个平台适用 Rust 用例、4/4 桌面 E2E 和未签名生产构建。Windows 原生系统 UI 仍未人工验证。许可证扫描覆盖默认与 `e2e` Cargo feature，为 531 个 Node 包、508 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
+- 当前自动化测试覆盖许可证策略、T2～T11 底座、Rust↔TypeScript 契约 parity、T12 launcher、T13 workbench、T14 公共组件、T17 焦点/快捷键契约、根启动错误去重、工作区路径代数、临时 fixture、失效清理日志满额回归、平台原子替换和 P1/P2 桌面 E2E，共 115 个 Rust 单元测试、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、35 个 React UI/状态测试、1 个 fixture 测试、4 个许可证策略测试和 4 个桌面 E2E；提交 `9a1690a` 的 Windows runner 已通过 105 个平台适用 Rust 用例、4/4 桌面 E2E 和未签名生产构建。Windows 原生系统 UI 仍未人工验证。许可证扫描覆盖默认与 `e2e` Cargo feature，为 531 个 Node 包、508 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
 
 ## 文档、协作与 Git
 
 - 除命令、代码、日志和原文外，面向用户使用简体中文。
 - 需求、计划、开发留痕、业务核查、测试证据和 SQL（若未来确有）放入 `agent-works/{feature-slug}/`；同一功能复用同一语义目录，不在根目录堆零散 Markdown。
 - 已确认任务在既有功能目录内的常规开发留痕，随代码、计划状态和验证证据直接同步，不再单独请求确认；只有功能目录、范围拆分或归档边界存在真实歧义时才确认。
-- 修改代码或文档前检查最近一次远端同步时间；超过 2 小时先同步并解决冲突。最近一次远端同步：2026-07-22 18:04 CST（当前分支跟踪 `origin/codex/plainroot-stage-1`；提交 `9a1690a` 已推送并通过双平台 CI）。
+- 修改代码或文档前检查最近一次远端同步时间；超过 2 小时先同步并解决冲突。最近一次远端同步：2026-07-22 21:04 CST（当前分支跟踪 `origin/codex/plainroot-stage-1`；提交 `9a1690a` 已推送并通过双平台 CI）。
 - 工作区可能包含用户未提交改动；先读 `git status`，保留无关改动，不覆盖、不清理、不顺手格式化。
 - 未经用户要求不创建提交或推送。需要提交时按用户确认范围处理，提交信息使用中文语义化描述。

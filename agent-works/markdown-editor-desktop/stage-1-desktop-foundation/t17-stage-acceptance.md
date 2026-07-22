@@ -70,7 +70,7 @@ T17 提交 `9a1690a` 已取得 GitHub Actions 双平台绿灯，第一阶段具�
 ### 5.1 本地自动化与构建
 
 - `pnpm typecheck`：通过。
-- `pnpm test`：通过，包含 4 个许可证策略测试、4 个永久删除反馈测试、18 个文件树 reducer 测试、1 个 fixture 测试和 35 个 React UI/状态测试。
+- `pnpm test`：通过，包含 4 个许可证策略测试、4 个永久删除反馈测试、3 个工作区路径测试、18 个文件树 reducer 测试、1 个 fixture 测试和 35 个 React UI/状态测试。
 - `pnpm build`：通过，生产前端产物约 247.89 kB JS / 22.42 kB CSS。
 - `cargo test --locked --manifest-path src-tauri/Cargo.toml --all-features`：115/115 通过。
 - `cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --no-default-features`：115/115 通过。
@@ -94,6 +94,14 @@ T17 提交 `9a1690a` 已取得 GitHub Actions 双平台绿灯，第一阶段具�
 - 自动化证据：新增根级 React 回归，锁定同源双失败时仅有一个 `role=alert`、不存在“无法恢复当前窗口”，并保留“重试”和“打开文件夹”。React UI/状态测试由 34 个增至 35 个。
 - 浏览器证据：在 1280×820 与 740×760 两个桌面窗口宽度真实渲染原生能力不可用的错误态，均只有一条错误面板、无 `.app-bootstrap--error`、无横向溢出；关闭后错误面消失且主打开入口保留，重试失败后仍只保留一条可重试错误。
 - 范围与回滚：该修改只收敛 P2/R11 的错误反馈，不改变需求编号、状态仓库、IPC、窗口协调、文件权限、配置或用户 Markdown；回滚对应 App 根层与回归测试改动即可。
+
+## 前端复用审查后的路径代数收口
+
+- 复核发现：`workspaceTreeState.ts` 与 `WorkspaceWorkbench.tsx` 分别维护父路径、同路径/子路径判断和前缀重映射；其中根级父路径已分别返回空字符串和 `null`，存在重命名/移动后树状态与页面选中、展开、文档状态继续分叉的风险。
+- 修改结果：新增纯函数复用单元 `workspacePath.ts`，两个消费者统一使用 `parentPath`、`isSameOrInside` 和 `replacePrefix`；树 reducer 在消费父路径时用 `?? ROOT_KEY` 保留自身根键契约，页面继续使用 `null` 表达没有父目录。
+- 自动化证据：新增 3 个纯函数测试，覆盖根级与嵌套父路径、完整路径段边界、目标及后代重映射和相似前缀不误改；18 个既有树 reducer 测试继续验证新建、重命名、移动、删除与监听归并行为。
+- 复用边界：页面错误“关闭/重试”动作的资格模型不同，launcher 与 workbench gateway mock 的命令集合也不同，本次不强行抽取；若出现第三个同职责消费者或两处模型收敛，再重新评估。
+- 范围与回滚：该修改只收敛 P1/R2 的前端相对路径状态映射，不改变 Rust 路径授权、磁盘命令、IPC、配置、权限或用户 Markdown；回滚 util、两个消费者、测试与登记文档即可。
 
 ### 5.3 未验证边界
 

@@ -22,6 +22,7 @@ import type {
 import { desktopErrorMessage, normalizeDesktopError } from "../../services/desktop/errors";
 import { PermanentDeleteDialog } from "./PermanentDeleteDialog";
 import { WorkspaceTree } from "./WorkspaceTree";
+import { isSameOrInside, parentPath, replacePrefix } from "./workspacePath";
 import {
   applyDirectoryScanBatch,
   applyWorkspaceTreeDeleteSuccess,
@@ -788,19 +789,6 @@ function DocumentView({
 
 function documentMetric(state: Parameters<typeof DocumentView>[0]["state"]): string {
   return state.status === "ready" ? `${state.result.content?.length ?? 0} 字符` : "未打开文档";
-}
-
-function parentPath(path: string): WorkspaceRelativePath | null {
-  return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : null;
-}
-
-function isSameOrInside(path: string, parent: string): boolean {
-  return path === parent || path.startsWith(`${parent}/`);
-}
-
-function replacePrefix(path: string, previous: string, next: string): string {
-  if (path === previous) return next;
-  return path.startsWith(`${previous}/`) ? `${next}${path.slice(previous.length)}` : path;
 }
 
 function supportsPageRetry(error: DesktopError, hasSelectedEntry: boolean) {

@@ -200,9 +200,9 @@ Key Characteristics：
 | 工作区启动 P2 | launcher | 打开本地目录或文件 | 欢迎与主入口 + 最近工作区列表 |
 | 颜色主题工作室 P3 | settings studio | 编辑、验证、预览并保存主题 | 设置导航 + 预设库 + token 编辑 + 实时预览 + 固定提交区 |
 
-已登记运行时组件：
+已登记运行时复用单元：
 
-| 组件 | 代码事实源 | 当前消费者 | 稳定职责 |
+| 复用单元 | 代码事实源 | 当前消费者 | 稳定职责 |
 |---|---|---|---|
 | `focusContainment` | `src/components/focusContainment.ts` | `AppDialog`、P1 窄窗文件树抽屉 | 可聚焦元素筛选、进入焦点、Tab/Shift+Tab 圈定和安全焦点恢复；不持有页面业务状态 |
 | `AppDialog` | `src/components/AppDialog.tsx` | P1/P2 打开流程、文件操作、永久删除 | 原生 dialog、共享焦点圈定、Esc/遮罩关闭、关闭门禁、焦点返回和统一动作区 |
@@ -210,6 +210,7 @@ Key Characteristics：
 | `WorkspaceLauncher` | `src/features/launcher/WorkspaceLauncher.tsx` | P2 | 本地打开主入口、最近记录、授权、窗口决策与根会话恢复 |
 | `WorkspaceWorkbench` | `src/features/workbench/WorkspaceWorkbench.tsx` | P1 | 当前根工作区壳、真实文件操作、只读 Markdown 状态、窗口决策与窄窗目录抽屉 |
 | `WorkspaceTree` | `src/features/workbench/WorkspaceTree.tsx` | P1 | 渐进目录节点、磁盘提交后更新、只读标识、异步刷新期间也稳定的单一 Tab 停靠点，以及上下/首尾/父子方向键导航 |
+| `workspacePath` | `src/features/workbench/workspacePath.ts` | `workspaceTreeState`、`WorkspaceWorkbench` | 工作区相对路径的父级计算、同路径/子路径边界判断和前缀重映射；根目录键仍由树状态层适配 |
 
 布局规则：
 
@@ -287,7 +288,7 @@ Iteration Guide：
 
 ## 10. Known Gaps
 
-- P2、P1 第一阶段工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；T17 已完成页面私有颜色/渐变收口，并让 `AppDialog` 与 P1 窄窗抽屉共同消费 `focusContainment`。`PathStatus`、`DesktopWindowStatus` 未形成两个同职责消费者，因此未登记为空组件。P1 的编辑器、页签、大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
+- P2、P1 第一阶段工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；T17 已完成页面私有颜色/渐变收口，并让 `AppDialog` 与 P1 窄窗抽屉共同消费 `focusContainment`。P1 文件树 reducer 与工作台页面共同消费 `workspacePath`，避免重命名/移动后的树状态与页面选择状态使用两套路径规则。`PathStatus`、`DesktopWindowStatus` 未形成两个同职责消费者，因此未登记为空组件。P1 的编辑器、页签、大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
 - 启动页原型危险色为 `#955252`，工作台和主题工作室为 `#9b5050`；本文已收敛为 `#9b5050`，正式实现时应统一消费 token。
 - 暗色主题尚无完整原型和 token；不得简单反转当前亮色值。R7/R15 阶段需补全明暗语义、派生状态和跨窗口预览测试。
 - `17px / 1.76`、约 `760–820px` 正文宽度及 `252/220px` 侧栏是 alpha 校准基线，仍需在不同 DPI、中英文长文和 Windows 字体渲染下验证。

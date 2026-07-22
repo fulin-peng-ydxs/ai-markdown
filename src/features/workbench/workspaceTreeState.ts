@@ -12,6 +12,7 @@ import type {
   WorkspaceWatchStart,
   WorkspaceWatchStatus,
 } from "../../services/desktop/contracts";
+import { isSameOrInside, parentPath, replacePrefix } from "./workspacePath.ts";
 
 export type DirectoryLoadStatus =
   | "idle"
@@ -313,20 +314,22 @@ export function applyWorkspaceTreeMutationSuccess(
   const nextPath = result.entry.relativePath;
   const entries: Record<WorkspaceRelativePath, FsEntry> = {};
   for (const [path, entry] of Object.entries(state.entries)) {
-    const mapped = previousPath ? replacePathPrefix(path, previousPath, nextPath) : path;
+    const mapped = previousPath ? replacePrefix(path, previousPath, nextPath) : path;
     entries[mapped] = path === previousPath ? result.entry : { ...entry, relativePath: mapped };
   }
   entries[nextPath] = result.entry;
 
   const children: Record<string, WorkspaceRelativePath[]> = {};
-  const previousParent = previousPath ? parentPath(previousPath) : null;
-  const nextParent = parentPath(nextPath);
+  const previousParent = previousPath
+    ? (parentPath(previousPath) ?? ROOT_KEY)
+    : null;
+  const nextParent = parentPath(nextPath) ?? ROOT_KEY;
   for (const [parent, paths] of Object.entries(state.children)) {
     const mappedParent = previousPath
-      ? replacePathPrefix(parent, previousPath, nextPath)
+      ? replacePrefix(parent, previousPath, nextPath)
       : parent;
     const mappedPaths = paths.map((path) =>
-      previousPath ? replacePathPrefix(path, previousPath, nextPath) : path,
+      previousPath ? replacePrefix(path, previousPath, nextPath) : path,
     );
     children[mappedParent] =
       previousParent !== null && previousParent !== nextParent && parent === previousParent
@@ -392,7 +395,7 @@ export function applyWorkspaceTreeDeleteSuccess(
   const scans = Object.fromEntries(
     Object.entries(state.scans).filter(
       ([directory]) =>
-        directory !== parentPath(result.relativePath) &&
+        directory !== (parentPath(result.relativePath) ?? ROOT_KEY) &&
         !isSameOrInside(directory, result.relativePath),
     ),
   );
@@ -420,25 +423,4 @@ export function markDirectoryScanCancelled(
 
 function isInsideDirectory(path: string, directory: string): boolean {
   return directory === ROOT_KEY || path.startsWith(`${directory}/`);
-}
-
-function isSameOrInside(path: string, directory: string): boolean {
-  return path === directory || isInsideDirectory(path, directory);
-}
-
-function replacePathPrefix(
-  path: string,
-  previousPath: string,
-  nextPath: string,
-): string {
-  if (path === previousPath) {
-    return nextPath;
-  }
-  return path.startsWith(`${previousPath}/`)
-    ? `${nextPath}${path.slice(previousPath.length)}`
-    : path;
-}
-
-function parentPath(path: string): string {
-  return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ROOT_KEY;
 }
