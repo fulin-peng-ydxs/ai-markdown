@@ -15,7 +15,7 @@
 - T1 已建立并验证技术基线：Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以当前清单和锁文件为准。
 - Markdown 内容事实源始终是用户授权目录中的真实 `.md` 文件；首版不建立云端账号、在线协作、插件市场或私有内容数据库。
 - 当前仓库已完成 T1～T17 的本地开发、macOS 实机与 macOS/Windows 双平台 CI 验收；提交 `9a1690a` 的远端矩阵已确认许可证、类型、前端/Rust 测试、4/4 桌面 E2E、未签名生产构建和 artifact 上传全部通过。当前具备真实系统选择器、最近记录、根目录决策、渐进文件树、只读 Markdown、文件 CRUD/删除/定位入口、窄窗目录抽屉、多窗口打开和可重复隔离的 P1/P2 桌面测试；Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍无人工实机证据。产品尚无自动保存、恢复快照、完整外部冲突状态机、编辑器/页签/大纲，第一阶段完成不得表述为完整 R1、R2、R5 或 R14 完成。
-- 第二阶段当前分支为 `codex/plainroot-stage-2`，执行计划位于 `agent-works/markdown-editor-desktop/stage-2-markdown-editing/plan.md`；T18～T32 均为待开始。已确认 Milkdown/ProseMirror + CodeMirror 6、统一 Markdown 内容源、独立短期恢复仓储、单目标另存和根内资源目录边界，但这些仍是计划与约束，不是已实现能力；T18 PoC 未通过前不得继续正式编辑器集成。
+- 第二阶段当前分支为 `codex/plainroot-stage-2`，执行计划位于 `agent-works/markdown-editor-desktop/stage-2-markdown-editing/plan.md`；T18 已完成，T19 待开始。Milkdown 7.21.3、CodeMirror 6 及其 React/Markdown adapter 已精确锁定并通过隔离 PoC，但未接入正式 P1；统一文档会话、保存、恢复、另存和资源目录仍只是计划约束，不是已实现能力。
 
 ## 当前与目标代码边界
 
@@ -67,16 +67,16 @@
 
 ## 命令与验证状态
 
-- 2026-07-22 已在 macOS arm64 实际验证：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm typecheck`、`pnpm test`、`pnpm build`、`pnpm test:ui`、`pnpm test:workspace-path`、`pnpm test:workspace-tree`、`pnpm test:permanent-delete-feedback`、`pnpm test:fixtures`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --no-default-features`、`cargo test --locked --manifest-path src-tauri/Cargo.toml --all-features`、`cargo check --locked --manifest-path src-tauri/Cargo.toml --features e2e`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`、`pnpm test:e2e`、`pnpm tauri build --no-bundle` 与 `pnpm tauri build --bundles app`。
+- 2026-07-22 已在 macOS arm64 实际验证：`nvm use`、`pnpm install --frozen-lockfile`、`pnpm typecheck`、`pnpm test`、`pnpm build`、`pnpm test:ui`、`pnpm test:workspace-path`、`pnpm test:workspace-tree`、`pnpm test:permanent-delete-feedback`、`pnpm test:fixtures`、`pnpm test:editor-poc`、`pnpm test:editor-poc:performance`、`pnpm test:licenses`、`pnpm licenses:check`、`cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --no-default-features`、`cargo test --locked --manifest-path src-tauri/Cargo.toml --all-features`、`cargo check --locked --manifest-path src-tauri/Cargo.toml --features e2e`、`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`、`cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`、`pnpm test:e2e`、`pnpm tauri build --no-bundle` 与 `pnpm tauri build --bundles app`。
 - `pnpm test:e2e` 每次使用独立临时状态目录，真实 macOS Tauri/WebKit 4/4 通过：P2 IPC、1100/740px 布局、入口焦点顺序，以及 fixture 工作区经真实授权/窗口绑定/启动快照/文件树扫描读取 P1 Markdown。默认生产依赖图、前端产物和 release 二进制均确认不含 WDIO/WebDriver 或测试命令。T17 另在生产 `.app` 实测 P1/P2、窄窗抽屉焦点链、原生多窗口、Finder、系统废纸篓、外部监听和同状态目录第二实例退出；这些 macOS 证据不替代 Windows 原生人工验收。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。T16 已在 GitHub `windows-latest` 上验证锁定的 Node/Rust 工具链、Windows 编译、测试、WebView2 E2E 和未签名生产构建；原生系统交互仍保留人工未验证状态。
-- 当前自动化测试覆盖许可证策略、T2～T11 底座、Rust↔TypeScript 契约 parity、T12 launcher、T13 workbench、T14 公共组件、T17 焦点/快捷键契约、根启动错误去重、工作区路径代数、临时 fixture、失效清理日志满额回归、平台原子替换和 P1/P2 桌面 E2E，共 115 个 Rust 单元测试、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、35 个 React UI/状态测试、1 个 fixture 测试、4 个许可证策略测试和 4 个桌面 E2E；提交 `9a1690a` 的 Windows runner 已通过 105 个平台适用 Rust 用例、4/4 桌面 E2E 和未签名生产构建。Windows 原生系统 UI 仍未人工验证。许可证扫描覆盖默认与 `e2e` Cargo feature，为 531 个 Node 包、508 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
+- 当前自动化测试覆盖许可证策略、T2～T11 底座、Rust↔TypeScript 契约 parity、T12 launcher、T13 workbench、T14 公共组件、T17 焦点/快捷键契约、T18 编辑器 PoC、根启动错误去重、工作区路径代数、临时 fixture、失效清理日志满额回归、平台原子替换和 P1/P2 桌面 E2E，共 115 个 Rust 单元测试、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、42 个 React UI/状态/编辑器 PoC 测试、1 个 fixture 测试、4 个许可证策略测试和 4 个桌面 E2E；提交 `9a1690a` 的 Windows runner 已通过 105 个平台适用 Rust 用例、4/4 桌面 E2E 和未签名生产构建。T18 新依赖尚无远端 Windows 证据，且 Windows 原生系统 UI 仍未人工验证。许可证扫描覆盖默认与 `e2e` Cargo feature，为 727 个 Node 包、508 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
 
 ## 文档、协作与 Git
 
 - 除命令、代码、日志和原文外，面向用户使用简体中文。
 - 需求、计划、开发留痕、业务核查、测试证据和 SQL（若未来确有）放入 `agent-works/{feature-slug}/`；同一功能复用同一语义目录，不在根目录堆零散 Markdown。
 - 已确认任务在既有功能目录内的常规开发留痕，随代码、计划状态和验证证据直接同步，不再单独请求确认；只有功能目录、范围拆分或归档边界存在真实歧义时才确认。
-- 修改代码或文档前检查最近一次远端同步时间；超过 2 小时先同步并解决冲突。最近一次远端同步：2026-07-22 21:04 CST（当前分支跟踪 `origin/codex/plainroot-stage-1`；提交 `9a1690a` 已推送并通过双平台 CI）。
+- 修改代码或文档前检查最近一次远端同步时间；超过 2 小时先同步并解决冲突。最近一次远端同步：2026-07-22 23:11 CST（已抓取 `origin/codex/plainroot-stage-1`；当前 `codex/plainroot-stage-2` 尚无 upstream，未推送）。
 - 工作区可能包含用户未提交改动；先读 `git status`，保留无关改动，不覆盖、不清理、不顺手格式化。
 - 未经用户要求不创建提交或推送。需要提交时按用户确认范围处理，提交信息使用中文语义化描述。

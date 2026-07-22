@@ -1,6 +1,6 @@
 # Plainroot
 
-Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成本地、macOS 实机与 macOS/Windows 双平台 CI 验收：当前具备 Tauri/React 工程、受控工作区授权、文件扫描与安全写入底座、文件操作/监听、原生窗口菜单、工作区窗口协调、真实 P2 启动页、P1 只读工作台以及隔离的 P1/P2 桌面 E2E。第二阶段编辑与保存计划已经建立，但任务尚未开始；当前仍没有可用的编辑器、页签、大纲、自动保存或完整冲突状态机。
+Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成本地、macOS 实机与 macOS/Windows 双平台 CI 验收：当前具备 Tauri/React 工程、受控工作区授权、文件扫描与安全写入底座、文件操作/监听、原生窗口菜单、工作区窗口协调、真实 P2 启动页、P1 只读工作台以及隔离的 P1/P2 桌面 E2E。第二阶段 T18 已完成 Milkdown 7.21.3 + CodeMirror 6 技术门禁，T19 待开始；PoC 未接入正式 P1，当前仍没有可用的产品编辑器、页签、大纲、自动保存或完整冲突状态机。
 
 ## 工具链
 
@@ -23,6 +23,8 @@ pnpm test:workspace-path
 pnpm test:workspace-tree
 pnpm test:permanent-delete-feedback
 pnpm test:fixtures
+pnpm test:editor-poc
+pnpm test:editor-poc:performance
 pnpm test:licenses
 pnpm licenses:check
 cargo check --locked --manifest-path src-tauri/Cargo.toml
