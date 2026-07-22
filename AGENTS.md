@@ -15,6 +15,7 @@
 - T1 已建立并验证技术基线：Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以当前清单和锁文件为准。
 - Markdown 内容事实源始终是用户授权目录中的真实 `.md` 文件；首版不建立云端账号、在线协作、插件市场或私有内容数据库。
 - 当前仓库已完成 T1～T17 的本地开发、macOS 实机与 macOS/Windows 双平台 CI 验收；提交 `9a1690a` 的远端矩阵已确认许可证、类型、前端/Rust 测试、4/4 桌面 E2E、未签名生产构建和 artifact 上传全部通过。当前具备真实系统选择器、最近记录、根目录决策、渐进文件树、只读 Markdown、文件 CRUD/删除/定位入口、窄窗目录抽屉、多窗口打开和可重复隔离的 P1/P2 桌面测试；Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍无人工实机证据。产品尚无自动保存、恢复快照、完整外部冲突状态机、编辑器/页签/大纲，第一阶段完成不得表述为完整 R1、R2、R5 或 R14 完成。
+- 第二阶段当前分支为 `codex/plainroot-stage-2`，执行计划位于 `agent-works/markdown-editor-desktop/stage-2-markdown-editing/plan.md`；T18～T32 均为待开始。已确认 Milkdown/ProseMirror + CodeMirror 6、统一 Markdown 内容源、独立短期恢复仓储、单目标另存和根内资源目录边界，但这些仍是计划与约束，不是已实现能力；T18 PoC 未通过前不得继续正式编辑器集成。
 
 ## 当前与目标代码边界
 
