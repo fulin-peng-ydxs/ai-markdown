@@ -1,6 +1,6 @@
 # Plainroot
 
-Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成本地开发与 macOS 验收，T16 基线已取得 macOS/Windows 双平台 CI 绿灯：当前具备 Tauri/React 工程、受控工作区授权、文件扫描与安全写入底座、文件操作/监听、原生窗口菜单、工作区窗口协调、真实 P2 启动页、P1 只读工作台以及隔离的 P1/P2 桌面 E2E。T17 当前增量尚未推送，仍需在推送后复跑双平台 CI；编辑器、页签、大纲、自动保存与完整冲突状态机尚未进入开发。
+Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成本地、macOS 实机与 macOS/Windows 双平台 CI 验收：当前具备 Tauri/React 工程、受控工作区授权、文件扫描与安全写入底座、文件操作/监听、原生窗口菜单、工作区窗口协调、真实 P2 启动页、P1 只读工作台以及隔离的 P1/P2 桌面 E2E。编辑器、页签、大纲、自动保存与完整冲突状态机尚未进入开发。
 
 ## 工具链
 
@@ -32,7 +32,7 @@ pnpm tauri build --no-bundle
 pnpm tauri build --bundles app
 ```
 
-`pnpm test:e2e` 会构建独立 identifier/capability 的测试版本，以临时状态目录启动 embedded WebDriver，覆盖 P2 与 P1 fixture 工作区真 IPC；测试 feature 默认关闭，不进入正式构建。T16 基线已在 GitHub Actions 的 macOS/Windows runner 上通过 4/4 桌面 E2E 和生产构建；尚未推送的本地增量不能沿用该结果。
+`pnpm test:e2e` 会构建独立 identifier/capability 的测试版本，以临时状态目录启动 embedded WebDriver，覆盖 P2 与 P1 fixture 工作区真 IPC；测试 feature 默认关闭，不进入正式构建。提交 `9a1690a` 已在 GitHub Actions 的 macOS/Windows runner 上通过 4/4 桌面 E2E 和生产构建。
 
 开发模式在依赖安装完成后运行：
 

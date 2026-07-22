@@ -23,7 +23,7 @@ T17 已完成本地验收并修复 5 项真实问题：
 
 第一阶段任务状态：T1～T17 的本地开发与 macOS 验收已完成。R1、R2、R5、R8、R11、R14、R30、R31 仅表示第一阶段子集完成，产品级需求仍是部分覆盖；编辑器、页签、大纲、自动保存、恢复快照、完整冲突状态机和主题工作室必须由后续阶段继续承接。
 
-T16 基线提交 `0e25dae` 已取得 GitHub Actions 双平台绿灯。T17 当前增量在本地完成验证，尚未推送，因此不能把基线提交的 Windows 结果表述为当前增量的远端 Windows 验证。
+T17 提交 `9a1690a` 已取得 GitHub Actions 双平台绿灯，第一阶段具备覆盖最新代码的 macOS/Windows 自动化证据。
 
 ## 3. 功能开发的具体实施方案
 
@@ -85,11 +85,10 @@ T16 基线提交 `0e25dae` 已取得 GitHub Actions 双平台绿灯。T17 当前
 ### 5.2 真实平台与远端证据
 
 - macOS 生产 `.app`：系统选择器、P1/P2、740px 抽屉焦点链、原生多窗口、关闭窗口快捷键、Finder 定位、系统废纸篓、外部变化监听和单实例均已人工实测通过。
-- T16 基线 GitHub Actions：运行 `29885090733` 的 macOS/Windows 矩阵均为 Success；macOS artifact SHA-256 为 `e58d26fa0ff7ba2d8b3718efb84cc66aa8c9b6294b9b3e8e52aaa359d13ba23d`，Windows artifact SHA-256 为 `2e1a559f7c4a58cba77ce982f3e33c82c9b2d00f4a4555e63651e5ec931d8837`。
+- T17 GitHub Actions：[Desktop CI 29889538719](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29889538719) 的 macOS/Windows 矩阵均为 Success；macOS artifact SHA-256 为 `24e306da5e1abc40eb7d644df09a8a5a1cebe737f915bf3c78e5340366806b37`，Windows artifact SHA-256 为 `b31ffc8cccb97256c1c49863d0b442a40943c3fbfe33f276c3d4498c045f2f1d`。
 
 ### 5.3 未验证边界
 
-- T17 当前增量尚未推送，未取得包含本次焦点、样式和快捷键修复的 Windows runner 结果。
 - Windows 原生选择器、回收站、Explorer、原生菜单与辅助技术仍缺人工实机验收；既有自动化绿灯不能替代这些系统 UI 证据。
 - 系统休眠、网络卷、文件系统卸载和超大目录的长时行为未执行。
 - P1 尚无编辑器，因此自动保存、恢复快照和完整外部冲突产品链路不适用；本阶段只验证了对应的底层安全写与修订原语。
