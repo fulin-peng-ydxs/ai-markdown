@@ -53,12 +53,20 @@ async function measureEditorBundle() {
       rollupOptions: {
         external: ["react", "react-dom", "react/jsx-runtime"],
         input: entry,
+        preserveEntrySignatures: "strict",
       },
     },
   });
   const outputs = Array.isArray(result) ? result.flatMap((item) => item.output) : result.output;
   const chunks = outputs.filter((output) => output.type === "chunk");
   const code = chunks.map((chunk) => chunk.code).join("\n");
+
+  if (code.length === 0) {
+    throw new Error("Editor bundle probe was tree-shaken; package-size evidence is invalid.");
+  }
+  if (code.includes("__plainrootEditorBundleProbe")) {
+    throw new Error("Editor bundle probe must not depend on a global runtime marker.");
+  }
 
   return {
     rawBytes: Buffer.byteLength(code),

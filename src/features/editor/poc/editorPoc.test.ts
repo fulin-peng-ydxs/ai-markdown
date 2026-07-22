@@ -49,9 +49,16 @@ describe("Milkdown 7.21.3 PoC", () => {
     expect(typeof reparsed).not.toBe("string");
     if (typeof reparsed !== "string") expect(reparsed.textContent).toBe(before.textContent);
     expect(canonical.getMarkdown()).toBe(serialized);
+    expect(serialized).toContain("**粗体**");
+    expect(serialized).toContain("*斜体*");
+    expect(serialized).toContain("~~删除线~~");
+    expect(serialized).toContain("[链接](https://example.com)");
+    expect(serialized).toContain("> 长文引用保持语义。");
+    expect(serialized).toContain("1. 有序项目");
     expect(serialized).toMatch(/\| 能力 \| 状态\s+\|/);
     expect(serialized).toMatch(/[*-] \[x\] 已完成/);
     expect(serialized).toContain("```ts");
+    expect(serialized).toContain('![示例图片](assets/example.png "图片标题")');
 
     await canonical.destroy();
     await instance.destroy();
@@ -63,12 +70,17 @@ describe("Milkdown 7.21.3 PoC", () => {
 
     expect(serialized).toContain("<details>");
     expect(serialized).toContain("<summary>保留原始 HTML</summary>");
+    expect(serialized).toContain("<script>globalThis.__plainrootRawHtmlExecuted = true;</script>");
     expect(instance.view.dom.querySelector("script")).toBeNull();
+    expect(
+      (globalThis as typeof globalThis & { __plainrootRawHtmlExecuted?: boolean })
+        .__plainrootRawHtmlExecuted,
+    ).toBeUndefined();
 
     await instance.destroy();
   });
 
-  it("survives focus, composition and Markdown clipboard input, then destroys listeners", async () => {
+  it("accepts programmatic Chinese insertion and Markdown clipboard input, then destroys listeners", async () => {
     const root = mountRoot();
     const instance = await createMilkdownPoc(root, "# 输入测试\n\n开始");
     const onFocus = vi.fn();
@@ -76,11 +88,9 @@ describe("Milkdown 7.21.3 PoC", () => {
     instance.editor.ctx.get(listenerCtx).focus(onFocus).destroy(onDestroy);
 
     instance.view.focus();
-    instance.view.dom.dispatchEvent(new CompositionEvent("compositionstart", { data: "中" }));
     instance.view.dispatch(
       instance.view.state.tr.insertText("中文输入", instance.view.state.doc.content.size),
     );
-    instance.view.dom.dispatchEvent(new CompositionEvent("compositionend", { data: "中文输入" }));
 
     instance.view.dispatch(
       instance.view.state.tr.setSelection(TextSelection.atEnd(instance.view.state.doc)),
@@ -105,18 +115,14 @@ describe("Milkdown 7.21.3 PoC", () => {
 });
 
 describe("CodeMirror 6 PoC", () => {
-  it("creates, focuses, accepts composition text and releases its view", () => {
+  it("creates, focuses, accepts a programmatic Chinese change and releases its view", () => {
     const root = mountRoot();
     const view = createCodeMirrorPoc(root, commonmarkGfm);
 
     view.focus();
-    view.contentDOM.dispatchEvent(new CompositionEvent("compositionstart", { data: "中" }));
     view.dispatch({
       changes: { from: view.state.doc.length, insert: "\n中文源码输入" },
     });
-    view.contentDOM.dispatchEvent(
-      new CompositionEvent("compositionend", { data: "中文源码输入" }),
-    );
 
     expect(view.hasFocus).toBe(true);
     expect(view.state.doc.toString()).toContain("中文源码输入");

@@ -8,8 +8,8 @@ import { Milkdown, MilkdownProvider } from "@milkdown/react";
 import { markdown } from "@codemirror/lang-markdown";
 import { basicSetup, EditorView } from "codemirror";
 
-// A dedicated build entry measures the editor dependency increment without exposing a
-// hidden production route or forcing T18's disposable PoC into the shipped application.
+// This module is a build-only entry. The report script preserves its exports so Rollup
+// cannot erase the measured dependency graph; production code never imports this file.
 export const editorBundleProbe = {
   Editor,
   EditorView,
@@ -23,8 +23,3 @@ export const editorBundleProbe = {
   listener,
   markdown,
 };
-
-Object.defineProperty(globalThis, "__plainrootEditorBundleProbe", {
-  configurable: true,
-  value: editorBundleProbe,
-});

@@ -7,7 +7,7 @@ T18 是第二阶段正式编辑器开发前的技术硬门禁，对应 R1、R3�
 - 精确锁定编辑器依赖，许可证策略不放宽；
 - CommonMark、GFM、中文/英文、表格、图片、代码块和 raw HTML 能稳定语义往返；
 - 未验证支持的 frontmatter、自定义 directive、wiki link 和 MDX 组件不被排版编辑器静默改写，必须保留原始源码并进入源码安全路径；
-- 两个 editor 可以创建、聚焦、处理 composition/剪贴板并完整销毁；
+- 两个 editor 可以创建、聚焦、处理程序化中文插入/剪贴板并完整销毁；真实 IME composition 必须单独取得浏览器/WebView 证据；
 - 记录 100 KiB、5 MiB、20 MiB、64 MiB 文档的序列化/hash 成本、编辑器依赖包体和首次加载数据；
 - PoC 不得接入正式 P1，不得创建菜单、权限、配置、持久化或用户数据副作用；任一硬门禁失败时停止 T19。
 
@@ -20,11 +20,11 @@ T18 结论为通过，可以进入 T19，但不能据此宣称 R3、R6 或 R10 �
 - `package.json` 与 `pnpm-lock.yaml` 精确锁定 `@milkdown/kit@7.21.3`、`@milkdown/react@7.21.3`、`codemirror@6.0.2`、`@codemirror/lang-markdown@6.5.1`；四个直接依赖均为 MIT。
 - `src/features/editor/poc/` 建立隔离的 Milkdown 直接 adapter、React adapter、CodeMirror adapter、浏览器 PoC、异常语法分类器和包体探针；这些模块未被 `src/App.tsx` 或正式 P1 导入。
 - `tests/fixtures/markdown/` 建立 CommonMark/GFM、raw HTML 与 source-only 三类语料。
-- 7 个专项测试验证 React 挂载/销毁、稳定语义往返、raw HTML 保留且不生成可执行 `script`、焦点、composition、剪贴板、CodeMirror 生命周期、异常语法原文保留与 fenced code 排除。
+- 7 个专项测试验证 React 挂载/销毁，粗体、斜体、删除线、链接、引用、有序列表、任务、代码、表格和图片的稳定结构往返，raw HTML 保留且不生成可执行 `script`，焦点、程序化中文插入、剪贴板、CodeMirror 生命周期、异常语法原文保留与 fenced code 排除。jsdom 没有真实 IME 路径，测试名称和留痕不再把程序化事务写入称作 composition。
 - 受支持 Markdown 的“无损”落实为语义和规范化输出稳定，不把列表符号、分隔线和表格空格等合法规范化误判为数据丢失；异常扩展语法不进入排版往返。
-- 真实 Chromium 页面加载后，Milkdown 首次 ready 为 104.8 ms、CodeMirror 为 3.8 ms，两个 editor 均完成中文输入且控制台无错误。
+- 真实 Chromium 页面加载后，Milkdown 首次 ready 为 104.8 ms、CodeMirror 为 3.8 ms，两个 editor 均完成中文按键输入且控制台无错误；该自动化没有启用系统输入法候选流程，不等同真实 IME。
 - macOS Tauri WebKit 605.1.15 已真实启动并加载两个 editor；WebDriver 自动化中文按键未能写入 contenteditable，且本机 UI 当时处于锁定状态，未取得人工输入证据。该缺口不伪报为通过，完整 WebKit/Windows 输入由 T23/T31 在产品 adapter 与桌面 E2E 中继续验证。
-- 正式生产入口未加载编辑器 PoC，生产 JS 保持 247.44 kB / gzip 75.91 kB；独立编辑器依赖 chunk（排除仓库既有 React）为 1,063,853 B / gzip 347,935 B，证明 T23 必须按文档首次打开懒加载，不能并入根启动包。
+- 正式生产入口未加载编辑器 PoC，生产 JS 保持 247.44 kB / gzip 75.91 kB；独立编辑器依赖 chunk（排除仓库既有 React）为 1,063,793 B / gzip 347,906 B，证明 T23 必须按文档首次打开懒加载，不能并入根启动包。统计入口依靠 Rollup `preserveEntrySignatures` 保留导出，不再在 import 时向 `globalThis` 注入标记。
 - 没有新增数据库、SQL、seed、产品环境变量、Tauri capability、菜单、用户偏好或初始化数据。
 
 ## 3. 功能开发的具体实施方案
@@ -33,19 +33,19 @@ T18 结论为通过，可以进入 T19，但不能据此宣称 R3、R6 或 R10 �
 
 - `milkdownPoc.ts` 统一装配 CommonMark、GFM、clipboard、history 和 listener；`MilkdownReactPoc.tsx` 复用同一个工厂，避免直接/React 两套配置漂移。
 - `codeMirrorPoc.ts` 只验证 CodeMirror 6 Markdown 创建、输入、焦点和销毁，不建立第二份文件或保存通道。
-- `markdownCompatibility.ts` 使用保守 source-only 分类识别本阶段没有往返证据的语法，并忽略 fenced code 中的示例文本。该分类器是 T18 技术证据，T19/T23 仍须把它接入唯一 `DocumentSession`，当前不会改变 P1 行为。
+- `markdownCompatibility.ts` 使用保守的行级启发式分类识别本阶段没有往返证据的语法，并忽略普通 fenced code 中的示例文本。它可能把以主题分隔线开头的文档误判为 frontmatter，也不完整识别 blockquote 内 fence；误判只会进入更安全的源码路径。该分类器只是 T18 技术证据，T19 必须以 Markdown AST/解析结果建立生产判定，不能直接把此启发式接入唯一 `DocumentSession`。
 - `browserPoc.tsx` 与 `poc.html` 仅用于开发验证，不在 Vite 正式入口图中；`editorBundleProbe.ts` 只为构建统计保留依赖引用。
 
 ### 3.2 性能和包体
 
-`scripts/editor-poc-report.mjs` 可重复生成四个尺寸的 JSON 序列化、SHA-256 和编辑器依赖 chunk 报告。本次 Node 24.11.1 实测如下：
+`scripts/editor-poc-report.mjs` 可重复生成四个尺寸的 JSON 序列化、SHA-256 和编辑器依赖 chunk 报告。整改后 Node 24.11.1 连续两次实测区间如下；瞬时耗时仅作为数量级证据，不作为跨机器阈值：
 
 | 文档尺寸 | JSON 序列化 | SHA-256 |
 | --- | ---: | ---: |
-| 100 KiB | 0.23 ms | 0.31 ms |
-| 5 MiB | 6.41 ms | 6.08 ms |
-| 20 MiB | 21.70 ms | 25.27 ms |
-| 64 MiB | 85.85 ms | 106.75 ms |
+| 100 KiB | 0.09～0.13 ms | 0.28～0.31 ms |
+| 5 MiB | 6.32～12.11 ms | 5.85～9.71 ms |
+| 20 MiB | 24.79～27.60 ms | 26.35～31.62 ms |
+| 64 MiB | 91.00～123.02 ms | 94.78～106.01 ms |
 
 这些数字只证明前端传输前序列化与 hash 的数量级，不代表 64 MiB 文档已完成 Milkdown 排版、自动保存或恢复快照产品验收。800 ms/2 秒/5 秒防抖仍是候选值，须由 T26 结合真实写盘次数、编辑延迟和大文档策略校准。
 
@@ -84,12 +84,13 @@ pnpm test:editor-poc:performance
 - `pnpm tauri build --no-bundle`；
 - 生产 `dist` 与 release 二进制无 `editorBundleProbe`、PoC 输入文本或 PoC 工厂标记；
 - `git diff --check`；
-- 真实 Chromium 交互：两个 editor 中文输入、焦点和无控制台错误；
+- 真实 Chromium 交互：两个 editor 中文按键输入、焦点和无控制台错误；未启用系统输入法候选流程；
 - 真实 macOS Tauri WebKit 605.1.15：应用与两个 editor 加载成功。
 
 ### 5.2 未通过或未执行
 
-- macOS WebKit 自动化按键未写入 contenteditable；这次失败不表示 editor 解析/加载失败，但也不能作为中文输入通过证据。人工 UI 因本机处于锁定状态未执行。
+- jsdom 单测只通过 editor transaction/change API 插入中文，不触发浏览器 composition 状态机，不能作为 IME 证据。
+- macOS WebKit 自动化按键未写入 contenteditable；这次失败不表示 editor 解析/加载失败，但也不能作为中文输入或 IME 通过证据。人工 UI 因本机处于锁定状态未执行。
 - Windows 编译、WebView2 输入和远端 CI 未执行；T18 是本地任务，T31 承接双平台 CI。
 - 64 MiB 文档的 Milkdown 全量排版、连续输入、自动保存和恢复快照未执行；本任务只测序列化/hash 边界，产品性能由 T23/T26/T31 承接。
 - 未重跑既有 4/4 P1/P2 桌面 E2E，因为 T18 未进入正式 P1 入口；正式生产 Tauri 构建和全量前端回归已证明既有入口未被依赖图改变。
@@ -103,3 +104,13 @@ pnpm test:editor-poc:performance
 - `CLAUDE.md`：不需要更新，原因是其仍是稳定薄入口，没有新的长期协作规则。
 - `architecture/desktop-foundation.md`：不需要更新，原因是正式 P1 和桌面底座架构未接入 editor；第二阶段生产架构由 T32 在真实模块落地后建立。
 - SQL、seed、权限、菜单、Tauri capability、产品配置与环境变量文档：不需要更新，原因是本任务没有产生对应稳定事实。
+
+## 7. 审查整改记录
+
+- 认可 IME 单测覆盖夸大：删除无行为贡献的 `CompositionEvent`，把两条测试改名为程序化中文插入/变更，并同步需求、计划、AGENTS 和本留痕的证据口径。
+- 认可结构往返断言不足：补充粗体、斜体、删除线、链接 URL、引用、有序列表和图片路径/标题断言；表格、任务列表和代码块断言继续保留。
+- 自审补强 raw HTML 安全证据：语料加入脚本片段，断言源码仍保留，但编辑器 DOM 不生成 `script` 且全局标记未被修改。
+- source-only 行级启发式不升级为生产事实源：T19 任务已增加 AST 判定要求，当前 PoC 只保留保守证据用途。
+- 64 MiB 只完成序列化/hash：T23 增加 100 KiB/5 MiB/20 MiB/64 MiB 挂载、解析、连续输入、峰值内存和安全降级门禁，T26 继续验证真实写入与保存频率。
+- 移除 bundle probe 的 `globalThis` 注入，改用构建入口签名保留依赖图；生产入口仍无消费者。
+- 许可证扫描为数据驱动自动覆盖，本次没有修改 `scripts/check-licenses.mjs` 规则；计划措辞已纠正。

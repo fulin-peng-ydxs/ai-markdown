@@ -35,9 +35,10 @@ function hasFrontmatter(markdown: string): boolean {
 }
 
 /**
- * This conservative PoC guard keeps syntax without a verified Milkdown mapping on the
- * source-safe path. It intentionally ignores fenced code contents so examples of custom
- * syntax do not make an otherwise supported document source-only.
+ * This conservative PoC-only guard keeps syntax without a verified Milkdown mapping on
+ * the source-safe path. Its line heuristics are not a production parser: T19 must replace
+ * them with an AST-backed decision before wiring compatibility into DocumentSession. It
+ * ignores ordinary fenced code contents so custom-syntax examples do not force fallback.
  */
 export function classifyVisualEditingCompatibility(markdown: string): VisualEditingCompatibility {
   const reasons = new Set<string>();
