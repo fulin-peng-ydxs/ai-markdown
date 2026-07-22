@@ -186,6 +186,25 @@ describe("WorkspaceWorkbench", () => {
     await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 
+  it("moves focus into the file drawer and wraps Tab inside it", async () => {
+    const user = userEvent.setup();
+    render(<WorkspaceWorkbench gateway={gateway()} initialWorkspace={workspace} onWorkspaceChanged={() => undefined} />);
+    const trigger = screen.getByRole("button", { name: "显示文件目录" });
+    await user.click(trigger);
+    const close = screen.getByRole("button", { name: "关闭文件目录" });
+    await waitFor(() => expect(document.activeElement).toBe(close));
+
+    const drawer = screen.getByRole("complementary", { name: "文件目录" });
+    const drawerButtons = Array.from(drawer.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+    const last = drawerButtons.at(-1);
+    expect(last).toBeTruthy();
+    last?.focus();
+    await user.keyboard("{Tab}");
+    expect(document.activeElement).toBe(close);
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(document.activeElement).toBe(last);
+  });
+
   it("moves keyboard focus through visible file-tree rows", async () => {
     const user = userEvent.setup();
     render(<WorkspaceWorkbench gateway={gateway()} initialWorkspace={workspace} onWorkspaceChanged={() => undefined} />);

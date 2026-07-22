@@ -478,13 +478,20 @@ input {
     z-index: 50;
     inset: 48px auto 28px 0;
     width: min(320px, calc(100vw - 48px));
+    visibility: hidden;
+    pointer-events: none;
     box-shadow: var(--shadow-drawer);
     transform: translateX(-105%);
-    transition: transform 140ms ease-out;
+    transition:
+      transform 140ms ease-out,
+      visibility 0s linear 140ms;
   }
 
   .workbench__files[data-drawer-open] {
+    visibility: visible;
+    pointer-events: auto;
     transform: translateX(0);
+    transition-delay: 0s;
   }
 
   .workbench__drawer-backdrop {

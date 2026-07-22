@@ -14,6 +14,7 @@ pub const OPEN_FOLDER_ID: &str = "file.open_folder";
 pub const OPEN_MARKDOWN_ID: &str = "file.open_markdown";
 pub const HELP_ID: &str = "help.plainroot";
 pub const LAUNCHER_MENU_EVENT: &str = "plainroot://launcher-menu";
+const CLOSE_WINDOW_ACCELERATOR: &str = "CmdOrCtrl+Shift+W";
 
 pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let open_folder = custom_item(app, OPEN_FOLDER_ID, "打开文件夹…", Some("CmdOrCtrl+O"))?;
@@ -24,7 +25,12 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         Some("CmdOrCtrl+Shift+O"),
     )?;
     let new_window = custom_item(app, NEW_WINDOW_ID, "新建窗口", Some("CmdOrCtrl+Shift+N"))?;
-    let close_window = custom_item(app, CLOSE_WINDOW_ID, "关闭窗口", Some("CmdOrCtrl+W"))?;
+    let close_window = custom_item(
+        app,
+        CLOSE_WINDOW_ID,
+        "关闭窗口",
+        Some(CLOSE_WINDOW_ACCELERATOR),
+    )?;
 
     let file_builder = SubmenuBuilder::new(app, "文件")
         .item(&new_window)
@@ -211,7 +217,8 @@ fn custom_menu_enabled(id: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        custom_menu_enabled, CLOSE_WINDOW_ID, NEW_WINDOW_ID, OPEN_FOLDER_ID, OPEN_MARKDOWN_ID,
+        custom_menu_enabled, CLOSE_WINDOW_ACCELERATOR, CLOSE_WINDOW_ID, NEW_WINDOW_ID,
+        OPEN_FOLDER_ID, OPEN_MARKDOWN_ID,
     };
 
     #[test]
@@ -222,5 +229,10 @@ mod tests {
         assert!(custom_menu_enabled(OPEN_MARKDOWN_ID));
         assert!(!custom_menu_enabled("edit.copy"));
         assert!(!custom_menu_enabled("view.search"));
+    }
+
+    #[test]
+    fn close_window_keeps_the_tab_shortcut_available_for_later_stages() {
+        assert_eq!(CLOSE_WINDOW_ACCELERATOR, "CmdOrCtrl+Shift+W");
     }
 }

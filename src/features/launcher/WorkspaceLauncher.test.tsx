@@ -48,6 +48,13 @@ function gateway(overrides: Partial<WorkspaceLauncherGateway> = {}): WorkspaceLa
 }
 
 describe("WorkspaceLauncher", () => {
+  it("shows non-macOS shortcut labels when the runtime is not macOS", async () => {
+    render(<WorkspaceLauncher gateway={gateway()} />);
+    await screen.findByText("Research Notes");
+    expect(screen.getByText("Ctrl O", { selector: "kbd" })).toBeTruthy();
+    expect(screen.getByText("Ctrl Shift O", { selector: "kbd" })).toBeTruthy();
+  });
+
   it("filters by name/path and offers a real clear-filter action", async () => {
     const user = userEvent.setup();
     render(<WorkspaceLauncher gateway={gateway()} />);

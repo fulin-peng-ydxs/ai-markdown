@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppDialog } from "../../components/AppDialog";
 import { AsyncStatePanel } from "../../components/AsyncStatePanel";
+import {
+  containTabFocus,
+  focusContainmentEntry,
+} from "../../components/focusContainment";
 import type {
   DeleteResult,
   DesktopError,
@@ -88,6 +92,7 @@ export function WorkspaceWorkbench({
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const drawerTriggerRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
   const mountedRef = useRef(true);
   const generationRef = useRef(0);
   const activeScansRef = useRef(new Set<string>());
@@ -275,11 +280,16 @@ export function WorkspaceWorkbench({
 
   useEffect(() => {
     if (!drawerOpen) return;
+    const drawer = drawerRef.current;
+    if (!drawer) return;
+    queueMicrotask(() => focusContainmentEntry(drawer));
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
         closeDrawer();
+        return;
       }
+      containTabFocus(event, drawer);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -625,7 +635,13 @@ export function WorkspaceWorkbench({
 
       <div className="workbench__body">
         {drawerOpen ? <button aria-label="关闭文件目录遮罩" className="workbench__drawer-backdrop" onClick={closeDrawer} type="button" /> : null}
-        <aside className="workbench__files" data-drawer-open={drawerOpen || undefined} aria-label="文件目录">
+        <aside
+          aria-label="文件目录"
+          className="workbench__files"
+          data-drawer-open={drawerOpen || undefined}
+          ref={drawerRef}
+          tabIndex={-1}
+        >
           <div className="workbench__files-heading">
             <div><span>工作区</span><strong>{workspace.displayName}</strong></div>
             <button aria-label="关闭文件目录" className="workbench__drawer-close" onClick={closeDrawer} type="button">×</button>

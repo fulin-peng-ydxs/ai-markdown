@@ -63,6 +63,10 @@ export function WorkspaceLauncher({
   gateway = desktopWorkspaceLauncherGateway,
   onWorkspaceOpened,
 }: WorkspaceLauncherProps) {
+  const shortcuts = useMemo(
+    () => launcherShortcutLabels(typeof navigator === "undefined" ? "" : navigator.userAgent),
+    [],
+  );
   const [snapshot, setSnapshot] = useState<WorkspaceLauncherSnapshot | null>(null);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState<BusyState>({
@@ -408,12 +412,12 @@ export function WorkspaceLauncher({
             <button aria-label="打开文件夹" className="launcher__open-button" onClick={openFolder} type="button">
               <span className="launcher__open-icon" aria-hidden="true">⌁</span>
               <span><strong>打开文件夹</strong><small>作为独立工作区</small></span>
-              <kbd>⌘ O</kbd>
+              <kbd>{shortcuts.folder}</kbd>
             </button>
             <button aria-label="打开 Markdown 文件" className="launcher__open-button" onClick={openMarkdown} type="button">
               <span className="launcher__open-icon" aria-hidden="true">M↓</span>
               <span><strong>打开 Markdown 文件</strong><small>授权文件所在目录</small></span>
-              <kbd>⇧ ⌘ O</kbd>
+              <kbd>{shortcuts.markdown}</kbd>
             </button>
           </div>
           <p className="launcher__privacy">无需账号 · 不上传文档 · 可离线使用</p>
@@ -571,6 +575,13 @@ export function WorkspaceLauncher({
       </AppDialog>
     </main>
   );
+}
+
+function launcherShortcutLabels(userAgent: string) {
+  const isMac = /Macintosh|Mac OS X/i.test(userAgent);
+  return isMac
+    ? { folder: "⌘ O", markdown: "⇧ ⌘ O" }
+    : { folder: "Ctrl O", markdown: "Ctrl Shift O" };
 }
 
 function restoreStatusLabel(status: RestoreStatus): string {

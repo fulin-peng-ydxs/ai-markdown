@@ -204,7 +204,8 @@ Key Characteristics：
 
 | 组件 | 代码事实源 | 当前消费者 | 稳定职责 |
 |---|---|---|---|
-| `AppDialog` | `src/components/AppDialog.tsx` | P1/P2 打开流程、文件操作、永久删除 | 原生 dialog、初始焦点、Tab/Shift+Tab 圈定、Esc/遮罩关闭、关闭门禁、焦点返回和统一动作区 |
+| `focusContainment` | `src/components/focusContainment.ts` | `AppDialog`、P1 窄窗文件树抽屉 | 可聚焦元素筛选、进入焦点、Tab/Shift+Tab 圈定和安全焦点恢复；不持有页面业务状态 |
+| `AppDialog` | `src/components/AppDialog.tsx` | P1/P2 打开流程、文件操作、永久删除 | 原生 dialog、共享焦点圈定、Esc/遮罩关闭、关闭门禁、焦点返回和统一动作区 |
 | `AsyncStatePanel` | `src/components/AsyncStatePanel.tsx` | 根启动状态、P1/P2 加载、错误、阻塞与恢复 | 类型化状态与优先级、可见非颜色标签、自动 tone/role/aria-live、说明和恢复动作 |
 | `WorkspaceLauncher` | `src/features/launcher/WorkspaceLauncher.tsx` | P2 | 本地打开主入口、最近记录、授权、窗口决策与根会话恢复 |
 | `WorkspaceWorkbench` | `src/features/workbench/WorkspaceWorkbench.tsx` | P1 | 当前根工作区壳、真实文件操作、只读 Markdown 状态、窗口决策与窄窗目录抽屉 |
@@ -254,7 +255,7 @@ Plainroot 首发是桌面应用，响应式目标是窄桌面窗口可用，不�
 - `≥1180px`：工作台三栏完整；主题工作室保留设置导航、预设库、编辑和预览。
 - `940–1179px`：主题工作室先隐藏低频设置导航；工作台仍优先保证中央编辑器。
 - `821–1050px`：工作台右侧大纲退化为按需抽屉，右侧理想宽度仍保存在工作区偏好中。
-- `≤820px`：工作台左侧文件树也退化为抽屉，页签允许横向滚动，中央文档保留最小安全留白。
+- `≤820px`：工作台左侧文件树也退化为抽屉，页签允许横向滚动，中央文档保留最小安全留白；关闭抽屉必须同时退出点击与键盘可达范围，打开后焦点进入抽屉，Tab/Shift+Tab 圈定，Esc 关闭并返回触发器。
 - 启动页约 `760px` 以下由双栏变单栏；打开入口仍在最近列表之前，窗口 chrome 不丢失。
 - 主题工作室当前原型最小宽度为 `760px`，不承诺手机布局；更窄窗口应阻止继续压缩或采用后续确认的分步编辑方案。
 - 窄窗口退化不能覆盖已保存的理想侧栏宽度；恢复到宽窗口时回到用户设置。
@@ -286,9 +287,9 @@ Iteration Guide：
 
 ## 10. Known Gaps
 
-- P2、P1 第一阶段工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；T14 已固化对话框焦点圈定、类型化状态优先级、live-region 和非颜色标签。`PathStatus`、`DesktopWindowStatus` 未形成两个同职责消费者，因此未登记为空组件。P1 的编辑器、页签、大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
+- P2、P1 第一阶段工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；T17 已完成页面私有颜色/渐变收口，并让 `AppDialog` 与 P1 窄窗抽屉共同消费 `focusContainment`。`PathStatus`、`DesktopWindowStatus` 未形成两个同职责消费者，因此未登记为空组件。P1 的编辑器、页签、大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
 - 启动页原型危险色为 `#955252`，工作台和主题工作室为 `#9b5050`；本文已收敛为 `#9b5050`，正式实现时应统一消费 token。
 - 暗色主题尚无完整原型和 token；不得简单反转当前亮色值。R7/R15 阶段需补全明暗语义、派生状态和跨窗口预览测试。
 - `17px / 1.76`、约 `760–820px` 正文宽度及 `252/220px` 侧栏是 alpha 校准基线，仍需在不同 DPI、中英文长文和 Windows 字体渲染下验证。
 - 自定义主题“明暗两套调色板必须同时通过才允许保存”仍是待主题阶段确认的非阻塞决策；确认前不要写成用户已最终决定。
-- HTML 原型主要表现 macOS 窗口外观；Windows 原生标题栏、菜单、快捷键、回收站和窗口行为需在正式工程与 Windows CI/人工验收中补证。
+- HTML 原型主要表现 macOS 窗口外观；T16 基线已取得 Windows CI 证据，但 Windows 原生标题栏、菜单、快捷键、回收站和窗口行为仍需人工验收补证，T17 本地增量也需推送后复跑 Windows runner。

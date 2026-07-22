@@ -28,9 +28,7 @@ button, input { font: inherit; }
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 100vh;
-  background:
-    linear-gradient(90deg, transparent 0 31.8%, rgb(112 103 127 / 4%) 31.8% 31.9%, transparent 31.9%),
-    var(--color-paper);
+  background: var(--color-paper);
 }
 
 .launcher__header,

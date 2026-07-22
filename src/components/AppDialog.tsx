@@ -6,6 +6,12 @@ import {
   useRef,
 } from "react";
 
+import {
+  containTabFocus,
+  focusContainmentEntry,
+  restoreFocus,
+} from "./focusContainment";
+
 import "./AppDialog.css";
 
 export interface AppDialogProps {
@@ -46,7 +52,11 @@ export function AppDialog({
       } else {
         dialog.setAttribute("open", "");
       }
-      queueMicrotask(() => focusDialogEntry(dialog));
+      queueMicrotask(() => {
+        if (dialog.open) {
+          focusContainmentEntry(dialog);
+        }
+      });
       return;
     }
     if (!open && dialog.open) {
@@ -73,27 +83,7 @@ export function AppDialog({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDialogElement>) {
-    if (event.key !== "Tab") {
-      return;
-    }
-    const dialog = event.currentTarget;
-    const focusable = focusableElements(dialog);
-    if (focusable.length === 0) {
-      event.preventDefault();
-      dialog.focus();
-      return;
-    }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
-      event.preventDefault();
-      last.focus();
-      return;
-    }
-    if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
-      event.preventDefault();
-      first.focus();
-    }
+    containTabFocus(event, event.currentTarget);
   }
 
   return (
@@ -118,35 +108,6 @@ export function AppDialog({
       {actions ? <div className="app-dialog__actions">{actions}</div> : null}
     </dialog>
   );
-}
-
-const FOCUSABLE_SELECTOR = [
-  "button:not(:disabled)",
-  "[href]",
-  "input:not(:disabled)",
-  "select:not(:disabled)",
-  "textarea:not(:disabled)",
-  "[tabindex]:not([tabindex='-1'])",
-].join(",");
-
-function focusableElements(dialog: HTMLDialogElement): HTMLElement[] {
-  return Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-    (element) => !element.hidden && element.getAttribute("aria-hidden") !== "true",
-  );
-}
-
-function focusDialogEntry(dialog: HTMLDialogElement) {
-  if (!dialog.open || dialog.contains(document.activeElement)) {
-    return;
-  }
-  const autofocus = dialog.querySelector<HTMLElement>("[autofocus]");
-  (autofocus ?? focusableElements(dialog)[0] ?? dialog).focus();
-}
-
-function restoreFocus(element: HTMLElement | null) {
-  if (element?.isConnected) {
-    element.focus();
-  }
 }
 
 function closeDialog(dialog: HTMLDialogElement) {
