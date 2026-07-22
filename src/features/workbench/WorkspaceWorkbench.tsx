@@ -10,7 +10,6 @@ import type {
   DeleteResult,
   DesktopError,
   FsEntry,
-  MarkdownReadResult,
   WorkspaceDescriptor,
   WorkspaceMutationResult,
   WorkspaceOpenDisposition,
@@ -20,6 +19,14 @@ import type {
   WorkspaceSelectionProposal,
 } from "../../services/desktop/contracts";
 import { desktopErrorMessage, normalizeDesktopError } from "../../services/desktop/errors";
+import {
+  beginDocumentLoad,
+  createEmptyDocumentSession,
+  rejectDocumentRead,
+  resolveDocumentRead,
+  type DocumentSessionState,
+} from "../editor/documentSession";
+import type { VisualEditingCompatibility } from "../editor/markdownCompatibility";
 import { PermanentDeleteDialog } from "./PermanentDeleteDialog";
 import { WorkspaceTree } from "./WorkspaceTree";
 import { isSameOrInside, parentPath, replacePrefix } from "./workspacePath";
@@ -44,6 +51,11 @@ import {
 import "./WorkspaceWorkbench.css";
 
 type OperationKind = "create_file" | "create_directory" | "rename" | "move";
+
+const readonlyWorkbenchCompatibility: VisualEditingCompatibility = {
+  mode: "source-only",
+  reasons: ["visual-adapter-not-mounted"],
+};
 
 interface PendingOperation {
   kind: OperationKind;
@@ -76,13 +88,10 @@ export function WorkspaceWorkbench({
   const treeRef = useRef(tree);
   const [expanded, setExpanded] = useState<Set<WorkspaceRelativePath>>(new Set());
   const [selectedPath, setSelectedPath] = useState<WorkspaceRelativePath | null>(null);
-  const [documentState, setDocumentState] = useState<
-    | { status: "empty" }
-    | { status: "loading"; path: WorkspaceRelativePath }
-    | { status: "ready"; result: MarkdownReadResult }
-    | { status: "unsupported"; result: MarkdownReadResult }
-    | { status: "error"; path: WorkspaceRelativePath; error: DesktopError }
-  >({ status: "empty" });
+  const [documentState, setDocumentState] = useState<DocumentSessionState>(
+    createEmptyDocumentSession,
+  );
+  const documentStateRef = useRef(documentState);
   const [pageError, setPageError] = useState<DesktopError | null>(null);
   const [operation, setOperation] = useState<PendingOperation | null>(null);
   const [operationError, setOperationError] = useState<DesktopError | null>(null);
@@ -110,11 +119,13 @@ export function WorkspaceWorkbench({
   const rootScan = tree.scans[""];
   const rootLoading = rootScan?.status === "loading";
   const mutationProcessing = tree.mutation?.status === "processing";
-  const activeDocumentPath = documentState.status === "ready" || documentState.status === "unsupported"
-    ? documentState.result.relativePath
-    : documentState.status === "empty"
-      ? null
-      : documentState.path;
+  const activeDocumentPath =
+    documentState.status === "empty" ? null : documentState.relativePath;
+
+  const commitDocument = useCallback((next: DocumentSessionState) => {
+    documentStateRef.current = next;
+    setDocumentState(next);
+  }, []);
 
   const commitTree = useCallback((update: (current: WorkspaceTreeState) => WorkspaceTreeState) => {
     setTree((current) => {
@@ -236,7 +247,9 @@ export function WorkspaceWorkbench({
     treeRef.current = createWorkspaceTreeState();
     setExpanded(new Set());
     setSelectedPath(null);
-    setDocumentState({ status: "empty" });
+    commitDocument(
+      createEmptyDocumentSession(documentStateRef.current.generation + 1),
+    );
     setPageError(null);
     void gateway.setTitle(null).catch((reason) => {
       if (mountedRef.current && generation === generationRef.current) {
@@ -250,7 +263,7 @@ export function WorkspaceWorkbench({
     }
   // openMarkdown deliberately uses only stable gateway/state setters; workspace loading owns reset.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gateway, scanDirectory, startWatchLoop]);
+  }, [commitDocument, gateway, scanDirectory, startWatchLoop]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -302,27 +315,46 @@ export function WorkspaceWorkbench({
     generation = generationRef.current,
   ) {
     setSelectedPath(path);
-    setDocumentState({ status: "loading", path });
-    void gateway.setTitle(path).catch((reason) => {
-      if (mountedRef.current && generation === generationRef.current) {
-        setPageError(normalizeDesktopError(reason, "window_title_failed"));
-      }
+    const loading = beginDocumentLoad(documentStateRef.current, {
+      workspaceId: targetWorkspace.id,
+      relativePath: path,
     });
+    commitDocument(loading);
     try {
       const result = await gateway.read(targetWorkspace.id, path);
       if (!mountedRef.current || generation !== generationRef.current) return;
-      setDocumentState(
-        result.status === "ready"
-          ? { status: "ready", result }
-          : { status: "unsupported", result },
+      const resolved = resolveDocumentRead(
+        documentStateRef.current,
+        loading.generation,
+        result,
+        readonlyWorkbenchCompatibility,
+        false,
       );
+      commitDocument(resolved);
+      if (
+        resolved.status !== "empty" &&
+        resolved.generation === loading.generation &&
+        resolved.relativePath === path
+      ) {
+        void gateway.setTitle(path).catch((reason) => {
+          if (
+            mountedRef.current &&
+            generation === generationRef.current &&
+            documentStateRef.current.generation === loading.generation
+          ) {
+            setPageError(normalizeDesktopError(reason, "window_title_failed"));
+          }
+        });
+      }
     } catch (reason) {
       if (!mountedRef.current || generation !== generationRef.current) return;
-      setDocumentState({
-        status: "error",
-        path,
-        error: normalizeDesktopError(reason, "io_failure"),
-      });
+      commitDocument(
+        rejectDocumentRead(
+          documentStateRef.current,
+          loading.generation,
+          normalizeDesktopError(reason, "io_failure"),
+        ),
+      );
     }
   }
 
@@ -409,11 +441,8 @@ export function WorkspaceWorkbench({
     if (!result.previousPath) return;
     const previousPath = result.previousPath;
     const nextPath = result.entry.relativePath;
-    const documentPath = documentState.status === "ready" || documentState.status === "unsupported"
-      ? documentState.result.relativePath
-      : documentState.status === "empty"
-        ? null
-        : documentState.path;
+    const documentPath =
+      documentState.status === "empty" ? null : documentState.relativePath;
     setSelectedPath((current) => current ? replacePrefix(current, previousPath, nextPath) : null);
     setExpanded((current) => new Set([...current].map((path) => replacePrefix(path, previousPath, nextPath))));
     if (documentPath && isSameOrInside(documentPath, previousPath)) {
@@ -452,13 +481,12 @@ export function WorkspaceWorkbench({
     if (selectedPath && isSameOrInside(selectedPath, result.relativePath)) {
       setSelectedPath(null);
     }
-    const openDocumentPath = documentState.status === "ready" || documentState.status === "unsupported"
-      ? documentState.result.relativePath
-      : documentState.status === "empty"
-        ? null
-        : documentState.path;
+    const openDocumentPath =
+      documentState.status === "empty" ? null : documentState.relativePath;
     if (openDocumentPath && isSameOrInside(openDocumentPath, result.relativePath)) {
-      setDocumentState({ status: "empty" });
+      commitDocument(
+        createEmptyDocumentSession(documentStateRef.current.generation + 1),
+      );
       void gateway.setTitle(null).catch(() => undefined);
     }
   }
@@ -758,37 +786,33 @@ function DocumentView({
   state,
   onRetry,
 }: {
-  state:
-    | { status: "empty" }
-    | { status: "loading"; path: WorkspaceRelativePath }
-    | { status: "ready"; result: MarkdownReadResult }
-    | { status: "unsupported"; result: MarkdownReadResult }
-    | { status: "error"; path: WorkspaceRelativePath; error: DesktopError };
+  state: DocumentSessionState;
   onRetry(path: WorkspaceRelativePath): void;
 }) {
   if (state.status === "empty") {
     return <div className="workbench__document-empty"><span aria-hidden="true">M↓</span><h1>选择一份 Markdown 文档</h1><p>当前阶段提供真实只读查看；编辑与页签将在后续阶段接入，不会用假控件占位。</p></div>;
   }
   if (state.status === "loading") {
-    return <AsyncStatePanel description={state.path} state="loading" title="正在读取文档" />;
+    return <AsyncStatePanel description={state.relativePath} state="loading" title="正在读取文档" />;
   }
-  if (state.status === "error") {
-    return <AsyncStatePanel actions={<button className="plainroot-button" onClick={() => onRetry(state.path)} type="button">重试读取</button>} description={`${desktopErrorMessage(state.error)} 当前内存中没有可安全展示的旧内容。`} state={state.error.code === "permission_denied" ? "permission_denied" : state.error.code === "path_not_found" ? "missing" : "error"} title="无法读取文档" />;
-  }
-  if (state.status === "unsupported") {
-    const title = state.result.status === "too_large" ? "文档超过当前查看上限" : "文档不是受支持的 UTF-8 编码";
+  if (state.status === "unavailable" && state.reason !== "read_failed") {
+    const title = state.reason === "too_large" ? "文档超过当前查看上限" : "文档不是受支持的 UTF-8 编码";
     return <AsyncStatePanel description="Plainroot 没有修改这个文件。请使用其他工具转换或缩小后重试。" state="unsupported" title={title} />;
+  }
+  if (state.status === "unavailable") {
+    const error = state.error;
+    return <AsyncStatePanel actions={<button className="plainroot-button" onClick={() => onRetry(state.relativePath)} type="button">重试读取</button>} description={`${error ? desktopErrorMessage(error) : "文档读取结果不完整。"} 当前内存中没有可安全展示的旧内容。`} state={error?.code === "permission_denied" ? "permission_denied" : error?.code === "path_not_found" ? "missing" : "error"} title="无法读取文档" />;
   }
   return (
     <article className="workbench__reader">
-      <header><span>只读 Markdown</span><strong>{state.result.relativePath}</strong></header>
-      <pre>{state.result.content}</pre>
+      <header><span>只读 Markdown</span><strong>{state.relativePath}</strong></header>
+      <pre>{state.markdown}</pre>
     </article>
   );
 }
 
 function documentMetric(state: Parameters<typeof DocumentView>[0]["state"]): string {
-  return state.status === "ready" ? `${state.result.content?.length ?? 0} 字符` : "未打开文档";
+  return state.status === "ready" ? `${state.markdown.length} 字符` : "未打开文档";
 }
 
 function supportsPageRetry(error: DesktopError, hasSelectedEntry: boolean) {

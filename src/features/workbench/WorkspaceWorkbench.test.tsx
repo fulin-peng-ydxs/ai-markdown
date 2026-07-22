@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type {
   FsEntry,
+  MarkdownReadResult,
   WorkspaceDescriptor,
   WorkspaceScanBatch,
 } from "../../services/desktop/contracts";
@@ -35,6 +36,12 @@ const folder: FsEntry = {
   writable: true,
   symlink: false,
   childrenState: "not_loaded",
+};
+
+const secondNote: FsEntry = {
+  ...note,
+  relativePath: "second.md",
+  name: "second.md",
 };
 
 function gateway(overrides: Partial<WorkspaceWorkbenchGateway> = {}): WorkspaceWorkbenchGateway {
@@ -93,6 +100,62 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByText("只读 Markdown")).toBeTruthy();
     expect(api.read).toHaveBeenCalledWith("workspace-a", "note.md");
     await waitFor(() => expect(api.setTitle).toHaveBeenCalledWith("note.md"));
+  });
+
+  it("does not let a slower old document read replace the latest selection", async () => {
+    let resolveFirst!: (value: MarkdownReadResult) => void;
+    const firstRead = new Promise<MarkdownReadResult>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const api = gateway({
+      pollScan: vi.fn().mockResolvedValue({
+        scanId: "scan-1",
+        processed: 2,
+        entries: [note, secondNote],
+        issues: [],
+        complete: true,
+        cancelled: false,
+      }),
+      read: vi.fn().mockImplementation((_workspaceId, path) =>
+        path === "note.md"
+          ? firstRead
+          : Promise.resolve({
+              relativePath: "second.md",
+              status: "ready",
+              content: "# 第二份文档",
+              revision: {
+                modifiedAt: 2,
+                size: 8,
+                contentHash: "second",
+                encoding: "utf8",
+                lineEnding: "lf",
+              },
+            }),
+      ),
+    });
+    const user = userEvent.setup();
+    render(<WorkspaceWorkbench gateway={api} initialWorkspace={workspace} onWorkspaceChanged={() => undefined} />);
+
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await user.click(await screen.findByRole("treeitem", { name: /second\.md/ }));
+    expect(await screen.findByText(/第二份文档/)).toBeTruthy();
+
+    resolveFirst({
+      relativePath: "note.md",
+      status: "ready",
+      content: "# 过期文档",
+      revision: {
+        modifiedAt: 1,
+        size: 7,
+        contentHash: "first",
+        encoding: "utf8",
+        lineEnding: "lf",
+      },
+    });
+    await Promise.resolve();
+
+    expect(screen.getByText(/第二份文档/)).toBeTruthy();
+    expect(screen.queryByText(/过期文档/)).toBeNull();
   });
 
   it("adds a created file only after the disk gateway succeeds", async () => {

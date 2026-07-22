@@ -1,6 +1,5 @@
 import type {
   DeleteResult,
-  MarkdownReadResult,
   WorkspaceDescriptor,
   WorkspaceId,
   WorkspaceMutationResult,
@@ -39,8 +38,9 @@ import {
   setWorkbenchWindowTitle,
   type LauncherMenuAction,
 } from "../../services/desktop/workspace";
+import type { EditorDocumentGateway } from "../editor/editorGateway";
 
-export interface WorkspaceWorkbenchGateway {
+export interface WorkspaceWorkbenchGateway extends EditorDocumentGateway {
   scan(workspaceId: WorkspaceId, directory: WorkspaceRelativePath | null): Promise<WorkspaceScanStart>;
   pollScan(scanId: string): Promise<WorkspaceScanBatch>;
   cancelScan(scanId: string): Promise<boolean>;
@@ -48,7 +48,6 @@ export interface WorkspaceWorkbenchGateway {
   restartWatch(workspaceId: WorkspaceId): Promise<WorkspaceWatchStart>;
   pollWatch(watchId: string): Promise<WorkspaceWatchBatch>;
   stopWatch(watchId: string): Promise<boolean>;
-  read(workspaceId: WorkspaceId, path: WorkspaceRelativePath): Promise<MarkdownReadResult>;
   createFile(workspaceId: WorkspaceId, name: string, parent: WorkspaceRelativePath | null): Promise<WorkspaceMutationResult>;
   createDirectory(workspaceId: WorkspaceId, name: string, parent: WorkspaceRelativePath | null): Promise<WorkspaceMutationResult>;
   rename(workspaceId: WorkspaceId, path: WorkspaceRelativePath, name: string): Promise<WorkspaceMutationResult>;
