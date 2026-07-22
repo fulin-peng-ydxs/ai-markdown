@@ -4,7 +4,7 @@
 
 - 沿用 R1、R2、R5、R8、R11、R14、R30、R31，不新增或改变需求编号。
 - 本任务建立 macOS/Windows CI 门禁、平台文件替换回归、P1 真 IPC 桌面 E2E、失败诊断和未签名测试产物。
-- 当前状态为“macOS 远端通过，Windows E2E 本地 URL 断言整改后待复跑”。第五轮 GitHub Actions 已确认 Windows 105/105 个平台适用 Rust 测试通过，并真实运行 4 个桌面 E2E；其中 IPC、响应式/溢出、焦点顺序和 fixture 工作区链路均工作，唯一失败是启动用例把 macOS `tauri://localhost` 写死，没有接受 Windows WebView2 的 `http://tauri.localhost/`。现已把断言收敛为仅接受两种 Tauri 本地应用 URL，尚需远端复验，因此 T16 不标记完成。
+- 当前状态为“已完成”。第六轮 GitHub Actions 已确认 macOS 与 Windows 的许可证、类型、前端/Rust 测试、4/4 桌面 E2E、未签名生产构建和 artifact 上传全部通过；Windows 实际执行 105/105 个平台适用 Rust 测试，并由 WebView2 验证 IPC、响应式/溢出、焦点顺序和 fixture 工作区链路。T16 自动化完成结论不包含 Windows 原生系统交互的人工验收。
 - Windows 原生选择器、回收站、Explorer、菜单和辅助技术的视觉/键鼠可用性不能由 WebView 自动化替代，继续登记为人工未验证。
 
 ## 2. 实际实现
@@ -24,7 +24,7 @@
 - macOS 上的 Windows 目标交叉检查先发现 Tauri 资源编译缺少 `src-tauri/icons/icon.ico`；已从仓库既有、明确标为占位的 `icon.png` 同源生成 `.ico`，不引入新品牌设计，正式发布前仍需替换占位图标。
 - 共享原子适配新增替换已有目标与禁止覆盖已有目标测试，两类测试在目标平台真实调用各自平台实现。
 - Windows 条件测试通过 `OpenOptionsExt::share_mode(0)` 独占打开目标，要求 `MoveFileExW` 替换失败，并断言临时源与旧目标内容均保留。
-- 补齐 `.ico` 后，交叉检查继续到 Windows 资源编译并因本机缺少 `llvm-rc` 停止；因此 Windows 条件代码和测试仍未完成编译或运行，必须以远端 `windows-latest` 日志为准。
+- 补齐 `.ico` 后，本机交叉检查继续到 Windows 资源编译并因缺少 `llvm-rc` 停止；该本机限制后来由远端 `windows-latest` 的真实编译、测试和运行结果闭合。
 - 第二轮远端编译确认稳定 Rust 1.97.1 仍不开放 `MetadataExt::volume_serial_number/file_index`。现以 `GetFileInformationByHandle` 读取卷序列号与 64 位文件索引，复用到永久删除目标防替换和大小写重命名的同文件判断；句柄只请求属性、允许读写删除共享，并用 `FILE_FLAG_BACKUP_SEMANTICS` 支持目录。
 - 同轮还发现 `menu` 与 `atomic` 的平台条件会在 Windows 产生 `unused_mut`/`unused_imports`；现改为条件遮蔽构建器和条件导入，不用 `allow` 掩盖警告。
 
@@ -36,6 +36,7 @@
 - 这不是跳过 Windows 测试：完整库用例数量与默认/all-features 本机结果一致；生产运行时仍由 all-features clippy、4 个真实桌面 E2E 和默认生产构建覆盖。
 - 第四轮远端结果证明隔离有效：Windows 不再发生进程装载失败，105 个平台适用用例全部被发现并执行。`invalid_app_data_path_degrades_to_in_memory_default` 暴露 POSIX `NotADirectory` 与 Windows `NotFound` 的差异；两者现在统一尝试初始化写入并以 `StateWriteFailed` 表达“状态路径不可创建”，保持可重试语义和跨平台稳定错误码。
 - 第五轮远端确认状态错误码整改有效，Windows Rust 测试 105/105。桌面 E2E 首次真实进入 Windows WebView2，4 项中 3 项通过，剩余启动用例仅因平台内部 URL 文本差异失败；断言现只允许 macOS `tauri://localhost` 或 Windows `http://tauri.localhost`，仍拒绝远程站点与开发服务器地址。
+- 第六轮远端确认 URL 断言整改有效：Windows 105/105 个 Rust 测试、4/4 WebView2 桌面 E2E、未签名生产构建和 artifact 上传全部通过；macOS 同轮全部门禁通过。两平台均没有依靠跳过或增加重试次数取得绿灯。
 
 ### 2.4 P1 真 IPC E2E 与隔离
 
@@ -92,8 +93,9 @@ node scripts/collect-ci-artifact.mjs macos
 - 第三轮 GitHub Actions：[Desktop CI #3](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29843694120) 中 macOS 再次完整成功，artifact 摘要为 `sha256:0955b7ade3eabf3183e4b5c9915ba7cedd5df20da1345e45f7c9b169566697d9`。Windows 已通过 all-features lint 并完成测试链接，但测试进程在首个用例前因 Tauri 上游装载问题以 `0xc0000139` 退出；失败诊断 artifact 摘要为 `sha256:798475611e7ad066cb313f5f8581136e0af8ec7aa31800f83af9bdbb253cc8fb`，不能视为 Windows 产品产物。
 - 第四轮 GitHub Actions：[Desktop CI #4](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29845608511) 中 macOS 再次完整成功，artifact 摘要为 `sha256:688dc50a029f9c91e54c1aa6dd74b912a2132a97b9d24a8f52c7b1c3dc9405aa`。Windows 的测试进程已成功启动并执行 105 个平台适用测试，104 个通过、1 个因跨平台错误码预期失败；Windows 诊断 artifact 摘要为 `sha256:9f03b94212e497d517753774e7d308c926cc3e3b2097539503f7dfd5c8de2550`，未包含产品二进制。
 - 第五轮 GitHub Actions：[Desktop CI #5](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29846509599) 中 macOS 再次完整成功，artifact 摘要为 `sha256:80cf7f9f3676e5882e3200631f881b883e0d6c0d49a7b13ef12290637330252e`。Windows 105/105 个 Rust 测试通过，桌面 E2E 3/4，通过项已覆盖布局、焦点和 P1 真 IPC 工作区；启动项因 `http://tauri.localhost/` 未被 macOS 专用断言接受而失败。Windows 诊断 artifact 摘要为 `sha256:2637e26cc86352616d41f34a7a68a4e1605948d663256d20a6f30340a4131c1e`，未包含产品二进制。
+- 第六轮 GitHub Actions：[Desktop CI #6](https://github.com/fulin-peng-ydxs/ai-markdown/actions/runs/29847958107) 中 macOS 与 Windows 均完整成功。Windows 实际执行 105/105 个平台适用 Rust 测试、4/4 WebView2 桌面 E2E、未签名生产构建和 artifact 上传，artifact `plainroot-windows-29847958107` 的摘要为 `sha256:a0288096663eb05c88dc040abda484258c22251b0337d2778b378d9568198b7f`、大小 3,081,816 字节；macOS artifact `plainroot-macos-29847958107` 的摘要为 `sha256:96eea5e1c6b8e9cc341403ed57e9b7c685afa0e96ee389231fcf7cb57f23dd0d`、大小 3,254,618 字节。
 - Windows 文件标识已改用稳定 Win32 API；本机用临时资源编译占位器仅绕过 Tauri `.res` 生成后，`x86_64-pc-windows-msvc` 的 `cargo check --all-features` 与 `cargo clippy --all-targets --all-features -- -D warnings` 通过。该证据验证 Rust 条件代码，但不替代真实 Windows 资源、链接、测试或运行结果。
 - 本机执行 `cargo check --target x86_64-pc-windows-msvc --tests --all-features`：首次发现并修复缺少 `.ico`；复跑停在 macOS 缺少 `llvm-rc`。该失败不计为 Windows 编译证据，也不等同远端 runner 失败。
-- 第三轮已真实编译 Windows `MoveFileExW`、文件标识、Dialog/WebView2、watch、回收站和 Explorer 条件代码，但测试进程未启动，因此 Windows 条件测试、E2E 和生产构建仍未执行；macOS 结果不得外推。
+- 第六轮已真实编译 Windows `MoveFileExW`、文件标识、Dialog/WebView2、watch、回收站和 Explorer 条件代码，并完成平台适用测试、E2E 与生产构建；这仍不替代原生选择器、回收站、Explorer、菜单和辅助技术的人工可用性验收。
 - 自动化验证了选择/授权服务的取消和过滤规则单测、Dialog 插件/命令编译边界及 P1/P2 IPC；Windows 原生面板的真实过滤展示、取消键鼠行为仍需人工设备。
-- 下一步推送 Windows E2E 本地 URL 断言整改并复跑矩阵；两个平台全部通过并记录运行链接、artifact 哈希后，才能把 T16 改为完成并进入 T17。
+- T16 已完成；下一任务仅为 T17 第一阶段验收、证据汇总和交接，本次不提前进入 T17。
