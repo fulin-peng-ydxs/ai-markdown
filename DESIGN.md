@@ -8,6 +8,7 @@ colors:
   chrome-strong: "#e4e4e6"
   paper: "#f3f3f2"
   paper-deep: "#eeeeed"
+  paper-hover: "#f8f8f7"
   heading: "#222226"
   text: "#28282c"
   muted: "#66666d"
@@ -59,7 +60,9 @@ spacing:
   xl: 24px
   2xl: 32px
 effects:
+  overlay: "rgb(34 34 38 / 18%)"
   dialog-backdrop: "rgb(34 34 38 / 24%)"
+  drawer-shadow: "18px 0 44px rgb(34 34 38 / 16%)"
   dialog-shadow: "0 18px 48px rgb(34 34 38 / 18%)"
 components:
   button-primary:
@@ -118,13 +121,14 @@ Key Characteristics：
 | 边界 | `line` / `line-strong` | 常规分隔与强调边界，不用阴影替代所有分隔 |
 | 交互强调 | `accent` / `accent-soft` | 主按钮、活动页签、焦点、当前大纲与轻选中 |
 | 状态 | `success` / `warning` / `danger` | 成功、警告、失败或破坏性动作；必须搭配文字、图标或结构语义 |
-| 遮罩与层级 | `dialog-backdrop` / `dialog-shadow` | 模态任务遮罩和公共对话框阴影；页面不得复制私有 rgba/rgb 值 |
+| 遮罩与层级 | `overlay` / `drawer-shadow` / `dialog-backdrop` / `dialog-shadow` | `overlay` 与 `drawer-shadow` 用于窄窗抽屉，后两者用于模态任务；页面不得复制私有 rgba/rgb 值 |
 
 规则：
 
 - 页面和组件只消费语义 token，不在局部复制相同 hex。
 - 主按钮可用 `accent` 实底；次按钮使用 `paper + line-strong`；危险按钮默认保持浅背景与危险文字，只有明确不可逆且需要强提醒时才考虑实底。
 - Hover 优先由当前表面与 `text`/`accent` 混合得到，不另建随机灰色。
+- 生产危险色统一消费 `danger`（当前值 `#9b5050`）；启动页原型保留的 `#955252` 仅是原型历史证据，不得进入正式页面样式。
 - 自定义主题保存至少要满足普通文字 `4.5:1`、大字号文字 `3:1` 的对比目标；明暗两套是否必须联合通过见 Known Gaps。
 - 颜色预设不得改变 Markdown 文件内容，也不得把状态色当作正文任意着色工具。
 
@@ -202,6 +206,8 @@ Key Characteristics：
 
 已登记运行时复用单元：
 
+登记范围包括跨页面复用单元、页面壳，以及承担独立安全或状态职责且具有稳定边界的关键页面组件；只承载一次性排版的页面私有包装不单独登记。
+
 | 复用单元 | 代码事实源 | 当前消费者 | 稳定职责 |
 |---|---|---|---|
 | `focusContainment` | `src/components/focusContainment.ts` | `AppDialog`、P1 窄窗文件树抽屉 | 可聚焦元素筛选、进入焦点、Tab/Shift+Tab 圈定和安全焦点恢复；不持有页面业务状态 |
@@ -210,6 +216,7 @@ Key Characteristics：
 | `WorkspaceLauncher` | `src/features/launcher/WorkspaceLauncher.tsx` | P2 | 本地打开主入口、最近记录、授权、窗口决策与根会话恢复 |
 | `WorkspaceWorkbench` | `src/features/workbench/WorkspaceWorkbench.tsx` | P1 | 当前根工作区壳、真实文件操作、只读 Markdown 状态、窗口决策与窄窗目录抽屉 |
 | `WorkspaceTree` | `src/features/workbench/WorkspaceTree.tsx` | P1 | 渐进目录节点、磁盘提交后更新、只读标识、异步刷新期间也稳定的单一 Tab 停靠点，以及上下/首尾/父子方向键导航 |
+| `PermanentDeleteDialog` | `src/features/workbench/PermanentDeleteDialog.tsx` | P1 永久删除流程 | 复用 `AppDialog` 承载删除提案、显式不可逆确认、提交门禁、阶段化错误反馈与安全取消 |
 | `workspacePath` | `src/features/workbench/workspacePath.ts` | `workspaceTreeState`、`WorkspaceWorkbench` | 工作区相对路径的父级计算、同路径/子路径边界判断和前缀重映射；根目录键仍由树状态层适配 |
 
 布局规则：
@@ -226,6 +233,7 @@ Key Characteristics：
 - 常规层级优先用背景明度和 `line` 边界；卡片与列表行默认不加阴影。
 - 原型窗口可使用双层轻阴影表达演示舞台；正式原生窗口使用系统阴影，不叠加网页大阴影。
 - Dialog 使用 `line-strong`、`rounded.lg` 和单一高层阴影；Popover 比 dialog 更轻，Toast 使用深色实底。
+- 窄窗侧栏抽屉使用 `overlay` 遮罩与 `drawer-shadow` 侧向阴影，不复用模态对话框的遮罩强度或居中阴影。
 - 圆角遵循 `4 / 6 / 9 / 11px` 层级：微控件、普通控件、浮层、原型窗口。不得在页面内随机新增相近圆角。
 - 遮罩保持中性半透明，确保上下文仍可识别；z-index 建立少量语义层级，不使用不断增大的局部数字竞争。
 
@@ -289,7 +297,6 @@ Iteration Guide：
 ## 10. Known Gaps
 
 - P2、P1 第一阶段工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；T17 已完成页面私有颜色/渐变收口，并让 `AppDialog` 与 P1 窄窗抽屉共同消费 `focusContainment`。P1 文件树 reducer 与工作台页面共同消费 `workspacePath`，避免重命名/移动后的树状态与页面选择状态使用两套路径规则。`PathStatus`、`DesktopWindowStatus` 未形成两个同职责消费者，因此未登记为空组件。P1 的编辑器、页签、大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
-- 启动页原型危险色为 `#955252`，工作台和主题工作室为 `#9b5050`；本文已收敛为 `#9b5050`，正式实现时应统一消费 token。
 - 暗色主题尚无完整原型和 token；不得简单反转当前亮色值。R7/R15 阶段需补全明暗语义、派生状态和跨窗口预览测试。
 - `17px / 1.76`、约 `760–820px` 正文宽度及 `252/220px` 侧栏是 alpha 校准基线，仍需在不同 DPI、中英文长文和 Windows 字体渲染下验证。
 - 自定义主题“明暗两套调色板必须同时通过才允许保存”仍是待主题阶段确认的非阻塞决策；确认前不要写成用户已最终决定。
