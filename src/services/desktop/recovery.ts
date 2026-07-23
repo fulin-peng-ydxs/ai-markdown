@@ -60,8 +60,11 @@ export function upsertRecoverySnapshot(
   });
 }
 
-export function deleteRecoverySnapshot(snapshotId: string): Promise<boolean> {
-  return invoke("delete_recovery_snapshot", { snapshotId });
+export function deleteRecoverySnapshot(
+  snapshotId: string,
+  workspaceId: WorkspaceId,
+): Promise<boolean> {
+  return invoke("delete_recovery_snapshot", { snapshotId, workspaceId });
 }
 
 export function cleanupRecoverySnapshots(): Promise<RecoveryCleanupResult> {

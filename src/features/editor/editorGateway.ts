@@ -58,7 +58,7 @@ export interface EditorRecoveryGateway {
     content: string,
     baseRevision: FileRevision,
   ): Promise<RecoveryUpsertResult>;
-  delete(snapshotId: string): Promise<boolean>;
+  delete(snapshotId: string, workspaceId: WorkspaceId): Promise<boolean>;
   cleanup(): Promise<RecoveryCleanupResult>;
 }
 

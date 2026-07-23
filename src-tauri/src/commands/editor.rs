@@ -58,10 +58,13 @@ pub async fn upsert_recovery_snapshot(
 #[tauri::command]
 pub async fn delete_recovery_snapshot(
     snapshot_id: String,
+    workspace_id: WorkspaceId,
+    access: State<'_, WorkspaceAccessService>,
     recovery: State<'_, RecoveryRepository>,
 ) -> Result<bool, DesktopError> {
+    access.workspace(&workspace_id)?;
     let service = recovery.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || service.delete(&snapshot_id))
+    tauri::async_runtime::spawn_blocking(move || service.delete(&snapshot_id, &workspace_id))
         .await
         .map_err(|_| DesktopError::new(DesktopErrorCode::RecoveryWriteFailed, true, true))?
 }

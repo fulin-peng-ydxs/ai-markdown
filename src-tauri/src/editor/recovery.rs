@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -187,6 +187,7 @@ enum RecoveryRepositoryStatus {
 struct RecoveryInner {
     manifest: RecoveryManifestV1,
     active_dirty: HashSet<RecoveryDocumentKey>,
+    snapshot_reads: HashMap<String, usize>,
     status: RecoveryRepositoryStatus,
 }
 
@@ -246,6 +247,7 @@ impl RecoveryRepository {
             inner: Arc::new(Mutex::new(RecoveryInner {
                 manifest,
                 active_dirty: HashSet::new(),
+                snapshot_reads: HashMap::new(),
                 status,
             })),
             policy,
@@ -260,6 +262,7 @@ impl RecoveryRepository {
             inner: Arc::new(Mutex::new(RecoveryInner {
                 manifest: RecoveryManifestV1::default(),
                 active_dirty: HashSet::new(),
+                snapshot_reads: HashMap::new(),
                 status: RecoveryRepositoryStatus::Unavailable(error),
             })),
             policy: RecoveryPolicy::default(),
@@ -298,20 +301,33 @@ impl RecoveryRepository {
         relative_path: &WorkspaceRelativePath,
     ) -> Result<RecoverySnapshot, DesktopError> {
         let store = self.store()?;
-        let inner = self.lock_inner()?;
-        ensure_readable(&inner.status)?;
-        let entry = inner
-            .manifest
-            .entries
-            .iter()
-            .find(|entry| entry.metadata.snapshot_id == snapshot_id)
-            .filter(|entry| {
-                &entry.metadata.workspace_id == workspace_id
-                    && &entry.metadata.relative_path == relative_path
-            })
-            .cloned()
-            .ok_or_else(snapshot_not_found)?;
-        let content = store.read_snapshot(&entry)?;
+        let entry = {
+            let mut inner = self.lock_inner()?;
+            ensure_readable(&inner.status)?;
+            let entry = inner
+                .manifest
+                .entries
+                .iter()
+                .find(|entry| entry.metadata.snapshot_id == snapshot_id)
+                .filter(|entry| {
+                    &entry.metadata.workspace_id == workspace_id
+                        && &entry.metadata.relative_path == relative_path
+                })
+                .cloned()
+                .ok_or_else(snapshot_not_found)?;
+            *inner
+                .snapshot_reads
+                .entry(entry.metadata.snapshot_id.clone())
+                .or_insert(0) += 1;
+            entry
+        };
+        let content = store.read_snapshot(&entry);
+        let release = self.finish_snapshot_read(&entry, &store);
+        let content = match (content, release) {
+            (Err(error), _) => return Err(error),
+            (Ok(_), Err(error)) => return Err(error),
+            (Ok(content), Ok(())) => content,
+        };
         Ok(RecoverySnapshot {
             metadata: entry.metadata,
             content,
@@ -351,35 +367,29 @@ impl RecoveryRepository {
         validate_snapshot_input(&relative_path, &base_revision, size_bytes)?;
         let key = RecoveryDocumentKey::new(workspace_id.clone(), relative_path.clone());
         let store = self.store()?;
-        let mut inner = self.lock_inner()?;
-        if !inner.active_dirty.contains(&key) {
-            return Err(recovery_error(
-                DesktopErrorCode::RecoverySessionNotActive,
-                true,
-            ));
-        }
-        if let Err(error) = ensure_writable(&inner.status) {
-            return Ok(RecoveryUpsertResult::memory_only(error));
+        {
+            let inner = self.lock_inner()?;
+            if !inner.active_dirty.contains(&key) {
+                return Err(recovery_error(
+                    DesktopErrorCode::RecoverySessionNotActive,
+                    true,
+                ));
+            }
+            if let Err(error) = ensure_writable(&inner.status) {
+                return Ok(RecoveryUpsertResult::memory_only(error));
+            }
         }
 
         let now = unix_timestamp_millis();
         let snapshot_id = secure_snapshot_id()?;
         let file_name = snapshot_file_name(&snapshot_id).ok_or_else(recovery_unavailable)?;
-        let existing = inner
-            .manifest
-            .entries
-            .iter()
-            .find(|entry| entry.metadata.key() == key)
-            .cloned();
-        let metadata = RecoverySnapshotMetadata {
+        let mut metadata = RecoverySnapshotMetadata {
             snapshot_id,
             workspace_id,
             relative_path,
             base_revision,
             content_hash: sha256_hex(content.as_bytes()),
-            created_at: existing
-                .as_ref()
-                .map_or(now, |entry| entry.metadata.created_at),
+            created_at: now,
             updated_at: now,
             expires_at: now.saturating_add(self.policy.retention_millis),
             size_bytes,
@@ -388,6 +398,72 @@ impl RecoveryRepository {
             metadata: metadata.clone(),
             snapshot_file_name: file_name,
         };
+
+        {
+            let inner = self.lock_inner()?;
+            if !inner.active_dirty.contains(&key) {
+                return Err(recovery_error(
+                    DesktopErrorCode::RecoverySessionNotActive,
+                    true,
+                ));
+            }
+            if let Err(error) = ensure_writable(&inner.status) {
+                return Ok(RecoveryUpsertResult::memory_only(error));
+            }
+            let mut candidate = inner.manifest.clone();
+            candidate
+                .entries
+                .retain(|entry| entry.metadata.key() != key);
+            candidate.entries.push(new_entry.clone());
+            if !plan_cleanup(&mut candidate, &inner.active_dirty, now, self.policy).limits_satisfied
+            {
+                return Ok(RecoveryUpsertResult::memory_only(recovery_error(
+                    DesktopErrorCode::RecoveryCapacityExceeded,
+                    true,
+                )));
+            }
+        }
+
+        if let Err(error) = store.write_snapshot(&new_entry, content.as_bytes()) {
+            if let Ok(mut inner) = self.lock_inner() {
+                inner.status = RecoveryRepositoryStatus::Unavailable(error.clone());
+            }
+            return Ok(RecoveryUpsertResult::memory_only(error));
+        }
+
+        let mut inner = match self.lock_inner() {
+            Ok(inner) => inner,
+            Err(error) => {
+                let _ = store.remove_snapshot_file(&new_entry.snapshot_file_name);
+                return Err(error);
+            }
+        };
+        if !inner.active_dirty.contains(&key) {
+            drop(inner);
+            let _ = store.remove_snapshot_file(&new_entry.snapshot_file_name);
+            return Err(recovery_error(
+                DesktopErrorCode::RecoverySessionNotActive,
+                true,
+            ));
+        }
+        if let Err(error) = ensure_writable(&inner.status) {
+            drop(inner);
+            let _ = store.remove_snapshot_file(&new_entry.snapshot_file_name);
+            return Ok(RecoveryUpsertResult::memory_only(error));
+        }
+
+        if let Some(existing) = inner
+            .manifest
+            .entries
+            .iter()
+            .find(|entry| entry.metadata.key() == key)
+        {
+            metadata.created_at = existing.metadata.created_at;
+        }
+        let new_entry = RecoveryManifestEntry {
+            metadata: metadata.clone(),
+            snapshot_file_name: new_entry.snapshot_file_name,
+        };
         let mut candidate = inner.manifest.clone();
         candidate
             .entries
@@ -395,19 +471,17 @@ impl RecoveryRepository {
         candidate.entries.push(new_entry.clone());
         let cleanup = plan_cleanup(&mut candidate, &inner.active_dirty, now, self.policy);
         if !cleanup.limits_satisfied {
+            drop(inner);
+            let _ = store.remove_snapshot_file(&new_entry.snapshot_file_name);
             return Ok(RecoveryUpsertResult::memory_only(recovery_error(
                 DesktopErrorCode::RecoveryCapacityExceeded,
                 true,
             )));
         }
-
-        if let Err(error) = store.write_snapshot(&new_entry, content.as_bytes()) {
-            inner.status = RecoveryRepositoryStatus::Unavailable(error.clone());
-            return Ok(RecoveryUpsertResult::memory_only(error));
-        }
         if let Err(error) = store.save_manifest(&candidate) {
-            let _ = store.remove_snapshot_file(&new_entry.snapshot_file_name);
             inner.status = RecoveryRepositoryStatus::Unavailable(error.clone());
+            drop(inner);
+            let _ = store.remove_snapshot_file(&new_entry.snapshot_file_name);
             return Ok(RecoveryUpsertResult::memory_only(error));
         }
 
@@ -421,6 +495,11 @@ impl RecoveryRepository {
             .entries
             .iter()
             .filter(|entry| !retained_files.contains(&entry.snapshot_file_name))
+            .filter(|entry| {
+                !inner
+                    .snapshot_reads
+                    .contains_key(&entry.metadata.snapshot_id)
+            })
             .map(|entry| entry.snapshot_file_name.clone())
             .collect::<Vec<_>>();
         inner.manifest = candidate;
@@ -432,7 +511,11 @@ impl RecoveryRepository {
         Ok(RecoveryUpsertResult::persisted(metadata))
     }
 
-    pub fn delete(&self, snapshot_id: &str) -> Result<bool, DesktopError> {
+    pub fn delete(
+        &self,
+        snapshot_id: &str,
+        workspace_id: &WorkspaceId,
+    ) -> Result<bool, DesktopError> {
         let store = self.store()?;
         let mut inner = self.lock_inner()?;
         ensure_writable(&inner.status)?;
@@ -441,6 +524,7 @@ impl RecoveryRepository {
             .entries
             .iter()
             .find(|entry| entry.metadata.snapshot_id == snapshot_id)
+            .filter(|entry| &entry.metadata.workspace_id == workspace_id)
             .cloned()
         else {
             return Ok(false);
@@ -461,8 +545,11 @@ impl RecoveryRepository {
         }
         inner.manifest = candidate;
         inner.status = RecoveryRepositoryStatus::Ready;
+        let remove_file = !inner.snapshot_reads.contains_key(snapshot_id);
         drop(inner);
-        let _ = store.remove_snapshot_file(&entry.snapshot_file_name);
+        if remove_file {
+            let _ = store.remove_snapshot_file(&entry.snapshot_file_name);
+        }
         Ok(true)
     }
 
@@ -477,19 +564,30 @@ impl RecoveryRepository {
             unix_timestamp_millis(),
             self.policy,
         );
-        let retained_files = candidate
+        let mut retained_files = candidate
             .entries
             .iter()
             .map(|entry| entry.snapshot_file_name.clone())
             .collect::<HashSet<_>>();
-        let removed_files = inner
+        retained_files.extend(
+            inner
+                .snapshot_reads
+                .keys()
+                .filter_map(|snapshot_id| snapshot_file_name(snapshot_id)),
+        );
+        let removed_entries = inner
             .manifest
             .entries
             .iter()
-            .filter(|entry| !retained_files.contains(&entry.snapshot_file_name))
-            .map(|entry| entry.snapshot_file_name.clone())
+            .filter(|entry| {
+                !candidate
+                    .entries
+                    .iter()
+                    .any(|candidate| candidate.metadata.snapshot_id == entry.metadata.snapshot_id)
+            })
+            .cloned()
             .collect::<Vec<_>>();
-        if !removed_files.is_empty() {
+        if !removed_entries.is_empty() {
             if let Err(error) = store.save_manifest(&candidate) {
                 inner.status = RecoveryRepositoryStatus::Unavailable(error.clone());
                 return Err(error);
@@ -497,13 +595,18 @@ impl RecoveryRepository {
             inner.manifest = candidate;
             inner.status = RecoveryRepositoryStatus::Ready;
         }
-        for file_name in &removed_files {
-            let _ = store.remove_snapshot_file(file_name);
+        for entry in &removed_entries {
+            if !inner
+                .snapshot_reads
+                .contains_key(&entry.metadata.snapshot_id)
+            {
+                let _ = store.remove_snapshot_file(&entry.snapshot_file_name);
+            }
         }
         store.remove_orphans(&retained_files);
         drop(inner);
         Ok(RecoveryCleanupResult {
-            removed: u32::try_from(removed_files.len()).unwrap_or(u32::MAX),
+            removed: u32::try_from(removed_entries.len()).unwrap_or(u32::MAX),
             remaining: u32::try_from(cleanup.remaining).unwrap_or(u32::MAX),
             total_bytes: cleanup.total_bytes,
             limits_satisfied: cleanup.limits_satisfied,
@@ -552,6 +655,37 @@ impl RecoveryRepository {
 
     fn store(&self) -> Result<Arc<RecoveryStore>, DesktopError> {
         self.store.clone().ok_or_else(recovery_unavailable)
+    }
+
+    fn finish_snapshot_read(
+        &self,
+        entry: &RecoveryManifestEntry,
+        store: &RecoveryStore,
+    ) -> Result<(), DesktopError> {
+        let remove_file = {
+            let mut inner = self.lock_inner()?;
+            let snapshot_id = &entry.metadata.snapshot_id;
+            let Some(readers) = inner.snapshot_reads.get_mut(snapshot_id) else {
+                return Err(recovery_unavailable());
+            };
+            if *readers == 0 {
+                return Err(recovery_unavailable());
+            }
+            *readers -= 1;
+            if *readers == 0 {
+                inner.snapshot_reads.remove(snapshot_id);
+            }
+            !inner.snapshot_reads.contains_key(snapshot_id)
+                && !inner
+                    .manifest
+                    .entries
+                    .iter()
+                    .any(|item| item.metadata.snapshot_id == *snapshot_id)
+        };
+        if remove_file {
+            let _ = store.remove_snapshot_file(&entry.snapshot_file_name);
+        }
+        Ok(())
     }
 
     fn lock_inner(&self) -> Result<std::sync::MutexGuard<'_, RecoveryInner>, DesktopError> {
@@ -1411,13 +1545,69 @@ mod tests {
         activate(&repository, &workspace_id, &relative_path);
         let snapshot = persist(&repository, &workspace_id, &relative_path, "dirty");
 
-        let error = repository.delete(&snapshot.snapshot_id).unwrap_err();
+        let error = repository
+            .delete(&snapshot.snapshot_id, &workspace_id)
+            .unwrap_err();
         assert_eq!(error.code, DesktopErrorCode::RecoverySnapshotProtected);
         repository
-            .release_active(workspace_id, relative_path)
+            .release_active(workspace_id.clone(), relative_path)
             .unwrap();
-        assert!(repository.delete(&snapshot.snapshot_id).unwrap());
+        assert!(repository
+            .delete(&snapshot.snapshot_id, &workspace_id)
+            .unwrap());
         assert!(repository.list().unwrap().is_empty());
+    }
+
+    #[test]
+    fn delete_rejects_a_snapshot_owned_by_another_workspace() {
+        let fixture = Fixture::new("recovery-delete-workspace");
+        let repository = fixture.repository();
+        let owner = workspace("workspace-owner");
+        let other = workspace("workspace-other");
+        let relative_path = path("note.md");
+        activate(&repository, &owner, &relative_path);
+        let snapshot = persist(&repository, &owner, &relative_path, "dirty");
+        repository
+            .release_active(owner.clone(), relative_path.clone())
+            .unwrap();
+
+        assert!(!repository.delete(&snapshot.snapshot_id, &other).unwrap());
+        assert_eq!(
+            repository
+                .get(&snapshot.snapshot_id, &owner, &relative_path)
+                .unwrap()
+                .content,
+            "dirty"
+        );
+    }
+
+    #[test]
+    fn a_leased_snapshot_file_is_removed_only_after_its_last_reader_releases() {
+        let fixture = Fixture::new("recovery-read-lease");
+        let repository = fixture.repository();
+        let workspace_id = workspace("workspace-one");
+        let relative_path = path("note.md");
+        activate(&repository, &workspace_id, &relative_path);
+        let snapshot = persist(&repository, &workspace_id, &relative_path, "dirty");
+        repository
+            .release_active(workspace_id.clone(), relative_path)
+            .unwrap();
+        let entry = {
+            let mut inner = repository.lock_inner().unwrap();
+            let entry = inner.manifest.entries[0].clone();
+            inner.snapshot_reads.insert(snapshot.snapshot_id.clone(), 1);
+            entry
+        };
+        let snapshot_path = fixture.snapshot_directory().join(&entry.snapshot_file_name);
+
+        assert!(repository
+            .delete(&snapshot.snapshot_id, &workspace_id)
+            .unwrap());
+        assert!(snapshot_path.exists());
+        repository
+            .finish_snapshot_read(&entry, repository.store().unwrap().as_ref())
+            .unwrap();
+        assert!(!snapshot_path.exists());
     }
 
     #[test]
@@ -1588,6 +1778,34 @@ mod tests {
             DesktopErrorCode::RecoveryUnsupportedVersion
         );
         assert_eq!(fs::read(&store.manifest_path).unwrap(), unknown);
+    }
+
+    #[test]
+    fn transient_write_failure_status_recovers_on_the_next_successful_upsert() {
+        let fixture = Fixture::new("recovery-runtime-retry");
+        let repository = fixture.repository();
+        let workspace_id = workspace("workspace-one");
+        let relative_path = path("note.md");
+        activate(&repository, &workspace_id, &relative_path);
+        {
+            let mut inner = repository.lock_inner().unwrap();
+            inner.status = RecoveryRepositoryStatus::Unavailable(recovery_error(
+                DesktopErrorCode::RecoveryWriteFailed,
+                true,
+            ));
+        }
+
+        let outcome = repository
+            .upsert(
+                workspace_id,
+                relative_path,
+                "retry succeeds".to_owned(),
+                revision("disk"),
+            )
+            .unwrap();
+
+        assert_eq!(outcome.status, RecoveryPersistStatus::Persisted);
+        assert!(repository.current_error().is_none());
     }
 
     #[test]
