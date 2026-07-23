@@ -64,6 +64,21 @@ export function desktopErrorMessage(error: DesktopError): string {
       return "该文件不是受支持的 UTF-8 编码，Plainroot 没有修改它。";
     case "file_too_large":
       return "该文件超过当前读取上限，Plainroot 没有修改它。";
+    case "conflict_confirmation_not_found":
+      return "覆盖确认已经过期或被使用。请重新检查磁盘版本后再决定。";
+    case "conflict_content_changed":
+      return "确认后编辑内容又发生了变化。为避免覆盖错误内容，请重新确认。";
+    case "save_copy_confirmation_not_found":
+      return "另存目标授权已经过期或被使用。请重新选择目标。";
+    case "save_copy_target_changed":
+      return "另存目标在确认前发生了变化，Plainroot 没有覆盖它。请重新选择。";
+    case "save_copy_format_required":
+      return "当前文件的编码或换行格式不能直接保留，请明确选择 UTF-8 输出格式。";
+    case "save_copy_overwrite_confirmation_required":
+      return "目标文件已经存在，必须明确确认覆盖结果后才能继续。";
+    case "save_copy_failed":
+    case "editor_save_unavailable":
+      return "保存副本没有完成，当前编辑内容和原磁盘文件仍保持不变。";
     case "invalid_entry_name":
       return "名称包含不支持的字符、路径分隔符或空白边界，请换一个名称。";
     case "reserved_entry_name":

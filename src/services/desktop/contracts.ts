@@ -52,6 +52,14 @@ export const DESKTOP_ERROR_CODES = [
   "recovery_capacity_exceeded",
   "recovery_session_not_active",
   "recovery_snapshot_protected",
+  "editor_save_unavailable",
+  "conflict_confirmation_not_found",
+  "conflict_content_changed",
+  "save_copy_confirmation_not_found",
+  "save_copy_target_changed",
+  "save_copy_format_required",
+  "save_copy_overwrite_confirmation_required",
+  "save_copy_failed",
   "invalid_entry_name",
   "reserved_entry_name",
   "target_already_exists",
@@ -176,6 +184,84 @@ export interface RecoveryCleanupResult {
   remaining: number;
   totalBytes: number;
   limitsSatisfied: boolean;
+}
+
+export interface ConflictOverwriteProposal {
+  confirmationId: string;
+  relativePath: WorkspaceRelativePath;
+  latestRevision: FileRevision;
+  currentContentHash: string;
+  targetWritable: boolean;
+}
+
+export const SAVE_COPY_FORMAT_CHOICES = [
+  "preserve",
+  "utf8_lf",
+  "utf8_crlf",
+  "utf8_cr",
+] as const;
+
+export type SaveCopyFormatChoice =
+  (typeof SAVE_COPY_FORMAT_CHOICES)[number];
+
+export const SAVE_COPY_SOURCE_KINDS = [
+  "workspace_document",
+  "new_document",
+] as const;
+
+export type SaveCopySourceKind =
+  (typeof SAVE_COPY_SOURCE_KINDS)[number];
+
+export type SaveCopySource =
+  | {
+      kind: "workspace_document";
+      workspaceId: WorkspaceId;
+      relativePath: WorkspaceRelativePath;
+      revision: FileRevision;
+    }
+  | {
+      kind: "new_document";
+      suggestedName: string;
+    };
+
+export const SAVE_COPY_TARGET_STATES = [
+  "new",
+  "existing",
+] as const;
+
+export type SaveCopyTargetState =
+  (typeof SAVE_COPY_TARGET_STATES)[number];
+
+export interface SaveCopyProposal {
+  confirmationId: string;
+  displayPath: string;
+  fileName: string;
+  targetState: SaveCopyTargetState;
+  targetRevision: FileRevision | null;
+  outputEncoding: TextEncoding;
+  outputLineEnding: LineEnding;
+  workspaceId: WorkspaceId | null;
+  relativePath: WorkspaceRelativePath | null;
+}
+
+export const SAVE_COPY_SELECTION_STATUSES = [
+  "cancelled",
+  "ready",
+] as const;
+
+export type SaveCopySelectionStatus =
+  (typeof SAVE_COPY_SELECTION_STATUSES)[number];
+
+export type SaveCopySelectionOutcome =
+  | { status: "cancelled" }
+  | { status: "ready"; proposal: SaveCopyProposal };
+
+export interface SaveCopyResult {
+  displayPath: string;
+  workspaceId: WorkspaceId | null;
+  relativePath: WorkspaceRelativePath | null;
+  revision: FileRevision;
+  bytesWritten: number;
 }
 
 export interface WorkspaceScanStart {

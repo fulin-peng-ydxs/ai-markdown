@@ -544,7 +544,15 @@ fn validate_expected_revision(
 }
 
 fn encode_content(content: &str, revision: &FileRevision) -> Result<Vec<u8>, DesktopError> {
-    if revision.encoding == TextEncoding::Unsupported {
+    encode_markdown_content(content, revision.encoding, revision.line_ending)
+}
+
+pub(crate) fn encode_markdown_content(
+    content: &str,
+    encoding: TextEncoding,
+    line_ending: LineEnding,
+) -> Result<Vec<u8>, DesktopError> {
+    if encoding == TextEncoding::Unsupported {
         return Err(DesktopError::new(
             DesktopErrorCode::UnsupportedTextEncoding,
             true,
@@ -552,16 +560,15 @@ fn encode_content(content: &str, revision: &FileRevision) -> Result<Vec<u8>, Des
         ));
     }
     let content = content.strip_prefix('\u{feff}').unwrap_or(content);
-    let normalized = match revision.line_ending {
+    let normalized = match line_ending {
         LineEnding::Lf => normalize_line_endings(content, "\n"),
         LineEnding::Crlf => normalize_line_endings(content, "\r\n"),
         LineEnding::Cr => normalize_line_endings(content, "\r"),
         LineEnding::None | LineEnding::Mixed => content.to_owned(),
     };
-    let mut bytes = Vec::with_capacity(
-        normalized.len() + usize::from(revision.encoding == TextEncoding::Utf8Bom) * 3,
-    );
-    if revision.encoding == TextEncoding::Utf8Bom {
+    let mut bytes =
+        Vec::with_capacity(normalized.len() + usize::from(encoding == TextEncoding::Utf8Bom) * 3);
+    if encoding == TextEncoding::Utf8Bom {
         bytes.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
     }
     bytes.extend_from_slice(normalized.as_bytes());

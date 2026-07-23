@@ -1,11 +1,17 @@
 import type {
   DesktopError,
+  ConflictOverwriteProposal,
   FileRevision,
   MarkdownReadResult,
   RecoveryCleanupResult,
   RecoverySnapshot,
   RecoverySnapshotMetadata,
   RecoveryUpsertResult,
+  SafeWriteResult,
+  SaveCopyFormatChoice,
+  SaveCopyResult,
+  SaveCopySelectionOutcome,
+  SaveCopySource,
   WorkspaceId,
   WorkspaceRelativePath,
 } from "../../services/desktop/contracts";
@@ -19,6 +25,14 @@ import {
   releaseActiveRecoverySession,
   upsertRecoverySnapshot,
 } from "../../services/desktop/recovery";
+import {
+  cancelConflictOverwrite,
+  cancelSaveCopy,
+  confirmConflictOverwrite,
+  confirmSaveCopy,
+  prepareConflictOverwrite,
+  prepareSaveCopy,
+} from "../../services/desktop/editorSave";
 import {
   rejectDocumentRead,
   resolveDocumentRead,
@@ -70,6 +84,39 @@ export const desktopRecoveryGateway: EditorRecoveryGateway = {
   upsert: upsertRecoverySnapshot,
   delete: deleteRecoverySnapshot,
   cleanup: cleanupRecoverySnapshots,
+};
+
+export interface EditorSaveGateway {
+  prepareOverwrite(
+    workspaceId: WorkspaceId,
+    relativePath: WorkspaceRelativePath,
+    content: string,
+  ): Promise<ConflictOverwriteProposal>;
+  confirmOverwrite(
+    workspaceId: WorkspaceId,
+    confirmationId: string,
+    content: string,
+  ): Promise<SafeWriteResult>;
+  cancelOverwrite(confirmationId: string): Promise<boolean>;
+  prepareSaveCopy(
+    source: SaveCopySource,
+    formatChoice?: SaveCopyFormatChoice | null,
+  ): Promise<SaveCopySelectionOutcome>;
+  confirmSaveCopy(
+    confirmationId: string,
+    content: string,
+    overwriteExisting: boolean,
+  ): Promise<SaveCopyResult>;
+  cancelSaveCopy(confirmationId: string): Promise<boolean>;
+}
+
+export const desktopSaveGateway: EditorSaveGateway = {
+  prepareOverwrite: prepareConflictOverwrite,
+  confirmOverwrite: confirmConflictOverwrite,
+  cancelOverwrite: cancelConflictOverwrite,
+  prepareSaveCopy,
+  confirmSaveCopy,
+  cancelSaveCopy,
 };
 
 export interface MarkdownCompatibilityParser {

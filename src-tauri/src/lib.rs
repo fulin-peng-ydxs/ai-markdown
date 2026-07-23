@@ -107,6 +107,12 @@ pub fn run() {
             commands::editor::cleanup_recovery_snapshots,
             commands::editor::register_active_recovery_session,
             commands::editor::release_active_recovery_session,
+            commands::editor::prepare_conflict_overwrite,
+            commands::editor::confirm_conflict_overwrite,
+            commands::editor::cancel_conflict_overwrite,
+            commands::editor::prepare_save_copy,
+            commands::editor::confirm_save_copy,
+            commands::editor::cancel_save_copy,
         ])
         .setup(|app| {
             let persistent_state = state::PersistentAppState::initialize_for_app(app.handle());
@@ -139,6 +145,9 @@ pub fn run() {
             let operation_lock = app
                 .state::<fs::mutate::WorkspaceMutationService>()
                 .operation_lock();
+            app.manage(editor::save_copy::EditorSaveService::with_operation_lock(
+                operation_lock.clone(),
+            ));
             let safe_writes = fs::safe_write::WorkspaceSafeWriteService::initialize_for_app(
                 app.handle(),
                 operation_lock,
