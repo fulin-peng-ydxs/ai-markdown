@@ -1,6 +1,28 @@
 export type WorkspaceId = string;
 export type WorkspaceRelativePath = string;
 
+export const WORKBENCH_MENU_ACTIONS = [
+  "file.save",
+  "file.save_copy",
+  "edit.undo",
+  "edit.redo",
+  "edit.find",
+  "view.visual",
+  "view.source",
+] as const;
+
+export type WorkbenchMenuAction = (typeof WORKBENCH_MENU_ACTIONS)[number];
+export type EditorMenuMode = "visual" | "source";
+
+export interface EditorMenuState {
+  hasDocument: boolean;
+  readOnly: boolean;
+  busy: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
+  mode: EditorMenuMode | null;
+}
+
 export const DESKTOP_ERROR_CODES = [
   "invalid_workspace_id",
   "workspace_not_registered",
@@ -21,6 +43,7 @@ export const DESKTOP_ERROR_CODES = [
   "window_focus_failed",
   "window_title_failed",
   "window_close_failed",
+  "menu_update_failed",
   "state_unavailable",
   "state_read_failed",
   "state_write_failed",

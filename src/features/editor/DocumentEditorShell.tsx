@@ -1,8 +1,10 @@
 import {
+  forwardRef,
   lazy,
   Suspense,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -66,27 +68,45 @@ export interface DocumentEditorMetrics {
   selection: EditorSelection;
 }
 
+export interface DocumentEditorShellHandle {
+  execute(command: EditorCommand): void;
+  focus(): void;
+  switchMode(mode: EditorMode): void;
+}
+
+export interface DocumentEditorRuntimeState {
+  busy: boolean;
+}
+
 export interface DocumentEditorShellProps {
   assetGateway?: EditorAssetGateway;
   session: ReadyDocumentSession;
   parser?: MarkdownCompatibilityParser;
   onMetricsChange?(metrics: DocumentEditorMetrics): void;
+  onRuntimeStateChange?(state: DocumentEditorRuntimeState): void;
   onResolveConflict?(): void;
   onSave?(): void;
   onSaveCopy?(): void;
   onSessionChange(session: ReadyDocumentSession): void;
 }
 
-export function DocumentEditorShell({
-  assetGateway,
-  session,
-  parser = remarkMarkdownCompatibilityParser,
-  onMetricsChange,
-  onResolveConflict,
-  onSave,
-  onSaveCopy,
-  onSessionChange,
-}: DocumentEditorShellProps) {
+export const DocumentEditorShell = forwardRef<
+  DocumentEditorShellHandle,
+  DocumentEditorShellProps
+>(function DocumentEditorShell(
+  {
+    assetGateway,
+    session,
+    parser = remarkMarkdownCompatibilityParser,
+    onMetricsChange,
+    onRuntimeStateChange,
+    onResolveConflict,
+    onSave,
+    onSaveCopy,
+    onSessionChange,
+  },
+  ref,
+) {
   const sessionRef = useRef(session);
   const editorRef = useRef<EditorSurfaceHandle | null>(null);
   const pendingFindRef = useRef(false);
@@ -136,6 +156,10 @@ export function DocumentEditorShell({
       selection: session.selection,
     });
   }, [onMetricsChange, session.markdown, session.selection]);
+
+  useEffect(() => {
+    onRuntimeStateChange?.({ busy });
+  }, [busy, onRuntimeStateChange]);
 
   useEffect(() => {
     if (session.mode !== "source" || !pendingFindRef.current) return;
@@ -295,6 +319,18 @@ export function DocumentEditorShell({
       }
     },
     [applyHistory, switchMode],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      execute: executeCommand,
+      focus: () => editorRef.current?.focus(),
+      switchMode: (mode) => {
+        void switchMode(mode);
+      },
+    }),
+    [executeCommand, switchMode],
   );
 
   const insertPreparedAsset = useCallback(
@@ -665,7 +701,7 @@ export function DocumentEditorShell({
       ) : null}
     </div>
   );
-}
+});
 
 function projectionForMode(
   mode: EditorMode,

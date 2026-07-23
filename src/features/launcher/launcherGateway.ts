@@ -12,6 +12,7 @@ import {
   coordinateWorkspaceOpen,
   getWorkspaceLauncherSnapshot,
   listenForLauncherMenu,
+  resetEditorMenuState,
   removeRecentWorkspace,
   removeWorkspaceSession,
   selectMarkdownFile,
@@ -38,6 +39,7 @@ export interface WorkspaceLauncherGateway {
   removeRecent(workspaceId: WorkspaceId): Promise<boolean>;
   removeSession(workspaceId: WorkspaceId): Promise<boolean>;
   listenMenu(listener: (action: LauncherMenuAction) => void): Promise<() => void>;
+  resetEditorMenu(): Promise<void>;
   recoveryGateway: EditorRecoveryGateway;
 }
 
@@ -52,5 +54,6 @@ export const desktopWorkspaceLauncherGateway: WorkspaceLauncherGateway = {
   removeRecent: removeRecentWorkspace,
   removeSession: removeWorkspaceSession,
   listenMenu: listenForLauncherMenu,
+  resetEditorMenu: resetEditorMenuState,
   recoveryGateway: desktopRecoveryGateway,
 };

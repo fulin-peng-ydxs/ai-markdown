@@ -1,9 +1,17 @@
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+use serde::{Deserialize, Serialize};
 use tauri::menu::AboutMetadata;
 use tauri::{
-    menu::{Menu, MenuBuilder, MenuItem, MenuItemBuilder, SubmenuBuilder},
-    AppHandle, Emitter, Manager, Runtime,
+    menu::{
+        CheckMenuItem, CheckMenuItemBuilder, Menu, MenuBuilder, MenuItem, MenuItemBuilder,
+        MenuItemKind, SubmenuBuilder,
+    },
+    AppHandle, Emitter, Manager, Runtime, State, WebviewWindow,
 };
 
+use crate::error::{DesktopError, DesktopErrorCode};
 use crate::window::APP_NAME;
 use crate::window::{WindowSettlementCoordinator, WorkspaceWindowCoordinator};
 use crate::{commands::workspace::WorkspaceAccessService, state::PersistentAppState};
@@ -12,9 +20,91 @@ pub const NEW_WINDOW_ID: &str = "file.new_window";
 pub const CLOSE_WINDOW_ID: &str = "file.close_window";
 pub const OPEN_FOLDER_ID: &str = "file.open_folder";
 pub const OPEN_MARKDOWN_ID: &str = "file.open_markdown";
+pub const SAVE_ID: &str = "file.save";
+pub const SAVE_COPY_ID: &str = "file.save_copy";
+pub const UNDO_ID: &str = "edit.undo";
+pub const REDO_ID: &str = "edit.redo";
+pub const FIND_ID: &str = "edit.find";
+pub const VISUAL_MODE_ID: &str = "view.visual";
+pub const SOURCE_MODE_ID: &str = "view.source";
 pub const HELP_ID: &str = "help.plainroot";
 pub const LAUNCHER_MENU_EVENT: &str = "plainroot://launcher-menu";
+pub const WORKBENCH_MENU_EVENT: &str = "plainroot://workbench-menu";
 const CLOSE_WINDOW_ACCELERATOR: &str = "CmdOrCtrl+Shift+W";
+
+const WORKBENCH_ACTION_IDS: &[&str] = &[
+    SAVE_ID,
+    SAVE_COPY_ID,
+    UNDO_ID,
+    REDO_ID,
+    FIND_ID,
+    VISUAL_MODE_ID,
+    SOURCE_MODE_ID,
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EditorMenuMode {
+    Visual,
+    Source,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorMenuState {
+    pub has_document: bool,
+    pub read_only: bool,
+    pub busy: bool,
+    pub can_undo: bool,
+    pub can_redo: bool,
+    pub mode: Option<EditorMenuMode>,
+}
+
+impl Default for EditorMenuState {
+    fn default() -> Self {
+        Self {
+            has_document: false,
+            read_only: true,
+            busy: false,
+            can_undo: false,
+            can_redo: false,
+            mode: None,
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct EditorMenuStateRegistry {
+    windows: Mutex<HashMap<String, EditorMenuState>>,
+}
+
+impl EditorMenuStateRegistry {
+    fn update(&self, window_label: &str, state: EditorMenuState) -> Result<(), DesktopError> {
+        self.windows
+            .lock()
+            .map_err(|_| menu_update_error())?
+            .insert(window_label.to_owned(), state);
+        Ok(())
+    }
+
+    fn remove(&self, window_label: &str) -> Result<(), DesktopError> {
+        self.windows
+            .lock()
+            .map_err(|_| menu_update_error())?
+            .remove(window_label);
+        Ok(())
+    }
+
+    pub fn state_for(&self, window_label: &str) -> Result<EditorMenuState, DesktopError> {
+        Ok(self
+            .windows
+            .lock()
+            .map_err(|_| menu_update_error())?
+            .get(window_label)
+            .copied()
+            .unwrap_or_default())
+    }
+}
 
 pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let open_folder = custom_item(app, OPEN_FOLDER_ID, "打开文件夹…", Some("CmdOrCtrl+O"))?;
@@ -31,11 +121,16 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         "关闭窗口",
         Some(CLOSE_WINDOW_ACCELERATOR),
     )?;
+    let save = custom_item(app, SAVE_ID, "保存", Some("CmdOrCtrl+S"))?;
+    let save_copy = custom_item(app, SAVE_COPY_ID, "另存副本…", Some("CmdOrCtrl+Shift+S"))?;
 
     let file_builder = SubmenuBuilder::new(app, "文件")
         .item(&new_window)
         .item(&open_folder)
         .item(&open_markdown)
+        .separator()
+        .item(&save)
+        .item(&save_copy)
         .separator()
         .item(&close_window);
     #[cfg(not(target_os = "macos"))]
@@ -43,31 +138,40 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
     let file_menu = file_builder.build()?;
 
     let edit_menu = SubmenuBuilder::new(app, "编辑")
-        .item(&custom_item(app, "edit.undo", "撤销", Some("CmdOrCtrl+Z"))?)
+        .item(&custom_item(app, UNDO_ID, "撤销", Some("CmdOrCtrl+Z"))?)
         .item(&custom_item(
             app,
-            "edit.redo",
+            REDO_ID,
             "重做",
             Some("CmdOrCtrl+Shift+Z"),
         )?)
         .separator()
-        .item(&custom_item(app, "edit.cut", "剪切", Some("CmdOrCtrl+X"))?)
-        .item(&custom_item(app, "edit.copy", "复制", Some("CmdOrCtrl+C"))?)
+        // Clipboard roles remain native so the focused CodeMirror/ProseMirror surface receives
+        // platform-correct cut/copy/paste/select-all behavior without a second JS shortcut path.
+        .cut_with_text("剪切")
+        .copy_with_text("复制")
+        .paste_with_text("粘贴")
+        .select_all_with_text("全选")
+        .separator()
         .item(&custom_item(
             app,
-            "edit.paste",
-            "粘贴",
-            Some("CmdOrCtrl+V"),
-        )?)
-        .item(&custom_item(
-            app,
-            "edit.select_all",
-            "全选",
-            Some("CmdOrCtrl+A"),
+            FIND_ID,
+            "在当前文档中查找…",
+            Some("CmdOrCtrl+F"),
         )?)
         .build()?;
 
+    let visual_mode = custom_check_item(app, VISUAL_MODE_ID, "排版编辑", Some("CmdOrCtrl+Alt+1"))?;
+    let source_mode = custom_check_item(
+        app,
+        SOURCE_MODE_ID,
+        "Markdown 源码",
+        Some("CmdOrCtrl+Alt+2"),
+    )?;
     let view_builder = SubmenuBuilder::new(app, "显示")
+        .item(&visual_mode)
+        .item(&source_mode)
+        .separator()
         .item(&custom_item(
             app,
             "view.toggle_sidebar",
@@ -173,32 +277,73 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
                 }
             })
         }
-        OPEN_FOLDER_ID | OPEN_MARKDOWN_ID => app
-            .webview_windows()
-            .into_values()
-            .find(|window| window.is_focused().unwrap_or(false))
-            .ok_or_else(|| {
-                crate::error::DesktopError::new(
-                    crate::error::DesktopErrorCode::WindowNotFound,
-                    true,
-                    true,
-                )
+        OPEN_FOLDER_ID | OPEN_MARKDOWN_ID => focused_window(app).and_then(|window| {
+            window
+                .emit(LAUNCHER_MENU_EVENT, id)
+                .map_err(|_| DesktopError::new(DesktopErrorCode::WindowFocusFailed, true, true))
+        }),
+        action if WORKBENCH_ACTION_IDS.contains(&action) => {
+            focused_window(app).and_then(|window| {
+                window
+                    .emit(WORKBENCH_MENU_EVENT, action)
+                    .map_err(|_| DesktopError::new(DesktopErrorCode::MenuUpdateFailed, true, true))
             })
-            .and_then(|window| {
-                window.emit(LAUNCHER_MENU_EVENT, id).map_err(|_| {
-                    crate::error::DesktopError::new(
-                        crate::error::DesktopErrorCode::WindowFocusFailed,
-                        true,
-                        true,
-                    )
-                })
-            }),
+        }
         _ => return,
     };
 
     if let Err(error) = result {
         eprintln!("Plainroot desktop action failed: {}", error.message_key);
     }
+}
+
+#[tauri::command]
+pub fn update_editor_menu_state<R: Runtime>(
+    app: AppHandle<R>,
+    window: WebviewWindow<R>,
+    state: EditorMenuState,
+    registry: State<'_, EditorMenuStateRegistry>,
+) -> Result<(), DesktopError> {
+    registry.update(window.label(), state)?;
+    if window.is_focused().unwrap_or(false) {
+        apply_editor_menu_state(&app, state)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn reset_editor_menu_state<R: Runtime>(
+    app: AppHandle<R>,
+    window: WebviewWindow<R>,
+    registry: State<'_, EditorMenuStateRegistry>,
+) -> Result<(), DesktopError> {
+    registry.remove(window.label())?;
+    if window.is_focused().unwrap_or(false) {
+        apply_editor_menu_state(&app, EditorMenuState::default())?;
+    }
+    Ok(())
+}
+
+pub fn apply_window_editor_menu_state<R: Runtime>(
+    app: &AppHandle<R>,
+    window_label: &str,
+    registry: &EditorMenuStateRegistry,
+) -> Result<(), DesktopError> {
+    apply_editor_menu_state(app, registry.state_for(window_label)?)
+}
+
+pub fn forget_window_editor_menu_state(
+    window_label: &str,
+    registry: &EditorMenuStateRegistry,
+) -> Result<(), DesktopError> {
+    registry.remove(window_label)
+}
+
+fn focused_window<R: Runtime>(app: &AppHandle<R>) -> Result<tauri::WebviewWindow<R>, DesktopError> {
+    app.webview_windows()
+        .into_values()
+        .find(|window| window.is_focused().unwrap_or(false))
+        .ok_or_else(|| DesktopError::new(DesktopErrorCode::WindowNotFound, true, true))
 }
 
 fn custom_item<R: Runtime>(
@@ -214,6 +359,19 @@ fn custom_item<R: Runtime>(
     builder.build(app)
 }
 
+fn custom_check_item<R: Runtime>(
+    app: &AppHandle<R>,
+    id: &str,
+    text: &str,
+    accelerator: Option<&str>,
+) -> tauri::Result<CheckMenuItem<R>> {
+    let mut builder = CheckMenuItemBuilder::with_id(id, text).enabled(custom_menu_enabled(id));
+    if let Some(accelerator) = accelerator {
+        builder = builder.accelerator(accelerator);
+    }
+    builder.build(app)
+}
+
 fn custom_menu_enabled(id: &str) -> bool {
     matches!(
         id,
@@ -221,11 +379,107 @@ fn custom_menu_enabled(id: &str) -> bool {
     )
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct EditorMenuPolicy {
+    save: bool,
+    save_copy: bool,
+    undo: bool,
+    redo: bool,
+    find: bool,
+    visual: bool,
+    source: bool,
+}
+
+fn editor_menu_policy(state: EditorMenuState) -> EditorMenuPolicy {
+    let available = state.has_document && !state.busy;
+    let editable = available && !state.read_only;
+    EditorMenuPolicy {
+        save: editable,
+        save_copy: available,
+        undo: editable && state.can_undo,
+        redo: editable && state.can_redo,
+        find: available,
+        visual: available && state.mode != Some(EditorMenuMode::Visual),
+        source: available && state.mode != Some(EditorMenuMode::Source),
+    }
+}
+
+fn apply_editor_menu_state<R: Runtime>(
+    app: &AppHandle<R>,
+    state: EditorMenuState,
+) -> Result<(), DesktopError> {
+    let menu = app.menu().ok_or_else(menu_update_error)?;
+    let policy = editor_menu_policy(state);
+    for (id, enabled) in [
+        (SAVE_ID, policy.save),
+        (SAVE_COPY_ID, policy.save_copy),
+        (UNDO_ID, policy.undo),
+        (REDO_ID, policy.redo),
+        (FIND_ID, policy.find),
+        (VISUAL_MODE_ID, policy.visual),
+        (SOURCE_MODE_ID, policy.source),
+    ] {
+        let item = find_menu_item(&menu, id).ok_or_else(menu_update_error)?;
+        set_item_enabled(&item, enabled)?;
+    }
+    set_check_item(
+        &menu,
+        VISUAL_MODE_ID,
+        state.mode == Some(EditorMenuMode::Visual),
+    )?;
+    set_check_item(
+        &menu,
+        SOURCE_MODE_ID,
+        state.mode == Some(EditorMenuMode::Source),
+    )?;
+    Ok(())
+}
+
+fn find_menu_item<R: Runtime>(menu: &Menu<R>, id: &str) -> Option<MenuItemKind<R>> {
+    for item in menu.items().ok()? {
+        if item.id().as_ref() == id {
+            return Some(item);
+        }
+        if let MenuItemKind::Submenu(submenu) = item {
+            if let Some(found) = submenu.get(id) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn set_item_enabled<R: Runtime>(item: &MenuItemKind<R>, enabled: bool) -> Result<(), DesktopError> {
+    let result = match item {
+        MenuItemKind::MenuItem(item) => item.set_enabled(enabled),
+        MenuItemKind::Submenu(item) => item.set_enabled(enabled),
+        // Clipboard roles are predefined system actions and manage availability from the
+        // focused native editor surface; Plainroot never passes them to this helper.
+        MenuItemKind::Predefined(_) => return Err(menu_update_error()),
+        MenuItemKind::Check(item) => item.set_enabled(enabled),
+        MenuItemKind::Icon(item) => item.set_enabled(enabled),
+    };
+    result.map_err(|_| menu_update_error())
+}
+
+fn set_check_item<R: Runtime>(menu: &Menu<R>, id: &str, checked: bool) -> Result<(), DesktopError> {
+    match find_menu_item(menu, id) {
+        Some(MenuItemKind::Check(item)) => {
+            item.set_checked(checked).map_err(|_| menu_update_error())
+        }
+        _ => Err(menu_update_error()),
+    }
+}
+
+fn menu_update_error() -> DesktopError {
+    DesktopError::new(DesktopErrorCode::MenuUpdateFailed, true, true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        custom_menu_enabled, CLOSE_WINDOW_ACCELERATOR, CLOSE_WINDOW_ID, NEW_WINDOW_ID,
-        OPEN_FOLDER_ID, OPEN_MARKDOWN_ID,
+        custom_menu_enabled, editor_menu_policy, EditorMenuMode, EditorMenuState,
+        CLOSE_WINDOW_ACCELERATOR, CLOSE_WINDOW_ID, NEW_WINDOW_ID, OPEN_FOLDER_ID, OPEN_MARKDOWN_ID,
     };
 
     #[test]
@@ -235,11 +489,69 @@ mod tests {
         assert!(custom_menu_enabled(OPEN_FOLDER_ID));
         assert!(custom_menu_enabled(OPEN_MARKDOWN_ID));
         assert!(!custom_menu_enabled("edit.copy"));
+        assert!(!custom_menu_enabled("file.save"));
         assert!(!custom_menu_enabled("view.search"));
     }
 
     #[test]
     fn close_window_keeps_the_tab_shortcut_available_for_later_stages() {
         assert_eq!(CLOSE_WINDOW_ACCELERATOR, "CmdOrCtrl+Shift+W");
+    }
+
+    #[test]
+    fn editor_menu_policy_tracks_document_permissions_busy_state_and_history() {
+        let ready = EditorMenuState {
+            has_document: true,
+            read_only: false,
+            busy: false,
+            can_undo: true,
+            can_redo: false,
+            mode: Some(EditorMenuMode::Visual),
+        };
+        let policy = editor_menu_policy(ready);
+        assert!(policy.save);
+        assert!(policy.save_copy);
+        assert!(policy.undo);
+        assert!(!policy.redo);
+        assert!(!policy.visual);
+        assert!(policy.source);
+
+        let readonly = editor_menu_policy(EditorMenuState {
+            read_only: true,
+            ..ready
+        });
+        assert!(!readonly.save);
+        assert!(readonly.save_copy);
+        assert!(!readonly.undo);
+        assert!(readonly.find);
+
+        let busy = editor_menu_policy(EditorMenuState {
+            busy: true,
+            ..ready
+        });
+        assert_eq!(
+            busy,
+            super::EditorMenuPolicy {
+                save: false,
+                save_copy: false,
+                undo: false,
+                redo: false,
+                find: false,
+                visual: false,
+                source: false,
+            }
+        );
+    }
+
+    #[test]
+    fn editor_menu_state_contract_matches_typescript() {
+        crate::contract_test::assert_interface_matches(
+            "EditorMenuState",
+            &EditorMenuState::default(),
+        );
+        assert_eq!(
+            crate::contract_test::typescript_string_constant_values("WORKBENCH_MENU_ACTIONS"),
+            super::WORKBENCH_ACTION_IDS
+        );
     }
 }

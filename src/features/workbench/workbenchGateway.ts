@@ -1,5 +1,6 @@
 import type {
   DeleteResult,
+  EditorMenuState,
   WorkspaceDescriptor,
   WorkspaceId,
   WorkspaceMutationResult,
@@ -11,6 +12,7 @@ import type {
   WorkspaceSelectionOutcome,
   WindowSettlementIntent,
   WindowSettlementResolution,
+  WorkbenchMenuAction,
   WorkspaceWatchBatch,
   WorkspaceWatchStart,
 } from "../../services/desktop/contracts";
@@ -35,11 +37,14 @@ import {
   cancelWorkspaceSelection,
   coordinateWorkspaceOpen,
   listenForWindowSettlement,
+  listenForWorkbenchMenu,
   listenForLauncherMenu,
+  resetEditorMenuState,
   resolveWindowSettlement,
   selectMarkdownFile,
   selectWorkspaceFolder,
   setWorkbenchWindowTitle,
+  updateEditorMenuState,
   type LauncherMenuAction,
 } from "../../services/desktop/workspace";
 import type { EditorDocumentGateway } from "../editor/editorGateway";
@@ -73,6 +78,11 @@ export interface WorkspaceWorkbenchGateway extends EditorDocumentGateway {
   open(workspaceId: WorkspaceId, disposition?: WorkspaceOpenDisposition): Promise<WorkspaceOpenOutcome>;
   setTitle(path: WorkspaceRelativePath | null): Promise<void>;
   listenMenu(listener: (action: LauncherMenuAction) => void): Promise<() => void>;
+  listenWorkbenchMenu(
+    listener: (action: WorkbenchMenuAction) => void,
+  ): Promise<() => void>;
+  updateEditorMenu(state: EditorMenuState): Promise<void>;
+  resetEditorMenu(): Promise<void>;
   listenSettlement(
     listener: (intent: WindowSettlementIntent) => void,
   ): Promise<() => void>;
@@ -109,6 +119,9 @@ export const desktopWorkspaceWorkbenchGateway: WorkspaceWorkbenchGateway = {
     await setWorkbenchWindowTitle(path);
   },
   listenMenu: listenForLauncherMenu,
+  listenWorkbenchMenu: listenForWorkbenchMenu,
+  updateEditorMenu: updateEditorMenuState,
+  resetEditorMenu: resetEditorMenuState,
   listenSettlement: listenForWindowSettlement,
   resolveSettlement: resolveWindowSettlement,
   saveGateway: desktopSaveGateway,

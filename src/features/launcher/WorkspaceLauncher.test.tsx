@@ -43,6 +43,7 @@ function gateway(overrides: Partial<WorkspaceLauncherGateway> = {}): WorkspaceLa
     removeRecent: vi.fn().mockResolvedValue(true),
     removeSession: vi.fn().mockResolvedValue(false),
     listenMenu: vi.fn().mockResolvedValue(() => undefined),
+    resetEditorMenu: vi.fn().mockResolvedValue(undefined),
     recoveryGateway: {
       list: vi.fn().mockResolvedValue([]),
       get: vi.fn(),
@@ -58,10 +59,12 @@ function gateway(overrides: Partial<WorkspaceLauncherGateway> = {}): WorkspaceLa
 
 describe("WorkspaceLauncher", () => {
   it("shows non-macOS shortcut labels when the runtime is not macOS", async () => {
-    render(<WorkspaceLauncher gateway={gateway()} />);
+    const api = gateway();
+    render(<WorkspaceLauncher gateway={api} />);
     await screen.findByText("Research Notes");
     expect(screen.getByText("Ctrl O", { selector: "kbd" })).toBeTruthy();
     expect(screen.getByText("Ctrl Shift O", { selector: "kbd" })).toBeTruthy();
+    expect(api.resetEditorMenu).toHaveBeenCalled();
   });
 
   it("filters by name/path and offers a real clear-filter action", async () => {

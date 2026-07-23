@@ -4,7 +4,7 @@
 
 本文描述 Plainroot 当前已经落地的桌面底座模块、数据流、权限边界和运行约束。产品范围与最终验收以 `../requirement.md` 为准，第一、二阶段任务状态与验证证据分别以 `../stage-1-desktop-foundation/plan.md`、`../stage-2-markdown-editing/plan.md` 为准；代码、清单、配置和自动化测试是实现事实源。
 
-当前架构覆盖 P2 工作区启动页、P1 单文档编辑工作台、本地文件与窗口底座、单一 `DocumentSession`、统一编辑器壳、Milkdown 排版 adapter、CodeMirror 源码 adapter、生产 Markdown 兼容性解析、自动/手动保存控制器、恢复快照触发、恢复/冲突/另存可见流程、外部删除保护和窗口结算握手，以及资源目录偏好、受控图片导入、文档相对链接、缺失占位与重新定位流程。多页签、大纲、全文搜索、主题工作室和分页阅读仍未落地。
+当前架构覆盖 P2 工作区启动页、P1 单文档编辑工作台、本地文件与窗口底座、单一 `DocumentSession`、统一编辑器壳、Milkdown 排版 adapter、CodeMirror 源码 adapter、生产 Markdown 兼容性解析、自动/手动保存控制器、恢复快照触发、恢复/冲突/另存可见流程、外部删除保护和窗口结算握手，以及资源目录偏好、受控图片导入、文档相对链接、缺失占位与重新定位、每窗口原生编辑菜单状态和持续文档状态栏。多页签、大纲、全文搜索、主题工作室和分页阅读仍未落地。
 
 ## 2. 总体结构
 
@@ -52,7 +52,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | 根应用与页面路由 | `src/App.tsx` | 根据当前窗口工作区快照在 P2 与 P1 间切换；根启动错误交给可恢复页面状态处理 | 不维护第二套同源错误面，不伪造工作区或编辑状态 |
 | P2 工作区启动页 | `src/features/launcher/` | 文件夹/Markdown 选择、授权范围确认、最近记录、失效重授权、根窗口恢复、恢复快照入口和打开方式决策 | 不在启动页直接写恢复正文；先打开并授权对应工作区，由 P1 消费快照；不删除本地目录 |
-| P1 单文档工作台 | `src/features/workbench/` | 渐进文件树、真实单文档排版/源码编辑、格式栏、自动/手动保存、恢复/冲突/另存、受控图片资源、外部删除保护、当前文档查找、文件 CRUD、监听、工作区切换和窗口结算意图消费 | 不包含页签、大纲、工作区搜索或虚假磁盘成功状态 |
+| P1 单文档工作台 | `src/features/workbench/` | 渐进文件树、真实单文档排版/源码编辑、格式栏、持续文档状态栏、自动/手动保存、恢复/冲突/另存、受控图片资源、外部删除保护、当前文档查找、文件 CRUD、监听、工作区切换、原生菜单状态投影和窗口结算意图消费 | 不包含页签、大纲、工作区搜索或虚假磁盘成功状态 |
 | 共享前端组件 | `src/components/` | `AppDialog`、`AsyncStatePanel` 与 `focusContainment` 统一对话框、状态优先级和焦点生命周期 | 页面业务状态保持在各自 feature；仅在第二个同职责消费者出现后抽取 |
 | 统一编辑器壳与文档会话 | `src/features/editor/DocumentEditorShell.tsx`、`documentSession.ts`、`remarkMarkdownParser.ts` | P1 唯一正文与历史；切换前提交当前 Markdown/选择/锚点；源码回排版按 AST、尺寸与结构复杂度重评估；统一格式/history/find/image 命令、资源目录弹层、选择/粘贴/拖放编排和非颜色状态反馈 | 不直接保存磁盘、不持有第二份正文；陈旧解析、图片导入或保存结果不能改写新 session；磁盘与恢复生命周期由保存控制器消费 |
 | 保存与恢复控制器 | `src/features/editor/save/DocumentSaveController.ts` | 以单一 session 为输入，按 UTF-8 尺寸分级调度自动保存和恢复快照；手动保存复用同一写入链；保存/快照分别单飞；保存中编辑追赶最终 revision；把 dirty/clean/conflict/content safety 投影为窗口结算结果 | 不直接拼绝对路径或另建写入实现；只有 Rust safe-write 成功才清洁 session；恢复快照不是磁盘提交；可见选择由 recovery 组件消费 |
@@ -62,7 +62,7 @@ flowchart LR
 | 桌面契约与网关 | `src/services/desktop/` | Rust↔TypeScript 类型、错误码和 IPC 调用封装 | 不把原始系统堆栈或任意绝对路径暴露为前端操作能力 |
 | Rust 命令入口 | `src-tauri/src/commands/` | 对外暴露选择、授权、扫描、读取、CRUD、删除、监听和安全写命令 | 命令只接收受控标识与相对路径，磁盘成功后才返回可提交结果 |
 | 文件系统服务 | `src-tauri/src/fs/` | 路径与身份、扫描、读取、变更、删除、监听、原子替换和安全写 | 默认不跟随根内符号链接；平台差异由适配层收口 |
-| 窗口与菜单 | `src-tauri/src/window.rs`、`src-tauri/src/menu.rs` | 一目录一窗口、当前/新窗口决策、根会话协调、单实例转交、原生菜单，以及系统关闭/菜单关闭/当前窗口根替换/应用退出的非阻塞结算意图 | 当前只结算每窗口一个文档，不承担页签集合门禁；coordinator mutex 不跨越前端等待；只有真实消费者的菜单项启用 |
+| 窗口与菜单 | `src-tauri/src/window.rs`、`src-tauri/src/menu.rs` | 一目录一窗口、当前/新窗口决策、根会话协调、单实例转交、原生菜单、按窗口保存编辑菜单状态，以及系统关闭/菜单关闭/当前窗口根替换/应用退出的非阻塞结算意图 | 当前只结算每窗口一个文档，不承担页签集合门禁；coordinator mutex 不跨越前端等待；只有聚焦窗口真实 session 可消费的菜单项启用 |
 | 版本化状态 | `src-tauri/src/state.rs` | 最近工作区与根窗口会话的原子持久化、损坏备份和未知版本保护 | 不保存 Markdown 正文、打开偏好、账号或远端状态 |
 | 版本化恢复 | `src-tauri/src/editor/recovery.rs`、`commands/editor.rs`、`src/services/desktop/recovery.ts` | app data 内最新单文档快照、活动脏会话保护、锁外大正文 I/O、并发读取租约、期限/条目/容量清理、损坏隔离和 IPC/TS 契约；P1/P2 已提供受控查询和恢复入口 | 不替代工作区 `.md`；恢复只进入 dirty session；正文读取与删除必须匹配已授权 workspace、snapshot id 与相对路径 |
 | 冲突覆盖与安全另存 | `src-tauri/src/editor/save_copy.rs`、`commands/editor.rs`、`src/services/desktop/editorSave.ts`、`src/features/editor/editorGateway.ts`、`src/features/editor/recovery/` | 生成冲突磁盘证据；签发绑定 workspace/path/revision/content hash 的一次性覆盖令牌；由 Rust 原生保存对话框签发单目标另存令牌；前端展示第二次确认和目标状态，成功后更新唯一 session | 令牌仅进程内、最多 32 项、5 分钟且确认即消费；前端不能提交绝对目标路径；工作区外目标不形成持久目录授权 |
@@ -125,8 +125,9 @@ flowchart LR
 
 ## 6. 菜单与原生能力
 
-- 已启用并有真实消费者：打开文件夹、打开 Markdown 文件、新建窗口、关闭窗口；关闭窗口事件统一进入当前文档结算门禁。
-- 编辑、显示和后续文档命令保持禁用；禁用项不发出成功反馈。
+- 已启用并有真实消费者：打开文件夹、打开 Markdown 文件、新建窗口、关闭窗口、保存、另存副本、撤销/重做、当前文档查找和排版/源码模式；关闭窗口事件统一进入当前文档结算门禁。
+- Rust `EditorMenuStateRegistry` 按窗口记录 `hasDocument/readOnly/busy/canUndo/canRedo/mode`，仅把聚焦窗口状态应用到平台菜单；窗口聚焦时恢复、销毁时删除，P2 与无文档 P1 主动重置，避免后台窗口或旧页面污染全局菜单。
+- 保存、另存、历史、查找和模式事件只发给聚焦工作台并进入 `DocumentEditorShell`/`DocumentSaveController` 的既有命令链。剪切、复制、粘贴和全选使用平台原生角色，不注册第二套 React 全局快捷键；工作区搜索、侧栏、阅读、页签和主题等后续命令保持禁用。
 - Finder/Explorer 定位、系统回收站与永久删除都通过 Rust 受控命令执行；回收站失败不会自动降级为永久删除。
 - 单实例插件仅在 macOS/Windows 注册，第二实例只转交有界启动参数并聚焦现有进程，不直接据参数授权路径。
 

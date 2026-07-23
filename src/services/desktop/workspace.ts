@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
+  EditorMenuState,
   SecondInstanceOpenRequest,
   WindowActionResult,
   WorkspaceDescriptor,
@@ -13,7 +14,9 @@ import type {
   WorkspaceSelectionOutcome,
   WindowSettlementIntent,
   WindowSettlementResolution,
+  WorkbenchMenuAction,
 } from "./contracts";
+import { WORKBENCH_MENU_ACTIONS } from "./contracts";
 
 export function selectWorkspaceFolder(): Promise<WorkspaceSelectionOutcome> {
   return invoke<WorkspaceSelectionOutcome>("select_workspace_folder");
@@ -131,4 +134,22 @@ export function listenForWindowSettlement(
     "plainroot://window-settlement",
     (event) => listener(event.payload),
   );
+}
+
+export function updateEditorMenuState(state: EditorMenuState): Promise<void> {
+  return invoke<void>("update_editor_menu_state", { state });
+}
+
+export function resetEditorMenuState(): Promise<void> {
+  return invoke<void>("reset_editor_menu_state");
+}
+
+export function listenForWorkbenchMenu(
+  listener: (action: WorkbenchMenuAction) => void,
+): Promise<UnlistenFn> {
+  return listen<WorkbenchMenuAction>("plainroot://workbench-menu", (event) => {
+    if (WORKBENCH_MENU_ACTIONS.includes(event.payload)) {
+      listener(event.payload);
+    }
+  });
 }

@@ -47,6 +47,8 @@ export function desktopErrorMessage(error: DesktopError): string {
       return "窗口标题未能同步，但当前文件内容和磁盘状态没有改变。";
     case "window_close_failed":
       return "未能关闭窗口，当前工作区会话仍然保留。";
+    case "menu_update_failed":
+      return "原生菜单状态没有更新。可重试，或继续使用页面内的编辑控件。";
     case "state_unavailable":
     case "state_read_failed":
     case "unsupported_state_version":

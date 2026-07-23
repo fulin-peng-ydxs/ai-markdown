@@ -139,6 +139,9 @@ export function WorkspaceLauncher({
 
   useEffect(() => {
     mountedRef.current = true;
+    // A launcher window has no active editor session. Resetting here prevents a previously
+    // focused workbench window from leaving global native editor actions enabled.
+    void gateway.resetEditorMenu().catch(() => undefined);
     void loadSnapshot();
     return () => {
       mountedRef.current = false;

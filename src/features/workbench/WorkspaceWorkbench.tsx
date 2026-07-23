@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 
 import { AppDialog } from "../../components/AppDialog";
 import { AsyncStatePanel } from "../../components/AsyncStatePanel";
@@ -10,6 +17,7 @@ import type {
   DeleteResult,
   DesktopError,
   FsEntry,
+  EditorMenuState,
   RecoverySnapshot,
   RecoverySnapshotMetadata,
   SafeWriteResult,
@@ -21,6 +29,7 @@ import type {
   WorkspaceSelectionOutcome,
   WorkspaceSelectionProposal,
   WindowSettlementIntent,
+  WorkbenchMenuAction,
 } from "../../services/desktop/contracts";
 import { desktopErrorMessage, normalizeDesktopError } from "../../services/desktop/errors";
 import {
@@ -46,8 +55,11 @@ import {
 } from "../editor/editorGateway";
 import {
   DocumentEditorShell,
+  type DocumentEditorRuntimeState,
+  type DocumentEditorShellHandle,
   type DocumentEditorMetrics,
 } from "../editor/DocumentEditorShell";
+import { DocumentStatusBar } from "../editor/DocumentStatusBar";
 import { remarkMarkdownCompatibilityParser } from "../editor/remarkMarkdownParser";
 import { assessVisualEditingCompatibility } from "../editor/markdownCompatibility";
 import {
@@ -117,6 +129,9 @@ export function WorkspaceWorkbench({
   );
   const [documentMetrics, setDocumentMetrics] =
     useState<DocumentEditorMetrics | null>(null);
+  const [editorRuntime, setEditorRuntime] =
+    useState<DocumentEditorRuntimeState>({ busy: false });
+  const editorHandleRef = useRef<DocumentEditorShellHandle | null>(null);
   const documentStateRef = useRef(documentState);
   const saveControllerRef = useRef<DocumentSaveController | null>(null);
   const [pageError, setPageError] = useState<DesktopError | null>(null);
@@ -157,6 +172,9 @@ export function WorkspaceWorkbench({
   const settlementHandlerRef = useRef<
     (intent: WindowSettlementIntent) => Promise<void>
   >(async () => undefined);
+  const workbenchMenuHandlerRef = useRef<
+    (action: WorkbenchMenuAction) => void
+  >(() => undefined);
 
   const selectedEntry = selectedPath ? tree.entries[selectedPath] ?? null : null;
   const rootScan = tree.scans[""];
@@ -164,6 +182,39 @@ export function WorkspaceWorkbench({
   const mutationProcessing = tree.mutation?.status === "processing";
   const activeDocumentPath =
     documentState.status === "empty" ? null : documentState.relativePath;
+  const editorMenuState = useMemo<EditorMenuState>(() => {
+    if (documentState.status !== "ready") {
+      return {
+        hasDocument: false,
+        readOnly: true,
+        busy:
+          editorRuntime.busy ||
+          mutationProcessing ||
+          busyLabel !== null,
+        canUndo: false,
+        canRedo: false,
+        mode: null,
+      };
+    }
+    const saveBusy = documentState.saveState.kind === "saving";
+    return {
+      hasDocument: true,
+      readOnly: documentState.saveState.kind === "readonly",
+      busy:
+        editorRuntime.busy ||
+        saveBusy ||
+        mutationProcessing ||
+        busyLabel !== null,
+      canUndo: documentState.history.past.length > 0,
+      canRedo: documentState.history.future.length > 0,
+      mode: documentState.mode,
+    };
+  }, [
+    busyLabel,
+    documentState,
+    editorRuntime.busy,
+    mutationProcessing,
+  ]);
 
   const commitDocument = useCallback((next: DocumentSessionState) => {
     documentStateRef.current = next;
@@ -393,6 +444,65 @@ export function WorkspaceWorkbench({
     void loadRecoverySnapshots();
   }, [loadRecoverySnapshots]);
 
+  const syncEditorMenu = useCallback(async () => {
+    try {
+      await gateway.updateEditorMenu(editorMenuState);
+    } catch (reason) {
+      if (mountedRef.current) {
+        setPageError(normalizeDesktopError(reason, "menu_update_failed"));
+      }
+    }
+  }, [editorMenuState, gateway]);
+
+  useEffect(() => {
+    void syncEditorMenu();
+  }, [syncEditorMenu]);
+
+  useEffect(
+    () => () => {
+      void gateway.resetEditorMenu().catch(() => undefined);
+    },
+    [gateway],
+  );
+
+  workbenchMenuHandlerRef.current = (action) => {
+    const current = documentStateRef.current;
+    if (!workbenchMenuActionAvailable(editorMenuState, action)) return;
+    switch (action) {
+      case "file.save":
+        if (current.status !== "ready") return;
+        if (current.saveState.kind === "conflict") {
+          setConflictOpen(true);
+          return;
+        }
+        void saveControllerRef.current?.manualSave();
+        return;
+      case "file.save_copy":
+        if (current.status === "ready") setSaveCopyOpen(true);
+        return;
+      case "edit.undo":
+        editorHandleRef.current?.execute({
+          kind: "history",
+          direction: "undo",
+        });
+        return;
+      case "edit.redo":
+        editorHandleRef.current?.execute({
+          kind: "history",
+          direction: "redo",
+        });
+        return;
+      case "edit.find":
+        editorHandleRef.current?.execute({ kind: "find" });
+        return;
+      case "view.visual":
+        editorHandleRef.current?.switchMode("visual");
+        return;
+      case "view.source":
+        editorHandleRef.current?.switchMode("source");
+    }
+  };
+
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     void gateway.listenMenu((action) => {
@@ -401,6 +511,23 @@ export function WorkspaceWorkbench({
     }).then((stop) => {
       unlisten = stop;
     }).catch(() => undefined);
+    return () => unlisten?.();
+  }, [gateway]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void gateway
+      .listenWorkbenchMenu((action) => {
+        workbenchMenuHandlerRef.current(action);
+      })
+      .then((stop) => {
+        unlisten = stop;
+      })
+      .catch((reason) => {
+        if (mountedRef.current) {
+          setPageError(normalizeDesktopError(reason, "menu_update_failed"));
+        }
+      });
     return () => unlisten?.();
   }, [gateway]);
 
@@ -1070,6 +1197,10 @@ export function WorkspaceWorkbench({
       });
       return;
     }
+    if (error.code === "menu_update_failed") {
+      void syncEditorMenu();
+      return;
+    }
     if (error.code === "reveal_unavailable" && selectedEntry) void revealSelected();
   }
 
@@ -1205,9 +1336,11 @@ export function WorkspaceWorkbench({
           ) : null}
           <DocumentView
             assetGateway={gateway.assetGateway}
+            editorHandleRef={editorHandleRef}
             onMetricsChange={setDocumentMetrics}
             onResolveConflict={() => setConflictOpen(true)}
             onRetry={(path) => void openMarkdown(path)}
+            onRuntimeStateChange={setEditorRuntime}
             onSave={() => void saveControllerRef.current?.manualSave()}
             onSaveCopy={() => setSaveCopyOpen(true)}
             onSessionChange={commitDocument}
@@ -1216,11 +1349,12 @@ export function WorkspaceWorkbench({
         </section>
       </div>
 
-      <footer className="workbench__statusbar" aria-live="polite">
-        <span>{statusText}</span>
-        <span>{documentMetric(documentState, documentMetrics)}</span>
-        <span>{workspace.writable ? "工作区可写" : "工作区只读"}</span>
-      </footer>
+      <DocumentStatusBar
+        activity={statusText}
+        metrics={documentMetrics}
+        session={documentState}
+        workspaceWritable={workspace.writable}
+      />
 
       <AppDialog
         actions={<><button className="plainroot-button" disabled={mutationProcessing} onClick={() => setOperation(null)} type="button">取消</button><button className="plainroot-button plainroot-button--primary" disabled={mutationProcessing || (!operation?.value.trim() && operation?.kind !== "move")} onClick={() => void submitOperation()} type="button">{mutationProcessing ? "正在提交…" : "提交到磁盘"}</button></>}
@@ -1360,19 +1494,23 @@ export function WorkspaceWorkbench({
 
 function DocumentView({
   assetGateway,
+  editorHandleRef,
   onMetricsChange,
   onResolveConflict,
   state,
   onRetry,
+  onRuntimeStateChange,
   onSave,
   onSaveCopy,
   onSessionChange,
 }: {
   assetGateway: WorkspaceWorkbenchGateway["assetGateway"];
+  editorHandleRef: RefObject<DocumentEditorShellHandle | null>;
   onMetricsChange(metrics: DocumentEditorMetrics): void;
   onResolveConflict(): void;
   state: DocumentSessionState;
   onRetry(path: WorkspaceRelativePath): void;
+  onRuntimeStateChange(state: DocumentEditorRuntimeState): void;
   onSave(): void;
   onSaveCopy(): void;
   onSessionChange(session: ReadyDocumentSession): void;
@@ -1396,12 +1534,36 @@ function DocumentView({
       assetGateway={assetGateway}
       onMetricsChange={onMetricsChange}
       onResolveConflict={onResolveConflict}
+      onRuntimeStateChange={onRuntimeStateChange}
       onSave={onSave}
       onSaveCopy={onSaveCopy}
       onSessionChange={onSessionChange}
+      ref={editorHandleRef}
       session={state}
     />
   );
+}
+
+function workbenchMenuActionAvailable(
+  state: EditorMenuState,
+  action: WorkbenchMenuAction,
+): boolean {
+  if (!state.hasDocument || state.busy) return false;
+  switch (action) {
+    case "file.save":
+      return !state.readOnly;
+    case "file.save_copy":
+    case "edit.find":
+      return true;
+    case "edit.undo":
+      return !state.readOnly && state.canUndo;
+    case "edit.redo":
+      return !state.readOnly && state.canRedo;
+    case "view.visual":
+      return state.mode !== "visual";
+    case "view.source":
+      return state.mode !== "source";
+  }
 }
 
 function recoveryUnavailableError(
@@ -1432,16 +1594,6 @@ function settlementMessage(result: Extract<DocumentSaveOutcome, { status: "block
   }
 }
 
-function documentMetric(
-  state: Parameters<typeof DocumentView>[0]["state"],
-  metrics: DocumentEditorMetrics | null,
-): string {
-  if (state.status !== "ready") return "未打开文档";
-  return metrics
-    ? `${metrics.wordCount} 字/词 · ${metrics.characterCount} 字符`
-    : `${state.markdown.length} 字符`;
-}
-
 function supportsPageRetry(error: DesktopError, hasSelectedEntry: boolean) {
   if (!error.retryable) return false;
   return (
@@ -1452,6 +1604,7 @@ function supportsPageRetry(error: DesktopError, hasSelectedEntry: boolean) {
     error.code === "path_not_found" ||
     error.code === "permission_denied" ||
     error.code === "window_title_failed" ||
+    error.code === "menu_update_failed" ||
     (error.code === "reveal_unavailable" && hasSelectedEntry)
   );
 }

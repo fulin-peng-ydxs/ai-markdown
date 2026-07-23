@@ -64,29 +64,50 @@ pub fn run() {
         .manage(fs::watch::WorkspaceWatchService::default())
         .manage(mutations)
         .manage(deletions)
+        .manage(menu::EditorMenuStateRegistry::default())
         .manage(window::WindowSettlementCoordinator::default())
         .menu(menu::build_app_menu)
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
-        .on_window_event(|window, event| {
-            let tauri::WindowEvent::CloseRequested { api, .. } = event else {
-                return;
-            };
-            let app = window.app_handle();
-            let settlement = app.state::<window::WindowSettlementCoordinator>();
-            if settlement.take_close_bypass(window.label()) {
-                return;
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::Focused(true) => {
+                if let Err(error) = menu::apply_window_editor_menu_state(
+                    window.app_handle(),
+                    window.label(),
+                    &window.app_handle().state::<menu::EditorMenuStateRegistry>(),
+                ) {
+                    eprintln!(
+                        "Plainroot menu focus synchronization failed: {}",
+                        error.message_key
+                    );
+                }
             }
-            let coordinator = app.state::<window::WorkspaceWindowCoordinator>();
-            let Ok(Some(_)) = coordinator.workspace_for_window(window.label()) else {
-                return;
-            };
-            api.prevent_close();
-            if let Err(error) = settlement.request_close(app, window.label()) {
-                eprintln!(
-                    "Plainroot close settlement request failed: {}",
-                    error.message_key
-                );
+            tauri::WindowEvent::Destroyed => {
+                if let Err(error) = menu::forget_window_editor_menu_state(
+                    window.label(),
+                    &window.app_handle().state::<menu::EditorMenuStateRegistry>(),
+                ) {
+                    eprintln!("Plainroot menu state cleanup failed: {}", error.message_key);
+                }
             }
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                let app = window.app_handle();
+                let settlement = app.state::<window::WindowSettlementCoordinator>();
+                if settlement.take_close_bypass(window.label()) {
+                    return;
+                }
+                let coordinator = app.state::<window::WorkspaceWindowCoordinator>();
+                let Ok(Some(_)) = coordinator.workspace_for_window(window.label()) else {
+                    return;
+                };
+                api.prevent_close();
+                if let Err(error) = settlement.request_close(app, window.label()) {
+                    eprintln!(
+                        "Plainroot close settlement request failed: {}",
+                        error.message_key
+                    );
+                }
+            }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             commands::workspace::select_workspace_folder,
@@ -106,6 +127,8 @@ pub fn run() {
             window::resolve_window_settlement,
             window::take_second_instance_open_requests,
             window::set_workbench_window_title,
+            menu::update_editor_menu_state,
+            menu::reset_editor_menu_state,
             commands::files::start_workspace_scan,
             commands::files::poll_workspace_scan,
             commands::files::cancel_workspace_scan,

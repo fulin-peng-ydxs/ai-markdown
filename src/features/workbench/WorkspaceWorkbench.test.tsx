@@ -85,6 +85,9 @@ function gateway(overrides: Partial<WorkspaceWorkbenchGateway> = {}): WorkspaceW
     open: vi.fn().mockResolvedValue({ status: "cancelled" }),
     setTitle: vi.fn().mockResolvedValue(undefined),
     listenMenu: vi.fn().mockResolvedValue(() => undefined),
+    listenWorkbenchMenu: vi.fn().mockResolvedValue(() => undefined),
+    updateEditorMenu: vi.fn().mockResolvedValue(undefined),
+    resetEditorMenu: vi.fn().mockResolvedValue(undefined),
     listenSettlement: vi.fn().mockResolvedValue(() => undefined),
     resolveSettlement: vi.fn().mockResolvedValue({ status: "cancelled" }),
     saveGateway: {
@@ -173,9 +176,88 @@ describe("WorkspaceWorkbench", () => {
 
     expect(await screen.findByText(/真实文档/)).toBeTruthy();
     expect(screen.getByRole("toolbar", { name: "文档编辑工具" })).toBeTruthy();
-    expect(screen.getByText("磁盘版本")).toBeTruthy();
+    expect(screen.getAllByText("磁盘版本")).toHaveLength(2);
     expect(api.read).toHaveBeenCalledWith("workspace-a", "note.md");
     await waitFor(() => expect(api.setTitle).toHaveBeenCalledWith("note.md"));
+  });
+
+  it("keeps the native menu bound to the focused document session and routes real actions", async () => {
+    let menuListener:
+      | Parameters<WorkspaceWorkbenchGateway["listenWorkbenchMenu"]>[0]
+      | undefined;
+    const api = gateway({
+      listenWorkbenchMenu: vi.fn().mockImplementation(async (listener) => {
+        menuListener = listener;
+        return () => undefined;
+      }),
+    });
+    const user = userEvent.setup();
+    const rendered = render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(menuListener).toBeDefined());
+    act(() => menuListener?.("file.save_copy"));
+    expect(
+      screen.queryByRole("heading", {
+        name: "保存一份独立的 Markdown 副本",
+      }),
+    ).toBeNull();
+
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByText(/真实文档/);
+    await waitFor(() =>
+      expect(api.updateEditorMenu).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hasDocument: true,
+          readOnly: false,
+          mode: "visual",
+        }),
+      ),
+    );
+
+    act(() => menuListener?.("view.source"));
+    await waitFor(() =>
+      expect(rendered.container.querySelector(".cm-editor")).not.toBeNull(),
+    );
+    await waitFor(() =>
+      expect(api.updateEditorMenu).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: "source" }),
+      ),
+    );
+
+    act(() => menuListener?.("file.save_copy"));
+    expect(
+      await screen.findByRole("heading", {
+        name: "保存一份独立的 Markdown 副本",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("shows mode, save, counts, source format and cursor in the real status bar", async () => {
+    const rendered = render(
+      <WorkspaceWorkbench
+        gateway={gateway()}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByText(/真实文档/);
+
+    const statusbar = rendered.container.querySelector(
+      ".workbench__statusbar",
+    );
+    expect(statusbar?.textContent).toContain("磁盘版本");
+    expect(statusbar?.textContent).toContain("排版编辑");
+    expect(statusbar?.textContent).toContain("字/词");
+    expect(statusbar?.textContent).toContain("UTF-8 · LF");
+    expect(statusbar?.textContent).toContain("排版光标");
   });
 
   it("offers explicit local-image link adjustment before moving an open document", async () => {
@@ -594,7 +676,7 @@ describe("WorkspaceWorkbench", () => {
       expect(screen.queryByRole("dialog")).toBeNull(),
     );
     expect(await screen.findByText(/恢复后的内容/)).toBeTruthy();
-    expect(screen.getByText("未保存")).toBeTruthy();
+    expect(screen.getAllByText("未保存")).toHaveLength(2);
     expect(api.saveGateway.write).not.toHaveBeenCalled();
   });
 
