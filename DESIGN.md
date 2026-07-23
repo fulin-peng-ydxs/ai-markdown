@@ -218,6 +218,8 @@ Key Characteristics：
 | `WorkspaceTree` | `src/features/workbench/WorkspaceTree.tsx` | P1 | 渐进目录节点、磁盘提交后更新、只读标识、异步刷新期间也稳定的单一 Tab 停靠点，以及上下/首尾/父子方向键导航 |
 | `PermanentDeleteDialog` | `src/features/workbench/PermanentDeleteDialog.tsx` | P1 永久删除流程 | 复用 `AppDialog` 承载删除提案、显式不可逆确认、提交门禁、阶段化错误反馈与安全取消 |
 | `workspacePath` | `src/features/workbench/workspacePath.ts` | `workspaceTreeState`、`WorkspaceWorkbench` | 工作区相对路径的父级计算、同路径/子路径边界判断和前缀重映射；根目录键仍由树状态层适配 |
+| `VisualMarkdownEditor` | `src/features/editor/adapters/milkdown/VisualMarkdownEditor.tsx` | T23 adapter 隔离验证；T25 接入 P1 | 连续纸面上的 Milkdown 排版编辑、有效选区上下文工具栏、语义焦点/只读状态、受控链接与图片请求、三态复制反馈；不持有文件保存或跨模式历史 |
+| `MilkdownVisualAdapter` | `src/features/editor/adapters/milkdown/MilkdownVisualAdapter.ts` | `VisualMarkdownEditor` | CommonMark/GFM 与统一 `EditorAdapter` 事务桥接、选择/锚点、结构命令、session history 回调、异步生命周期和字节/块复杂度降级；不建立第二份 Markdown 或权威历史 |
 
 布局规则：
 

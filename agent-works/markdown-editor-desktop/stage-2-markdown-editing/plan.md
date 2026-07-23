@@ -4,7 +4,7 @@
 >
 > 当前阶段：阶段 2——统一 Markdown 文档模型、排版编辑/源码编辑和完整单文档保存、恢复、冲突、图片资源链路
 >
-> 计划状态：进行中（T18～T22 已完成，T23 待开始）
+> 计划状态：进行中（T18～T23 已完成，T24 待开始）
 >
 > 需求编号规则：完全沿用 `requirement.md` 的 R1～R34，不新增、重排或改变 R 编号含义。
 
@@ -39,7 +39,7 @@
 - Milkdown 官方能力采用插件化接入：CommonMark/GFM、history、clipboard、listener、upload；生产实现不得直接复制原型中的 `contenteditable`/`textarea` 演示逻辑。
 - CodeMirror 6 负责源码高亮、行号、查找替换、括号匹配和源码选择；不建立第二份 Markdown 文件或独立保存通道。
 - 选型依据：[Milkdown 官方文档](https://milkdown.dev/docs)、[Milkdown 插件说明](https://milkdown.dev/docs/plugin/using-plugins)、[ProseMirror Guide](https://prosemirror.net/docs/guide/) 和 [CodeMirror Markdown 官方仓库](https://github.com/codemirror/lang-markdown)。
-- 第一阶段测试基线为 115 个 Rust 单测、3 个路径工具测试、18 个树状态测试、4 个永久删除反馈测试、35 个 React 测试、1 个 fixture 测试、4 个许可证测试和 4 个桌面 E2E。T18 新增 7 个编辑器 PoC 测试，T19 新增 28 个 session/history/AST 契约测试与 1 个 P1 陈旧读取回归，T20 及其整改新增 21 个恢复仓储/契约测试，T21 新增 16 个冲突/另存/契约测试，T22 新增 15 个资源偏好、导入和 raw IPC 契约测试；当前 Rust 全量为 167 项，`pnpm test` 的 Vitest 汇总仍为 71 项。第二阶段不得删除或弱化这些基线来换取绿灯。
+- 第一阶段测试基线为 115 个 Rust 单测、3 个路径工具测试、18 个树状态测试、4 个永久删除反馈测试、35 个 React 测试、1 个 fixture 测试、4 个许可证测试和 4 个桌面 E2E。T18 新增 7 个编辑器 PoC 测试，T19 新增 28 个 session/history/AST 契约测试与 1 个 P1 陈旧读取回归，T20 及其整改新增 21 个恢复仓储/契约测试，T21 新增 16 个冲突/另存/契约测试，T22 新增 15 个资源偏好、导入和 raw IPC 契约测试，T23 新增 20 个 Milkdown adapter/组件/性能与安全策略测试；当前 Rust 全量为 167 项，`pnpm test` 的 Vitest 汇总为 91 项。第二阶段不得删除或弱化这些基线来换取绿灯。
 
 ### 2.2 已有代码与可复用能力
 
@@ -79,10 +79,10 @@
 | --- | --- | --- | --- | --- | --- |
 | R1 | Windows/macOS 本地优先桌面应用 | 在既有桌面壳内增加离线编辑、保存、恢复和另存；不重做安装/授权 | 进行中 | T18、T29～T32 | T18 已完成本机技术门禁；双平台类型/构建/E2E、离线编辑保存仍待 T29～T32，Windows 原生 UI 保持人工项 |
 | R2 | 文件与目录管理 | 复用读取、watch、安全写并接入当前编辑会话和图片资源文件；不改变文件树 CRUD 语义 | 进行中 | T19、T21、T22、T26、T28、T30～T31 | T19 已让 P1 读取进入统一 session；T21 已让冲突覆盖复用安全写；T22 已让资源写入复用 workspace mutation lock、根授权与 watcher 自身写入登记；自动保存与 P1 图片消费者仍待后续任务 |
-| R3 | 所见即所得 Markdown 编辑 | 完整纳入本阶段 | 进行中 | T18、T19、T23、T25、T30～T32 | T19 已建立单一内容源、可逆历史和 adapter 契约；真实 AST parser、IME、产品编辑与 E2E 仍待后续任务 |
+| R3 | 所见即所得 Markdown 编辑 | 完整纳入本阶段 | 进行中 | T18、T19、T23、T25、T30～T32 | T23 已交付真实 Milkdown CommonMark/GFM adapter、格式/结构命令、选区工具栏、三态复制和安全粘贴；P1 产品接线、系统输入法候选流程与桌面 E2E 仍待 T25/T30～T32 |
 | R4 | 当前文档大纲 | 阶段 6 实现；本阶段只提供增量内容事件，不渲染大纲 | 跳过 | - | 映射审查确认没有假大纲或占位任务 |
 | R5 | 自动保存、恢复与外部冲突 | 完成单文档链路；多页签关闭检查由阶段 3 扩展，搜索索引异常协同由阶段 7 承接 | 进行中 | T19～T21、T25～T27、T29～T32 | T19 已落地保存 union，T20 已落地恢复仓储，T21 已落地冲突证据/一次性覆盖与原生单目标另存后端；自动触发、恢复/冲突 UI、关闭/退出门禁仍待后续任务 |
-| R6 | 图片粘贴、拖放与资源管理 | 完整纳入本阶段 | 进行中 | T18、T22、T23、T28、T30～T32 | T22 已完成 per-workspace 资源偏好、受控图片写入、相对路径、重名不覆盖和确认/取消清理后端；编辑器 upload hook、粘贴/拖放/选择和可见配置闭环仍待 T23/T28/T30～T32 |
+| R6 | 图片粘贴、拖放与资源管理 | 完整纳入本阶段 | 进行中 | T18、T22、T23、T28、T30～T32 | T22 已完成受控资源后端；T23 已提供只接收受控相对 `src` 的图片命令与 `requestImage` hook，富文本粘贴不直接接收外部图片；T28 仍需接入选择/粘贴/拖放、文档相对链接换算和导入确认 |
 | R7 | 中性主题与颜色语义 | 只消费既有 token，不在本阶段实现主题产品能力 | 跳过 | - | token 扫描只作为页面合规回归，不计 R7 完成 |
 | R8 | 自适应与区域调宽 | 保留第一阶段 P1 窄窗抽屉；完整调宽/持久化由阶段 4 实现 | 跳过 | - | T31 回归现有 820/760 px，不新增 R8 完成声明 |
 | R9 | 编辑/专注/分页阅读 | 阶段 6 实现 | 跳过 | - | 确认阅读入口隐藏/禁用且无假反馈 |
@@ -92,8 +92,8 @@
 | R13 | 多文档页签 | 阶段 3 实现；本阶段每窗口只维护一个 `DocumentSession` | 跳过 | - | 确认未以单文档下拉或隐藏页签模拟 R13 |
 | R14 | 一目录一窗口与多窗口生命周期 | 仅将当前单文档保存门禁接入关闭/当前窗口替换；阶段 3 扩展为全部页签 | 待开始 | T26、T29～T32 | 当前文档阻塞窗口关闭/替换，多窗口独立状态回归 |
 | R15 | 颜色预设与实时预览 | 阶段 5 实现；P1 只消费当前 Neutral token | 跳过 | - | P3 路由/状态不存在，映射审查 |
-| R30 | 核心命令键盘操作 | 编辑、撤销/重做、保存/另存、模式切换、查找和弹层焦点子集 | 待开始 | T23～T25、T27～T32 | macOS/Windows 快捷键、焦点返回和菜单契约 |
-| R31 | 无障碍基础 | 编辑器、保存状态、冲突/恢复/资源弹层子集 | 待开始 | T23～T25、T27～T32 | 语义树、键盘、非颜色状态、对比度和 reduced-motion |
+| R30 | 核心命令键盘操作 | 编辑、撤销/重做、保存/另存、模式切换、查找和弹层焦点子集 | 进行中 | T23～T25、T27～T32 | T23 已把视觉编辑命令与 Cmd/Ctrl+Z/重做桥接到统一 session history 回调；菜单、源码、保存、模式和双平台快捷键仍待后续任务 |
+| R31 | 无障碍基础 | 编辑器、保存状态、冲突/恢复/资源弹层子集 | 进行中 | T23～T25、T27～T32 | T23 已提供 textbox/toolbar 语义、可见焦点、只读状态和非颜色剪贴板反馈；完整键盘遍历、对比度与系统辅助技术仍待后续任务 |
 | R32 | 长文阅读排版 | 阶段 4 定稿；本阶段只保证编辑器基础可读与不溢出 | 跳过 | - | 不把编辑器基础样式记为 R32 完成 |
 
 ### 3.2 可选增强
@@ -388,7 +388,7 @@ plainroot-recovery-v1/
 
 ### 6.6 任务 T23：Milkdown 排版编辑 adapter
 
-- 状态：待开始
+- 状态：已完成
 - 依赖：T18、T19；T22 提供图片 hook 契约。
 - 涉及文件/模块：`src/features/editor/adapters/milkdown/`、`VisualMarkdownEditor.tsx`、编辑器 CSS/token、语法/交互测试、`t23-visual-editor.md`。
 - 目标：把确认通过的 Milkdown 方案接入统一 session，覆盖 R3 常用语法和排版编辑操作。
@@ -398,7 +398,10 @@ plainroot-recovery-v1/
 - 边界与异常：初始化/解析失败回退源码；原始片段不可编辑时可见且提供源码入口；IME composition 中不触发错误自动保存；64 MiB 达不到可交互挂载门槛时必须进入明确的源码/只读降级，不能冻结页面；卸载不泄漏监听器。
 - 验证方式：语法输入规则、格式命令、三种复制输出、粘贴纯文本/Markdown/富文本及不可转换结构、真实浏览器/WebView 中文 IME、撤销命令接线、只读、销毁重建、100 KiB/5 MiB/20 MiB/64 MiB 挂载解析/连续输入的每击延迟/峰值内存与降级阈值、token 扫描。
 - 完成标准：真实 session 驱动排版编辑，常用语法可编辑并输出统一 Markdown，不存在独立保存副本。
-- 实际落地情况：待实施。
+- 实际落地情况：已在 `src/features/editor/adapters/milkdown/` 建立生产 `MilkdownVisualAdapter` 与 `VisualMarkdownEditor`。adapter 使用 CommonMark/GFM、listener 与 clipboard，只接受/输出 `EditorAdapterDocument`/`EditorAdapterChange`，不持有独立文件保存副本；撤销/重做及 Cmd/Ctrl+Z/重做通过回调交给统一 `DocumentSession` history，不启用 Milkdown 第二套权威 history。已实现 H1～H6、粗体、斜体、删除线、行内代码、链接、引用、有序/无序/任务列表、表格、分隔线和受控图片命令；有效选区才显示上下文工具栏，支持纯文本、Markdown、富文本三种复制载荷。富文本粘贴仅保留 CommonMark/GFM 可表达标签，移除事件属性、危险 URL、图片与主动/未知容器，外部图片必须走 `requestImage` 受控 hook；T28 再负责资源导入与按当前文档目录换算链接。只读、焦点、选择/语义锚点、异步创建/销毁、StrictMode 晚到实例清理和 adapter 性能采样均已落地。
+  - 性能策略经真实 Chromium 校准为双门槛：UTF-8 内容超过 2 MiB，或独立块估算超过 2000，均在 Milkdown 分配前返回明确源码模式降级。普通约 100 KiB/100 段语料实测挂载 148.6 ms、输入到 Markdown 更新 225.6 ms（包含 listener 200 ms 合并窗口）；约 100 KiB/5680 段极端语料在策略校准前曾测得挂载 813 ms、单次更新约 7.8 秒，现由块复杂度门槛前置拒绝。5/20/64 MiB 均由字节门槛前置拒绝，不冻结页面。
+  - 新增 20 个 adapter/组件/策略测试，覆盖统一事务、结构命令、三态剪贴板载荷、剪贴板权限失败、富文本清洗、只读、session history 桥接、composition 分组、受控图片 hook 及其异常收敛、100 KiB 挂载、5/20/64 MiB 与高块数降级、已挂载投影跨越门槛时移除陈旧正文、StrictMode 创建中销毁和组件卸载。`pnpm typecheck`、91/91 Vitest、生产构建、许可证 727/508/0 和生产 CSS 私有颜色扫描已通过。真实 Chromium 已验证单实例、格式变更、Markdown 复制、中文 contenteditable 输入、740 px 无横向溢出和干净会话零告警。
+  - 尚未完成的范围保持诚实：T23 组件尚未替换 P1 只读视图，P1/session 保存接线属于 T25；系统输入法候选窗、WebKit/Windows 原生剪贴板和独立峰值内存采样仍由 T30/T31 验收，不能由 Chromium 证据外推。
 
 ### 6.7 任务 T24：CodeMirror 6 源码编辑 adapter
 
@@ -591,12 +594,12 @@ plainroot-recovery-v1/
 ### 8.3 页面与交互测试
 
 - 计划：P1 覆盖 visual/source、格式化、空文档、只读、dirty/saving/saved/save_failed/conflict、恢复、另存、图片、状态栏、菜单和窗口门禁；P2 覆盖恢复入口与单项失败；验证 1280/1050/820/740 px 和低高度，不测试手机重排。
-- 具体完成情况：待验证。
+- 具体完成情况：T23 隔离浏览器页已验证视觉 editor 单实例、有效选区工具栏、加粗真实状态变化、Markdown 复制、中文 contenteditable 输入和 740 px 无横向溢出；生产 P1 尚未消费该组件，因此 P1 visual/source、保存/冲突/恢复/图片状态和桌面 E2E 仍待 T25～T31。
 
 ### 8.4 组件资产闭环测试
 
 - 计划：验证 AppDialog/AsyncStatePanel/focusContainment 真实复用；新增 DocumentEditorShell、SaveStatus、ConflictDialog、RecoveryDialog、AssetDirectoryDialog 的 DESIGN 登记和 P1/P2 消费；扫描生产 CSS 只使用语义 token；配置字段从默认、保存、读取、消费到重置全链路可见。
-- 具体完成情况：待验证。
+- 具体完成情况：T23 新增 `VisualMarkdownEditor` 与 `MilkdownVisualAdapter` 并同步登记到 `DESIGN.md`；组件只消费既有语义 token，扫描未发现私有 hex/rgb/gradient。其余 DocumentEditorShell、SaveStatus 和弹层仍待后续任务。
 
 ### 8.5 权限与数据范围测试
 
@@ -611,7 +614,7 @@ plainroot-recovery-v1/
 ### 8.7 异常与边界测试
 
 - 计划：覆盖 0 字节、100 KB、5 MB 和 64 MiB 临界文档；非法 UTF-8、UTF-8 BOM、LF/CRLF/CR/mixed；未知 Markdown/raw HTML/frontmatter；IME composition；保存中继续输入；外部删除/修改；二次外部变化；进程退出；快照损坏/过期/超限；磁盘满；图片多选部分失败；Windows 目标占用和路径前缀。
-- 具体完成情况：T21 已覆盖 UTF-8 BOM、LF/CRLF/CR/mixed、非法 UTF-8、只读、二次外部变化、写入故障、取消和同名目标覆盖；T22 已覆盖图片格式伪造、20 MiB 超限、同名不覆盖、部分写入、取消换靶和 symlink。编辑器 IME、大文档挂载、强制进程终止孤立资源、磁盘满及 Windows 原生运行仍待后续任务。
+- 具体完成情况：T21 已覆盖 UTF-8 BOM、LF/CRLF/CR/mixed、非法 UTF-8、只读、二次外部变化、写入故障、取消和同名目标覆盖；T22 已覆盖图片格式伪造、20 MiB 超限、同名不覆盖、部分写入、取消换靶和 symlink。T23 已覆盖浏览器 composition 分组、创建中销毁、只读、100 KiB 正常挂载、5/20/64 MiB 字节降级及 2000 块复杂度降级；系统 IME 候选窗、峰值内存、强制进程终止孤立资源、磁盘满及 Windows 原生运行仍待后续任务。
 
 ### 8.8 桌面 E2E 与跨平台
 
@@ -671,7 +674,8 @@ T18/T30/T31 若新增稳定脚本，必须同步 `package.json`、README、AGENT
 - 图片输入可能伪造 MIME、体积过大或留下孤儿副本。已实现 Rust 文件签名/20 MiB 大小校验、唯一 no-replace 命名和 import token 确认/取消；正常失败/取消/过期/进程释放只按身份与 hash 清理本次新建副本。强制终止发生在写盘与插入之间时仍可能遗留孤立资源，应用不会在缺少持久证据时猜测删除。
 - Milkdown/CodeMirror 增加包体和首开耗时。缓解：T18 记录增量，按文档首次打开懒加载 editor chunk；加载态不显示旧内容。
 - 安全写与恢复快照都需要写入完整 Markdown；若对 5～64 MiB 文档固定使用 800 ms 自动保存和 2 秒快照，会产生明显磁盘写放大、hash/序列化开销和输入抖动。缓解：按 5/20 MiB 候选阈值延长防抖，大文件快照连续输入期最多每 10 秒一次，保存/快照分别单飞并合并陈旧请求；T18/T26 记录实际写入次数、耗时和输入延迟后校准，不能为性能绕过关闭结算或 revision 校验。
-- 中文/日文 IME、macOS/Windows 剪贴板和拖放事件存在 WebView 差异。缓解：组件自动化 + macOS 实机 + Windows CI，Windows 原生人工项诚实保留。
+- 中文/日文 IME、macOS/Windows 剪贴板和拖放事件存在 WebView 差异。T23 已验证浏览器 composition 分组与 Chromium 中文 contenteditable 输入，但没有系统输入法候选窗证据；缓解仍为组件自动化 + macOS 实机 + Windows CI，Windows 原生人工项诚实保留。
+- Milkdown 性能不仅取决于字节数，也取决于块节点密度。T23 已按真实浏览器证据增加 `2 MiB + 2000 块` 双门槛并在挂载前降级；T25/T26 继续记录 session patch/hash 和保存开销，T31 复核 WebKit/Windows 与峰值内存，未取得证据前不得提高门槛。
 
 ### 10.2 已确认决策
 
@@ -684,7 +688,7 @@ T18/T30/T31 若新增稳定脚本，必须同步 `package.json`、README、AGENT
 
 ### 10.3 非阻塞假设
 
-- 自动保存 800 ms/2 秒/5 秒尺寸分级和大文件快照 10 秒限频是待实测候选常量；T18 的序列化/hash、T23 的真实 IME/编辑器性能和 T26 的写入次数/保存频率证据可在不改变业务流程的前提下校准，并同步计划实际落地。
+- 自动保存 800 ms/2 秒/5 秒尺寸分级和大文件快照 10 秒限频是待实测候选常量；T23 已将排版模式临时门槛校准为 `≤2 MiB 且 ≤2000 块`，超过后进入源码模式，因此 T26 必须分别校准排版模式与大源码文档的写入频率，不能再假定 5～64 MiB 会进入 Milkdown。
 - 首版图片导入支持 PNG/JPEG/GIF/WebP，SVG 因主动内容风险明确拒绝；若要支持 SVG，需先补安全渲染规则和验收后另行确认。
 - 单次图片大小上限已在 T22 固化为 20 MiB；Web 输入使用 raw IPC 避免 JSON 数字数组放大，超限和格式错误返回稳定错误且不产生 Markdown 断链。
 - 文档内查找使用 CodeMirror 能力，仅在源码模式直接显示；排版模式的当前文档查找可延后到同阶段 T25 的统一 command 实现，但不得升级为 R12 工作区搜索。

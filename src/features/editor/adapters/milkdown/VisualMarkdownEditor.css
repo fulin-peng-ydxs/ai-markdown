@@ -1,0 +1,187 @@
+.visual-markdown-editor {
+  position: relative;
+  width: min(800px, 100%);
+  min-height: 100%;
+  margin: 0 auto;
+  color: var(--color-text);
+}
+
+.visual-markdown-editor__canvas {
+  min-height: 100%;
+}
+
+.visual-markdown-editor__canvas .ProseMirror {
+  min-height: 100%;
+  padding: 0 0 var(--space-2xl);
+  color: var(--color-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 17px;
+  line-height: 1.76;
+  outline: none;
+}
+
+.visual-markdown-editor__canvas .ProseMirror > :first-child {
+  margin-top: 0;
+}
+
+.visual-markdown-editor__canvas .ProseMirror h1,
+.visual-markdown-editor__canvas .ProseMirror h2,
+.visual-markdown-editor__canvas .ProseMirror h3,
+.visual-markdown-editor__canvas .ProseMirror h4,
+.visual-markdown-editor__canvas .ProseMirror h5,
+.visual-markdown-editor__canvas .ProseMirror h6 {
+  color: var(--color-heading);
+  line-height: 1.3;
+}
+
+.visual-markdown-editor__canvas .ProseMirror h1 {
+  margin: 0 0 var(--space-xl);
+  font-size: 30px;
+}
+
+.visual-markdown-editor__canvas .ProseMirror h2 {
+  margin: var(--space-2xl) 0 var(--space-md);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-line);
+  font-size: 23px;
+}
+
+.visual-markdown-editor__canvas .ProseMirror h3 {
+  margin: var(--space-xl) 0 var(--space-sm);
+  font-size: 19px;
+}
+
+.visual-markdown-editor__canvas .ProseMirror p,
+.visual-markdown-editor__canvas .ProseMirror ul,
+.visual-markdown-editor__canvas .ProseMirror ol,
+.visual-markdown-editor__canvas .ProseMirror blockquote,
+.visual-markdown-editor__canvas .ProseMirror pre,
+.visual-markdown-editor__canvas .ProseMirror table {
+  margin: 0 0 var(--space-lg);
+}
+
+.visual-markdown-editor__canvas .ProseMirror blockquote {
+  padding-left: var(--space-lg);
+  color: var(--color-muted);
+  border-left: 2px solid var(--color-accent);
+}
+
+.visual-markdown-editor__canvas .ProseMirror code {
+  padding: 1px var(--space-xs);
+  background: var(--color-paper-deep);
+  border-radius: var(--radius-sm);
+  font: var(--font-code);
+}
+
+.visual-markdown-editor__canvas .ProseMirror pre {
+  overflow: auto;
+  padding: var(--space-lg);
+  background: var(--color-paper-deep);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+}
+
+.visual-markdown-editor__canvas .ProseMirror pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.visual-markdown-editor__canvas .ProseMirror a {
+  color: var(--color-accent);
+  text-decoration-color: var(--color-line-strong);
+  text-underline-offset: 3px;
+}
+
+.visual-markdown-editor__canvas .ProseMirror img {
+  max-width: 100%;
+  height: auto;
+}
+
+.visual-markdown-editor__canvas .ProseMirror table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.visual-markdown-editor__canvas .ProseMirror th,
+.visual-markdown-editor__canvas .ProseMirror td {
+  padding: var(--space-sm);
+  border: 1px solid var(--color-line);
+}
+
+.visual-markdown-editor__canvas .ProseMirror th {
+  color: var(--color-heading);
+  background: var(--color-paper-deep);
+}
+
+.visual-markdown-editor__canvas .ProseMirror ::selection {
+  background: var(--color-accent-soft);
+}
+
+.visual-markdown-editor[data-readonly] .ProseMirror {
+  cursor: default;
+}
+
+.visual-markdown-editor__selection-toolbar {
+  position: sticky;
+  z-index: 20;
+  top: var(--space-sm);
+  display: flex;
+  align-items: center;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 auto var(--space-sm);
+  padding: var(--space-xs);
+  overflow-x: auto;
+  background: var(--color-chrome);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-dialog);
+}
+
+.visual-markdown-editor__selection-toolbar button {
+  min-width: 30px;
+  min-height: 28px;
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font: var(--font-ui-sm);
+}
+
+.visual-markdown-editor__selection-toolbar button:hover:not(:disabled) {
+  color: var(--color-heading);
+  background: var(--color-paper-hover);
+}
+
+.visual-markdown-editor__selection-toolbar button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.visual-markdown-editor__selection-toolbar button:disabled {
+  color: var(--color-quiet);
+}
+
+.visual-markdown-editor__toolbar-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 var(--space-xs);
+  background: var(--color-line);
+}
+
+.visual-markdown-editor__feedback {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+@media (max-width: 560px) {
+  .visual-markdown-editor__canvas .ProseMirror {
+    font-size: 16px;
+  }
+}

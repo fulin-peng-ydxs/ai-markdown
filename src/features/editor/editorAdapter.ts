@@ -32,8 +32,16 @@ export interface EditorAdapterChange {
 
 export type EditorCommand =
   | { kind: "format"; format: "bold" | "italic" | "strike" | "code" }
-  | { kind: "insert_link" }
-  | { kind: "insert_image" }
+  | {
+      kind: "block";
+      block: "paragraph" | "quote" | "bullet_list" | "ordered_list" | "task_list";
+    }
+  | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6 }
+  | { kind: "insert_link"; href: string; title?: string }
+  | { kind: "insert_image"; src: string; alt?: string; title?: string }
+  | { kind: "insert_table"; rows?: number; columns?: number }
+  | { kind: "insert_divider" }
+  | { kind: "history"; direction: "undo" | "redo" }
   | { kind: "find" }
   | { kind: "replace" };
 
