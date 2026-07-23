@@ -43,6 +43,15 @@ export const DESKTOP_ERROR_CODES = [
   "file_too_large",
   "safe_write_unavailable",
   "safe_write_failed",
+  "recovery_unavailable",
+  "recovery_read_failed",
+  "recovery_write_failed",
+  "recovery_unsupported_version",
+  "recovery_snapshot_not_found",
+  "recovery_snapshot_corrupt",
+  "recovery_capacity_exceeded",
+  "recovery_session_not_active",
+  "recovery_snapshot_protected",
   "invalid_entry_name",
   "reserved_entry_name",
   "target_already_exists",
@@ -129,6 +138,44 @@ export interface SafeWriteResult {
   relativePath: WorkspaceRelativePath;
   revision: FileRevision;
   bytesWritten: number;
+}
+
+export interface RecoverySnapshotMetadata {
+  snapshotId: string;
+  workspaceId: WorkspaceId;
+  relativePath: WorkspaceRelativePath;
+  baseRevision: FileRevision;
+  contentHash: string;
+  createdAt: number;
+  updatedAt: number;
+  expiresAt: number;
+  sizeBytes: number;
+}
+
+export interface RecoverySnapshot {
+  metadata: RecoverySnapshotMetadata;
+  content: string;
+}
+
+export const RECOVERY_PERSIST_STATUSES = [
+  "persisted",
+  "memory_only",
+] as const;
+
+export type RecoveryPersistStatus =
+  (typeof RECOVERY_PERSIST_STATUSES)[number];
+
+export interface RecoveryUpsertResult {
+  status: RecoveryPersistStatus;
+  snapshot: RecoverySnapshotMetadata | null;
+  issue: DesktopError | null;
+}
+
+export interface RecoveryCleanupResult {
+  removed: number;
+  remaining: number;
+  totalBytes: number;
+  limitsSatisfied: boolean;
 }
 
 export interface WorkspaceScanStart {

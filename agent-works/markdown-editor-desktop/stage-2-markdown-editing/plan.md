@@ -4,7 +4,7 @@
 >
 > 当前阶段：阶段 2——统一 Markdown 文档模型、排版编辑/源码编辑和完整单文档保存、恢复、冲突、图片资源链路
 >
-> 计划状态：进行中（T18～T19 已完成，T20 待开始）
+> 计划状态：进行中（T18～T20 已完成，T21 待开始）
 >
 > 需求编号规则：完全沿用 `requirement.md` 的 R1～R34，不新增、重排或改变 R 编号含义。
 
@@ -39,7 +39,7 @@
 - Milkdown 官方能力采用插件化接入：CommonMark/GFM、history、clipboard、listener、upload；生产实现不得直接复制原型中的 `contenteditable`/`textarea` 演示逻辑。
 - CodeMirror 6 负责源码高亮、行号、查找替换、括号匹配和源码选择；不建立第二份 Markdown 文件或独立保存通道。
 - 选型依据：[Milkdown 官方文档](https://milkdown.dev/docs)、[Milkdown 插件说明](https://milkdown.dev/docs/plugin/using-plugins)、[ProseMirror Guide](https://prosemirror.net/docs/guide/) 和 [CodeMirror Markdown 官方仓库](https://github.com/codemirror/lang-markdown)。
-- 第一阶段测试基线为 115 个 Rust 单测、3 个路径工具测试、18 个树状态测试、4 个永久删除反馈测试、35 个 React 测试、1 个 fixture 测试、4 个许可证测试和 4 个桌面 E2E。T18 新增 7 个编辑器 PoC 测试，T19 新增 28 个 session/history/AST 契约测试与 1 个 P1 陈旧读取回归，当前 `pnpm test` 的 Vitest 汇总为 71 项；第二阶段不得删除或弱化这些基线来换取绿灯。
+- 第一阶段测试基线为 115 个 Rust 单测、3 个路径工具测试、18 个树状态测试、4 个永久删除反馈测试、35 个 React 测试、1 个 fixture 测试、4 个许可证测试和 4 个桌面 E2E。T18 新增 7 个编辑器 PoC 测试，T19 新增 28 个 session/history/AST 契约测试与 1 个 P1 陈旧读取回归，T20 新增 18 个恢复仓储/契约测试；当前 Rust 全量为 133 项，`pnpm test` 的 Vitest 汇总为 71 项。第二阶段不得删除或弱化这些基线来换取绿灯。
 
 ### 2.2 已有代码与可复用能力
 
@@ -81,7 +81,7 @@
 | R2 | 文件与目录管理 | 复用读取、watch、安全写并接入当前编辑会话和图片资源文件；不改变文件树 CRUD 语义 | 进行中 | T19、T21、T22、T26、T28、T30～T31 | T19 已让 P1 读取进入统一 session 并阻止同工作区陈旧读取覆盖；写入、资源与外部变化仍待后续任务 |
 | R3 | 所见即所得 Markdown 编辑 | 完整纳入本阶段 | 进行中 | T18、T19、T23、T25、T30～T32 | T19 已建立单一内容源、可逆历史和 adapter 契约；真实 AST parser、IME、产品编辑与 E2E 仍待后续任务 |
 | R4 | 当前文档大纲 | 阶段 6 实现；本阶段只提供增量内容事件，不渲染大纲 | 跳过 | - | 映射审查确认没有假大纲或占位任务 |
-| R5 | 自动保存、恢复与外部冲突 | 完成单文档链路；多页签关闭检查由阶段 3 扩展，搜索索引异常协同由阶段 7 承接 | 进行中 | T19～T21、T25～T27、T29～T32 | T19 已落地保存 union、editVersion 与 in-flight 陈旧保护；尚无自动保存、恢复、冲突、关闭/退出或另存产品链路 |
+| R5 | 自动保存、恢复与外部冲突 | 完成单文档链路；多页签关闭检查由阶段 3 扩展，搜索索引异常协同由阶段 7 承接 | 进行中 | T19～T21、T25～T27、T29～T32 | T19 已落地保存 union、editVersion 与 in-flight 陈旧保护；T20 已落地独立、有界、活动会话保护的恢复仓储及 IPC/TS 契约，但尚无自动触发、恢复 UI、冲突、关闭/退出或另存产品链路 |
 | R6 | 图片粘贴、拖放与资源管理 | 完整纳入本阶段 | 进行中 | T18、T22、T23、T28、T30～T32 | T18 只验证含图片语法语料；真实导入、相对路径与回滚仍待 T22/T23/T28/T30～T32 |
 | R7 | 中性主题与颜色语义 | 只消费既有 token，不在本阶段实现主题产品能力 | 跳过 | - | token 扫描只作为页面合规回归，不计 R7 完成 |
 | R8 | 自适应与区域调宽 | 保留第一阶段 P1 窄窗抽屉；完整调宽/持久化由阶段 4 实现 | 跳过 | - | T31 回归现有 820/760 px，不新增 R8 完成声明 |
@@ -346,7 +346,7 @@ plainroot-recovery-v1/
 
 ### 6.3 任务 T20：版本化恢复快照仓储与命令契约
 
-- 状态：待开始
+- 状态：已完成
 - 依赖：T19 的 session/revision 契约；复用第一阶段原子文件适配。
 - 涉及文件/模块：`src-tauri/src/editor/recovery.rs`、`commands/editor.rs`、`error.rs`、`lib.rs`、`contract_test.rs`、`src/services/desktop/contracts.ts`、`editorGateway.ts`、恢复 fixture 和 `t20-recovery-store.md`。
 - 目标：实现正文恢复数据的独立、版本化、原子、有界仓储。
@@ -356,7 +356,7 @@ plainroot-recovery-v1/
 - 边界与异常：7 天/32 项/128 MiB 三重上限；容量指标彼此独立；活动 dirty session 的最后快照不可被清理；无法持久化时返回“仅内存安全”而不阻断编辑；单项损坏隔离；未知 schema 不覆盖；没有授权根时只能展示脱敏元数据，不能自动读取原文。
 - 验证方式：临时 app data 测试原子提交、崩溃残件、两个 64 MiB 级快照耗尽预算、第三个活动快照降级、非活动最旧清理、活动快照保护、成功保存/放弃/安全关闭后释放并恢复可淘汰、仅内存 contentSafety、过期、重复路径替换、损坏/未知版本、权限失败、非 UTF-8 路径和 Rust↔TS parity。
 - 完成标准：失败不破坏上一份有效快照，清理有界且不误删 Markdown/活动会话最后快照；容量不足时可观察地降级为仅内存安全，所有命令可由 P1/P2 消费。
-- 实际落地情况：待实施。
+- 实际落地情况：已新增独立 `plainroot-recovery-v1/manifest-v1.json` 与 `snapshots/` 仓储，不改变 `plainroot-state-v1.json`。`RecoveryRepository` 以每工作区/相对文档唯一项保存最新快照，正文先写入 `0600` opaque 新文件并同步，再原子提交 manifest；manifest 失败会删除未提交新文件并保留上一份有效快照。仓储实现 7 天、32 项、128 MiB 三重边界，按过期后非活动最旧顺序清理，活动 dirty session 的最后快照在释放前禁止容量淘汰和显式删除；容量、未知版本或写入失败返回 `memory_only` 与稳定 issue，不把内存内容伪装成已恢复。启动时只清理 Plainroot 命名的普通孤儿/临时文件，损坏 manifest 条目会备份并保留其他有效项，单个缺失/损坏 snapshot 不阻断其他项，未知 schema 原文件不覆盖。已注册 list/get/upsert/delete/cleanup/register/release 七组命令，正文读取须同时匹配当前授权 workspace、snapshot id 与相对路径；TS contracts、desktop service 和 `EditorRecoveryGateway` 已接入 parity，但 P1/P2 自动触发和恢复弹层仍由 T26/T27/T29 消费。18 个 T20 Rust 测试覆盖原子故障、活动保护、两个 64 MiB 级容量边界、过期/最旧清理、身份绑定、损坏/未知版本、孤儿、权限与非 UTF-8 安全失败；Rust 全量 133/133、Clippy、fmt、TypeScript、前端全量 71/71、构建和许可证 727/508/0 通过。证据见 `t20-recovery-store.md`。
 
 ### 6.4 任务 T21：冲突证据、一次性覆盖令牌和安全另存副本
 

@@ -4,7 +4,7 @@
 
 本文描述 Plainroot 当前已经落地的桌面底座模块、数据流、权限边界和运行约束。产品范围与最终验收以 `../requirement.md` 为准，第一阶段任务状态与验证证据以 `../stage-1-desktop-foundation/plan.md` 为准；代码、清单、配置和自动化测试是实现事实源。
 
-当前架构只覆盖 P2 工作区启动页、P1 只读工作台、本地文件与窗口底座。所见即所得编辑器、源码编辑器、多页签、大纲、全文搜索、自动保存/恢复、完整外部冲突状态机、主题工作室和分页阅读不属于当前已落地架构。
+当前架构覆盖 P2 工作区启动页、P1 只读工作台、本地文件与窗口底座，以及尚未接入页面流程的单文档会话和恢复快照仓储底座。所见即所得编辑器、源码编辑器、多页签、大纲、全文搜索、自动保存触发、恢复弹层、完整外部冲突状态机、主题工作室和分页阅读仍未落地。
 
 ## 2. 总体结构
 
@@ -19,6 +19,7 @@ flowchart LR
     IPC --> A["工作区授权注册表"]
     IPC --> F["文件服务"]
     W --> S["版本化应用状态"]
+    IPC --> R["版本化恢复仓储"]
     A --> F
     F --> M["用户授权根内的 Markdown 文件"]
     F --> J["安全写清理日志"]
@@ -39,6 +40,7 @@ flowchart LR
 | 文件系统服务 | `src-tauri/src/fs/` | 路径与身份、扫描、读取、变更、删除、监听、原子替换和安全写 | 默认不跟随根内符号链接；平台差异由适配层收口 |
 | 窗口与菜单 | `src-tauri/src/window.rs`、`src-tauri/src/menu.rs` | 一目录一窗口、当前/新窗口决策、根会话协调、单实例转交和原生菜单 | 当前不承担页签保存门禁；只有真实消费者的菜单项启用 |
 | 版本化状态 | `src-tauri/src/state.rs` | 最近工作区与根窗口会话的原子持久化、损坏备份和未知版本保护 | 不保存 Markdown 正文、打开偏好、账号或远端状态 |
+| 版本化恢复 | `src-tauri/src/editor/recovery.rs`、`commands/editor.rs`、`src/services/desktop/recovery.ts` | app data 内最新单文档快照、活动脏会话保护、期限/条目/容量清理、损坏隔离和 IPC/TS 契约 | 不替代工作区 `.md`；当前没有自动触发或恢复 UI；正文读取必须匹配已授权 workspace、snapshot id 与相对路径 |
 
 ## 4. 核心运行不变量
 
@@ -69,6 +71,7 @@ flowchart LR
 | Markdown 内容 | 用户授权工作区 | 真实 `.md` 文件，单次内联读取/写入上限 64 MiB | 不随应用版本回滚；失败保持原文件或明确报告内容安全性 |
 | 应用状态 | 操作系统 `appDataDir()/plainroot-state-v1.json` | schema v1；最近工作区最多 100 条；文件上限 8 MiB | 损坏文件备份后回到安全默认；未知版本不覆盖；退出应用后可备份并删除 |
 | 安全写清理日志 | `appDataDir()/plainroot-safe-write-cleanup-v1.json` | 最多 32 个待清理临时路径；日志上限 64 KiB | 只重试历史授权根内且重新校验通过的 Plainroot 临时文件；不可再授权条目不占全局预算 |
+| 恢复快照 | `appDataDir()/plainroot-recovery-v1/` | schema v1；每文档最新一份；默认 7 天、32 项、正文总量 128 MiB；snapshot/manifest 为私有原子文件 | 活动脏会话最后快照不被自动清理；容量/写入失败降级为仅内存安全；未知版本不覆盖；不读取未授权正文 |
 | 正式 Tauri 配置 | `src-tauri/tauri.conf.json`、`src-tauri/capabilities/default.json` | 开发 identifier、窗口尺寸、CSP 与最小 `core:default` capability | 不授予全 HOME 或前端通用文件权限；正式品牌身份与签名发布前另行确认 |
 | E2E 配置 | `src-tauri/tauri.e2e.conf.json`、Cargo `e2e` feature | 独立 identifier、临时状态目录和 WebDriver 能力 | 编译期 feature 默认关闭，不进入正式依赖图、前端产物或生产二进制 |
 

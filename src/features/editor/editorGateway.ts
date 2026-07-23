@@ -1,10 +1,24 @@
 import type {
   DesktopError,
+  FileRevision,
   MarkdownReadResult,
+  RecoveryCleanupResult,
+  RecoverySnapshot,
+  RecoverySnapshotMetadata,
+  RecoveryUpsertResult,
   WorkspaceId,
   WorkspaceRelativePath,
 } from "../../services/desktop/contracts";
 import { DESKTOP_ERROR_CODES } from "../../services/desktop/contracts";
+import {
+  cleanupRecoverySnapshots,
+  deleteRecoverySnapshot,
+  getRecoverySnapshot,
+  listRecoverySnapshots,
+  registerActiveRecoverySession,
+  releaseActiveRecoverySession,
+  upsertRecoverySnapshot,
+} from "../../services/desktop/recovery";
 import {
   rejectDocumentRead,
   resolveDocumentRead,
@@ -22,6 +36,41 @@ export interface EditorDocumentGateway {
     path: WorkspaceRelativePath,
   ): Promise<MarkdownReadResult>;
 }
+
+export interface EditorRecoveryGateway {
+  list(): Promise<RecoverySnapshotMetadata[]>;
+  get(
+    snapshotId: string,
+    workspaceId: WorkspaceId,
+    relativePath: WorkspaceRelativePath,
+  ): Promise<RecoverySnapshot>;
+  registerActive(
+    workspaceId: WorkspaceId,
+    relativePath: WorkspaceRelativePath,
+  ): Promise<boolean>;
+  releaseActive(
+    workspaceId: WorkspaceId,
+    relativePath: WorkspaceRelativePath,
+  ): Promise<boolean>;
+  upsert(
+    workspaceId: WorkspaceId,
+    relativePath: WorkspaceRelativePath,
+    content: string,
+    baseRevision: FileRevision,
+  ): Promise<RecoveryUpsertResult>;
+  delete(snapshotId: string): Promise<boolean>;
+  cleanup(): Promise<RecoveryCleanupResult>;
+}
+
+export const desktopRecoveryGateway: EditorRecoveryGateway = {
+  list: listRecoverySnapshots,
+  get: getRecoverySnapshot,
+  registerActive: registerActiveRecoverySession,
+  releaseActive: releaseActiveRecoverySession,
+  upsert: upsertRecoverySnapshot,
+  delete: deleteRecoverySnapshot,
+  cleanup: cleanupRecoverySnapshots,
+};
 
 export interface MarkdownCompatibilityParser {
   parse(markdown: string): Promise<MarkdownParseEvidence>;

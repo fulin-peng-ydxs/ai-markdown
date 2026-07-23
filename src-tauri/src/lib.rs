@@ -13,6 +13,7 @@ pub(crate) fn app_data_directory<R: tauri::Runtime>(
 }
 
 pub mod commands;
+pub mod editor;
 pub mod error;
 pub mod fs;
 pub mod menu;
@@ -99,6 +100,13 @@ pub fn run() {
             commands::files::confirm_permanent_delete,
             commands::files::cancel_permanent_delete,
             commands::files::reveal_workspace_entry,
+            commands::editor::list_recovery_snapshots,
+            commands::editor::get_recovery_snapshot,
+            commands::editor::upsert_recovery_snapshot,
+            commands::editor::delete_recovery_snapshot,
+            commands::editor::cleanup_recovery_snapshots,
+            commands::editor::register_active_recovery_session,
+            commands::editor::release_active_recovery_session,
         ])
         .setup(|app| {
             let persistent_state = state::PersistentAppState::initialize_for_app(app.handle());
@@ -143,6 +151,14 @@ pub fn run() {
                 );
             }
             app.manage(safe_writes);
+            let recovery = editor::recovery::RecoveryRepository::initialize_for_app(app.handle());
+            if let Some(error) = recovery.current_error() {
+                eprintln!(
+                    "Plainroot recovery initialization failed: {}",
+                    error.message_key
+                );
+            }
+            app.manage(recovery);
             Ok(())
         })
         .run(tauri::generate_context!())
