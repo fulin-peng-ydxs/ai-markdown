@@ -1,8 +1,13 @@
 use std::path::PathBuf;
 
+use tauri::ipc::{InvokeBody, Request};
 use tauri::{Runtime, State, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
+use crate::editor::assets::{
+    AssetImportProposal, AssetImportResult, AssetImportSelectionOutcome, AssetImportService,
+    AssetUploadTicket, ASSET_UPLOAD_HEADER,
+};
 use crate::editor::recovery::{
     RecoveryCleanupResult, RecoveryRepository, RecoverySnapshot, RecoverySnapshotMetadata,
     RecoveryUpsertResult,
@@ -15,6 +20,10 @@ use crate::error::{DesktopError, DesktopErrorCode};
 use crate::fs::safe_write::{SafeWriteResult, WorkspaceSafeWriteService};
 use crate::fs::watch::WorkspaceWatchService;
 use crate::fs::{FileRevision, WorkspaceId, WorkspaceRelativePath};
+use crate::preferences::{
+    default_asset_directory, parse_asset_directory, validate_asset_directory,
+    PreferencesRepository, WorkspaceAssetPreference,
+};
 
 use super::workspace::WorkspaceAccessService;
 
@@ -230,6 +239,147 @@ pub fn cancel_save_copy(
     editor_saves.cancel_save_copy(&confirmation_id)
 }
 
+#[tauri::command]
+pub fn get_workspace_asset_preference(
+    workspace_id: WorkspaceId,
+    access: State<'_, WorkspaceAccessService>,
+    preferences: State<'_, PreferencesRepository>,
+) -> Result<WorkspaceAssetPreference, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    let preference = preferences.get(&workspace_id)?;
+    validate_asset_directory(workspace.canonical_root(), &preference.asset_directory)?;
+    Ok(preference)
+}
+
+#[tauri::command]
+pub fn set_workspace_asset_directory(
+    workspace_id: WorkspaceId,
+    asset_directory: String,
+    access: State<'_, WorkspaceAccessService>,
+    preferences: State<'_, PreferencesRepository>,
+) -> Result<WorkspaceAssetPreference, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    let asset_directory = parse_asset_directory(&asset_directory)?;
+    validate_asset_directory(workspace.canonical_root(), &asset_directory)?;
+    preferences.set_asset_directory(workspace_id, asset_directory)
+}
+
+#[tauri::command]
+pub fn reset_workspace_asset_directory(
+    workspace_id: WorkspaceId,
+    access: State<'_, WorkspaceAccessService>,
+    preferences: State<'_, PreferencesRepository>,
+) -> Result<WorkspaceAssetPreference, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    validate_asset_directory(workspace.canonical_root(), &default_asset_directory())?;
+    preferences.reset_asset_directory(workspace_id)
+}
+
+#[tauri::command]
+pub fn begin_asset_import_upload(
+    workspace_id: WorkspaceId,
+    declared_mime: String,
+    suggested_name: String,
+    access: State<'_, WorkspaceAccessService>,
+    preferences: State<'_, PreferencesRepository>,
+    assets: State<'_, AssetImportService>,
+) -> Result<AssetUploadTicket, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    let preference = preferences.get(&workspace_id)?;
+    assets.begin_upload(
+        workspace_id,
+        workspace.canonical_root(),
+        preference.asset_directory,
+        &declared_mime,
+        &suggested_name,
+    )
+}
+
+#[tauri::command]
+pub async fn upload_asset_import(
+    request: Request<'_>,
+    access: State<'_, WorkspaceAccessService>,
+    assets: State<'_, AssetImportService>,
+    watches: State<'_, WorkspaceWatchService>,
+) -> Result<AssetImportProposal, DesktopError> {
+    let upload_id = request
+        .headers()
+        .get(ASSET_UPLOAD_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| DesktopError::new(DesktopErrorCode::AssetPayloadInvalid, true, false))?;
+    let bytes = raw_asset_upload_bytes(request.body())?;
+    let workspace_id = assets.upload_workspace_id(&upload_id)?;
+    access.workspace(&workspace_id)?;
+    let service = assets.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || service.upload(&upload_id, bytes))
+        .await
+        .map_err(|_| DesktopError::new(DesktopErrorCode::AssetWriteFailed, true, true))??;
+    watches.record_write(&workspace_id, &result.asset_path);
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn select_asset_image<R: Runtime>(
+    window: WebviewWindow<R>,
+    workspace_id: WorkspaceId,
+    access: State<'_, WorkspaceAccessService>,
+    preferences: State<'_, PreferencesRepository>,
+    assets: State<'_, AssetImportService>,
+    watches: State<'_, WorkspaceWatchService>,
+) -> Result<AssetImportSelectionOutcome, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    let canonical_root = workspace.canonical_root().to_path_buf();
+    let preference = preferences.get(&workspace_id)?;
+    validate_asset_directory(&canonical_root, &preference.asset_directory)?;
+    let selected = window
+        .dialog()
+        .file()
+        .set_parent(&window)
+        .set_title("导入图片到工作区")
+        .add_filter("图片", &["png", "jpg", "jpeg", "gif", "webp"])
+        .blocking_pick_file();
+    let selected = dialog_path(selected)?;
+    let service = assets.inner().clone();
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        service.import_selected_file(
+            selected,
+            workspace_id,
+            &canonical_root,
+            preference.asset_directory,
+        )
+    })
+    .await
+    .map_err(|_| DesktopError::new(DesktopErrorCode::AssetWriteFailed, true, true))??;
+    if let AssetImportSelectionOutcome::Ready { proposal } = &outcome {
+        watches.record_write(&proposal.workspace_id, &proposal.asset_path);
+    }
+    Ok(outcome)
+}
+
+#[tauri::command]
+pub fn confirm_asset_import(
+    workspace_id: WorkspaceId,
+    import_id: String,
+    access: State<'_, WorkspaceAccessService>,
+    assets: State<'_, AssetImportService>,
+) -> Result<AssetImportResult, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    assets.confirm(&workspace_id, workspace.canonical_root(), &import_id)
+}
+
+#[tauri::command]
+pub fn cancel_asset_import(
+    workspace_id: WorkspaceId,
+    import_id: String,
+    access: State<'_, WorkspaceAccessService>,
+    assets: State<'_, AssetImportService>,
+) -> Result<bool, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    assets.cancel(&workspace_id, workspace.canonical_root(), &import_id)
+}
+
 fn dialog_path(selected: Option<FilePath>) -> Result<Option<PathBuf>, DesktopError> {
     selected
         .map(|path| {
@@ -237,4 +387,37 @@ fn dialog_path(selected: Option<FilePath>) -> Result<Option<PathBuf>, DesktopErr
                 .map_err(|_| DesktopError::new(DesktopErrorCode::DialogUnavailable, true, true))
         })
         .transpose()
+}
+
+fn raw_asset_upload_bytes(body: &InvokeBody) -> Result<Vec<u8>, DesktopError> {
+    match body {
+        InvokeBody::Raw(bytes) => Ok(bytes.clone()),
+        InvokeBody::Json(_) => Err(DesktopError::new(
+            DesktopErrorCode::AssetPayloadInvalid,
+            true,
+            false,
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::raw_asset_upload_bytes;
+    use crate::error::DesktopErrorCode;
+    use tauri::ipc::InvokeBody;
+
+    #[test]
+    fn asset_upload_requires_raw_ipc_instead_of_a_json_number_array() {
+        let bytes = vec![0x89, b'P', b'N', b'G'];
+        assert_eq!(
+            raw_asset_upload_bytes(&InvokeBody::Raw(bytes.clone())).unwrap(),
+            bytes
+        );
+        assert_eq!(
+            raw_asset_upload_bytes(&InvokeBody::Json(serde_json::json!([137, 80, 78, 71])))
+                .unwrap_err()
+                .code,
+            DesktopErrorCode::AssetPayloadInvalid
+        );
+    }
 }

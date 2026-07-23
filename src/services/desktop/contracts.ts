@@ -60,6 +60,21 @@ export const DESKTOP_ERROR_CODES = [
   "save_copy_format_required",
   "save_copy_overwrite_confirmation_required",
   "save_copy_failed",
+  "preferences_unavailable",
+  "preferences_read_failed",
+  "preferences_write_failed",
+  "preferences_backup_failed",
+  "preferences_unsupported_version",
+  "invalid_preferences_data",
+  "invalid_asset_directory",
+  "asset_upload_not_found",
+  "asset_import_not_found",
+  "asset_unsupported_type",
+  "asset_mime_mismatch",
+  "asset_too_large",
+  "asset_payload_invalid",
+  "asset_target_changed",
+  "asset_write_failed",
   "invalid_entry_name",
   "reserved_entry_name",
   "target_already_exists",
@@ -507,4 +522,55 @@ export interface WorkspaceLauncherSnapshot {
 export interface WorkspaceWorkbenchSnapshot {
   workspace: WorkspaceDescriptor;
   windowLabel: string;
+}
+
+export interface WorkspaceAssetPreference {
+  workspaceId: WorkspaceId;
+  assetDirectory: WorkspaceRelativePath;
+}
+
+export const ASSET_IMAGE_KINDS = [
+  "png",
+  "jpeg",
+  "gif",
+  "webp",
+] as const;
+
+export type AssetImageKind = (typeof ASSET_IMAGE_KINDS)[number];
+
+export interface AssetUploadTicket {
+  uploadId: string;
+  maxBytes: number;
+  acceptedKind: AssetImageKind;
+}
+
+export interface AssetImportProposal {
+  importId: string;
+  workspaceId: WorkspaceId;
+  assetPath: WorkspaceRelativePath;
+  fileName: string;
+  imageKind: AssetImageKind;
+  mediaType: string;
+  byteLength: number;
+}
+
+export const ASSET_IMPORT_SELECTION_STATUSES = [
+  "cancelled",
+  "ready",
+] as const;
+
+export type AssetImportSelectionOutcome =
+  | { status: (typeof ASSET_IMPORT_SELECTION_STATUSES)[0] }
+  | {
+      status: (typeof ASSET_IMPORT_SELECTION_STATUSES)[1];
+      proposal: AssetImportProposal;
+    };
+
+export interface AssetImportResult {
+  workspaceId: WorkspaceId;
+  assetPath: WorkspaceRelativePath;
+  fileName: string;
+  imageKind: AssetImageKind;
+  mediaType: string;
+  byteLength: number;
 }

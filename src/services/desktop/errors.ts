@@ -79,6 +79,32 @@ export function desktopErrorMessage(error: DesktopError): string {
     case "save_copy_failed":
     case "editor_save_unavailable":
       return "保存副本没有完成，当前编辑内容和原磁盘文件仍保持不变。";
+    case "preferences_unavailable":
+    case "preferences_read_failed":
+    case "preferences_unsupported_version":
+    case "invalid_preferences_data":
+      return "无法读取当前工作区的资源目录偏好。Markdown 文件和已有资源没有受到影响。";
+    case "preferences_write_failed":
+    case "preferences_backup_failed":
+      return "资源目录偏好没有保存，原有设置仍保持不变。";
+    case "invalid_asset_directory":
+      return "资源目录必须是工作区内的安全相对目录，且不能经过符号链接。";
+    case "asset_upload_not_found":
+      return "图片上传授权已经过期或被使用，请重新选择图片。";
+    case "asset_import_not_found":
+      return "图片导入确认已经过期或被使用，请重新导入。";
+    case "asset_unsupported_type":
+      return "仅支持 PNG、JPEG、GIF 和 WebP 图片，不支持 SVG。";
+    case "asset_mime_mismatch":
+      return "图片内容与声明的格式不一致，Plainroot 没有导入它。";
+    case "asset_too_large":
+      return "图片超过 20 MiB 导入上限，Plainroot 没有写入它。";
+    case "asset_payload_invalid":
+      return "图片上传内容无效，请重新选择图片。";
+    case "asset_target_changed":
+      return "导入后的资源已被其他程序修改，Plainroot 没有删除或确认它。";
+    case "asset_write_failed":
+      return "图片导入没有完成，Markdown 内容和已有资源仍保持不变。";
     case "invalid_entry_name":
       return "名称包含不支持的字符、路径分隔符或空白边界，请换一个名称。";
     case "reserved_entry_name":

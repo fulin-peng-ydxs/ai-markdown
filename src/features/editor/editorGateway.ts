@@ -1,4 +1,8 @@
 import type {
+  AssetImportProposal,
+  AssetImportResult,
+  AssetImportSelectionOutcome,
+  AssetUploadTicket,
   DesktopError,
   ConflictOverwriteProposal,
   FileRevision,
@@ -13,6 +17,7 @@ import type {
   SaveCopySelectionOutcome,
   SaveCopySource,
   WorkspaceId,
+  WorkspaceAssetPreference,
   WorkspaceRelativePath,
 } from "../../services/desktop/contracts";
 import { DESKTOP_ERROR_CODES } from "../../services/desktop/contracts";
@@ -33,6 +38,16 @@ import {
   prepareConflictOverwrite,
   prepareSaveCopy,
 } from "../../services/desktop/editorSave";
+import {
+  beginAssetImportUpload,
+  cancelAssetImport,
+  confirmAssetImport,
+  getWorkspaceAssetPreference,
+  resetWorkspaceAssetDirectory,
+  selectAssetImage,
+  setWorkspaceAssetDirectory,
+  uploadAssetImport,
+} from "../../services/desktop/assets";
 import {
   rejectDocumentRead,
   resolveDocumentRead,
@@ -117,6 +132,40 @@ export const desktopSaveGateway: EditorSaveGateway = {
   prepareSaveCopy,
   confirmSaveCopy,
   cancelSaveCopy,
+};
+
+export interface EditorAssetGateway {
+  getPreference(workspaceId: WorkspaceId): Promise<WorkspaceAssetPreference>;
+  setDirectory(
+    workspaceId: WorkspaceId,
+    assetDirectory: WorkspaceRelativePath,
+  ): Promise<WorkspaceAssetPreference>;
+  resetDirectory(
+    workspaceId: WorkspaceId,
+  ): Promise<WorkspaceAssetPreference>;
+  beginUpload(
+    workspaceId: WorkspaceId,
+    declaredMime: string,
+    suggestedName: string,
+  ): Promise<AssetUploadTicket>;
+  upload(uploadId: string, bytes: Uint8Array): Promise<AssetImportProposal>;
+  select(workspaceId: WorkspaceId): Promise<AssetImportSelectionOutcome>;
+  confirm(
+    workspaceId: WorkspaceId,
+    importId: string,
+  ): Promise<AssetImportResult>;
+  cancel(workspaceId: WorkspaceId, importId: string): Promise<boolean>;
+}
+
+export const desktopAssetGateway: EditorAssetGateway = {
+  getPreference: getWorkspaceAssetPreference,
+  setDirectory: setWorkspaceAssetDirectory,
+  resetDirectory: resetWorkspaceAssetDirectory,
+  beginUpload: beginAssetImportUpload,
+  upload: uploadAssetImport,
+  select: selectAssetImage,
+  confirm: confirmAssetImport,
+  cancel: cancelAssetImport,
 };
 
 export interface MarkdownCompatibilityParser {

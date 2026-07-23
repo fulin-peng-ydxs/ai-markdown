@@ -17,6 +17,7 @@ pub mod editor;
 pub mod error;
 pub mod fs;
 pub mod menu;
+pub mod preferences;
 pub mod state;
 pub mod window;
 
@@ -113,6 +114,14 @@ pub fn run() {
             commands::editor::prepare_save_copy,
             commands::editor::confirm_save_copy,
             commands::editor::cancel_save_copy,
+            commands::editor::get_workspace_asset_preference,
+            commands::editor::set_workspace_asset_directory,
+            commands::editor::reset_workspace_asset_directory,
+            commands::editor::begin_asset_import_upload,
+            commands::editor::upload_asset_import,
+            commands::editor::select_asset_image,
+            commands::editor::confirm_asset_import,
+            commands::editor::cancel_asset_import,
         ])
         .setup(|app| {
             let persistent_state = state::PersistentAppState::initialize_for_app(app.handle());
@@ -148,9 +157,12 @@ pub fn run() {
             app.manage(editor::save_copy::EditorSaveService::with_operation_lock(
                 operation_lock.clone(),
             ));
+            app.manage(editor::assets::AssetImportService::with_operation_lock(
+                operation_lock.clone(),
+            ));
             let safe_writes = fs::safe_write::WorkspaceSafeWriteService::initialize_for_app(
                 app.handle(),
-                operation_lock,
+                operation_lock.clone(),
                 cleanup_roots,
             );
             if let Some(error) = safe_writes.current_error() {
@@ -168,6 +180,14 @@ pub fn run() {
                 );
             }
             app.manage(recovery);
+            let preferences = preferences::PreferencesRepository::initialize_for_app(app.handle());
+            if let Some(error) = preferences.current_error() {
+                eprintln!(
+                    "Plainroot preferences initialization failed: {}",
+                    error.message_key
+                );
+            }
+            app.manage(preferences);
             Ok(())
         })
         .run(tauri::generate_context!())
