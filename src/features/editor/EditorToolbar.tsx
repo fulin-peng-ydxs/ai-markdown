@@ -9,7 +9,9 @@ export interface EditorToolbarProps {
   mode: EditorMode;
   saveState: DocumentSaveState;
   sourceOnlyReason: string | null;
+  onResolveConflict?(): void;
   onSave?(): void;
+  onSaveCopy?(): void;
   onCommand(command: EditorCommand): void;
   onModeChange(mode: EditorMode): void;
 }
@@ -21,7 +23,9 @@ export function EditorToolbar({
   mode,
   saveState,
   sourceOnlyReason,
+  onResolveConflict,
   onSave,
+  onSaveCopy,
   onCommand,
   onModeChange,
 }: EditorToolbarProps) {
@@ -122,13 +126,31 @@ export function EditorToolbar({
 
       <span aria-hidden="true" className="document-editor-toolbar__divider" />
 
-      {onSave ? (
+      {saveState.kind === "conflict" && onResolveConflict ? (
+        <ToolbarButton
+          disabled={busy}
+          label="处理磁盘冲突"
+          onClick={onResolveConflict}
+        >
+          处理冲突
+        </ToolbarButton>
+      ) : onSave ? (
         <ToolbarButton
           disabled={readonly || busy || saveState.kind === "saving"}
           label="保存当前文档"
           onClick={onSave}
         >
           保存
+        </ToolbarButton>
+      ) : null}
+
+      {onSaveCopy ? (
+        <ToolbarButton
+          disabled={busy || saveState.kind === "saving"}
+          label="另存当前内容副本"
+          onClick={onSaveCopy}
+        >
+          另存副本
         </ToolbarButton>
       ) : null}
 

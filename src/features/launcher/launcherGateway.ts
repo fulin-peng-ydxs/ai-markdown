@@ -19,6 +19,10 @@ import {
   validateRecentWorkspace,
   type LauncherMenuAction,
 } from "../../services/desktop/workspace";
+import {
+  desktopRecoveryGateway,
+  type EditorRecoveryGateway,
+} from "../editor/editorGateway";
 
 export interface WorkspaceLauncherGateway {
   snapshot(): Promise<WorkspaceLauncherSnapshot>;
@@ -34,6 +38,7 @@ export interface WorkspaceLauncherGateway {
   removeRecent(workspaceId: WorkspaceId): Promise<boolean>;
   removeSession(workspaceId: WorkspaceId): Promise<boolean>;
   listenMenu(listener: (action: LauncherMenuAction) => void): Promise<() => void>;
+  recoveryGateway: EditorRecoveryGateway;
 }
 
 export const desktopWorkspaceLauncherGateway: WorkspaceLauncherGateway = {
@@ -47,4 +52,5 @@ export const desktopWorkspaceLauncherGateway: WorkspaceLauncherGateway = {
   removeRecent: removeRecentWorkspace,
   removeSession: removeWorkspaceSession,
   listenMenu: listenForLauncherMenu,
+  recoveryGateway: desktopRecoveryGateway,
 };

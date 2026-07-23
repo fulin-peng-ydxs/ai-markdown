@@ -499,4 +499,256 @@ describe("WorkspaceWorkbench", () => {
     });
     await waitFor(() => expect(api.scan).toHaveBeenCalledTimes(2));
   });
+
+  it("restores a matching snapshot into the P1 session without writing the source file", async () => {
+    const metadata = {
+      snapshotId: "snapshot-a",
+      workspaceId: "workspace-a",
+      relativePath: "note.md",
+      baseRevision: {
+        modifiedAt: 1,
+        size: 28,
+        contentHash: "abc",
+        encoding: "utf8" as const,
+        lineEnding: "lf" as const,
+      },
+      contentHash: "recovered",
+      createdAt: 1,
+      updatedAt: 2,
+      expiresAt: 3,
+      sizeBytes: 24,
+    };
+    const api = gateway();
+    vi.mocked(api.recoveryGateway.list).mockResolvedValue([metadata]);
+    vi.mocked(api.recoveryGateway.get).mockResolvedValue({
+      metadata,
+      content: "# 恢复后的内容",
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "检查尚未写入原文件的内容",
+      }),
+    ).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "恢复到编辑区" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).toBeNull(),
+    );
+    expect(await screen.findByText(/恢复后的内容/)).toBeTruthy();
+    expect(screen.getByText("未保存")).toBeTruthy();
+    expect(api.saveGateway.write).not.toHaveBeenCalled();
+  });
+
+  it("keeps an externally deleted open document and offers safe copy or protected close", async () => {
+    let resolveWatch!: (
+      batch: Awaited<ReturnType<WorkspaceWorkbenchGateway["pollWatch"]>>,
+    ) => void;
+    const watchBatch = new Promise<
+      Awaited<ReturnType<WorkspaceWorkbenchGateway["pollWatch"]>>
+    >((resolve) => {
+      resolveWatch = resolve;
+    });
+    const api = gateway({
+      pollWatch: vi.fn().mockReturnValue(watchBatch),
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByText(/真实文档/);
+
+    resolveWatch({
+      watchId: "watch-1",
+      sequence: 1,
+      events: [
+        {
+          kind: "remove",
+          paths: ["note.md"],
+          source: "external",
+          operationId: null,
+        },
+      ],
+      rescanDirectories: [null],
+      status: "watching",
+      issue: null,
+      overflowed: false,
+      complete: true,
+    });
+
+    expect(await screen.findByText("原文件已不存在")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "另存副本" }).length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "安全关闭文档" }),
+    ).toBeTruthy();
+    expect(screen.getByText(/真实文档/)).toBeTruthy();
+  });
+
+  it("refuses to close an externally deleted document when recovery persistence fails", async () => {
+    let resolveWatch!: (
+      batch: Awaited<ReturnType<WorkspaceWorkbenchGateway["pollWatch"]>>,
+    ) => void;
+    const api = gateway({
+      pollWatch: vi.fn().mockReturnValue(
+        new Promise<
+          Awaited<ReturnType<WorkspaceWorkbenchGateway["pollWatch"]>>
+        >((resolve) => {
+          resolveWatch = resolve;
+        }),
+      ),
+    });
+    vi.mocked(api.saveGateway.write).mockRejectedValue({
+      code: "path_not_found",
+      messageKey: "error.desktop.path_not_found",
+      pathHint: "note.md",
+      contentSafe: true,
+      retryable: false,
+    });
+    vi.mocked(api.recoveryGateway.upsert).mockResolvedValue({
+      status: "memory_only",
+      snapshot: null,
+      issue: {
+        code: "recovery_write_failed",
+        messageKey: "error.desktop.recovery_write_failed",
+        pathHint: "note.md",
+        contentSafe: true,
+        retryable: true,
+      },
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByText(/真实文档/);
+
+    resolveWatch({
+      watchId: "watch-1",
+      sequence: 1,
+      events: [
+        {
+          kind: "remove",
+          paths: ["note.md"],
+          source: "external",
+          operationId: null,
+        },
+      ],
+      rescanDirectories: [null],
+      status: "watching",
+      issue: null,
+      overflowed: false,
+      complete: true,
+    });
+
+    await user.click(
+      await screen.findByRole("button", { name: "安全关闭文档" }),
+    );
+    expect(
+      await screen.findByText(/关闭已取消：恢复副本尚未覆盖当前内容/),
+    ).toBeTruthy();
+    expect(screen.getByText(/真实文档/)).toBeTruthy();
+  });
+
+  it("closes an externally deleted document after recovery covers the current edit", async () => {
+    let resolveWatch!: (
+      batch: Awaited<ReturnType<WorkspaceWorkbenchGateway["pollWatch"]>>,
+    ) => void;
+    const api = gateway({
+      pollWatch: vi.fn().mockReturnValue(
+        new Promise<
+          Awaited<ReturnType<WorkspaceWorkbenchGateway["pollWatch"]>>
+        >((resolve) => {
+          resolveWatch = resolve;
+        }),
+      ),
+    });
+    vi.mocked(api.saveGateway.write).mockRejectedValue({
+      code: "path_not_found",
+      messageKey: "error.desktop.path_not_found",
+      pathHint: "note.md",
+      contentSafe: true,
+      retryable: false,
+    });
+    vi.mocked(api.recoveryGateway.upsert).mockResolvedValue({
+      status: "persisted",
+      snapshot: {
+        snapshotId: "snapshot-safe-close",
+        workspaceId: workspace.id,
+        relativePath: "note.md",
+        baseRevision: {
+          modifiedAt: 1,
+          size: 28,
+          contentHash: "abc",
+          encoding: "utf8",
+          lineEnding: "lf",
+        },
+        contentHash: "recovery",
+        createdAt: 1,
+        updatedAt: 2,
+        expiresAt: 3,
+        sizeBytes: 28,
+      },
+      issue: null,
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByText(/真实文档/);
+
+    resolveWatch({
+      watchId: "watch-1",
+      sequence: 1,
+      events: [
+        {
+          kind: "remove",
+          paths: ["note.md"],
+          source: "external",
+          operationId: null,
+        },
+      ],
+      rescanDirectories: [null],
+      status: "watching",
+      issue: null,
+      overflowed: false,
+      complete: true,
+    });
+
+    await user.click(
+      await screen.findByRole("button", { name: "安全关闭文档" }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "选择一份 Markdown 文档",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("文档已关闭；未保存内容仍保留在本机恢复副本中。"),
+    ).toBeTruthy();
+    expect(api.recoveryGateway.upsert).toHaveBeenCalled();
+    expect(api.setTitle).toHaveBeenCalledWith(null);
+  });
 });

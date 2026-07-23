@@ -57,7 +57,9 @@ export interface DocumentEditorShellProps {
   session: ReadyDocumentSession;
   parser?: MarkdownCompatibilityParser;
   onMetricsChange?(metrics: DocumentEditorMetrics): void;
+  onResolveConflict?(): void;
   onSave?(): void;
+  onSaveCopy?(): void;
   onSessionChange(session: ReadyDocumentSession): void;
 }
 
@@ -65,7 +67,9 @@ export function DocumentEditorShell({
   session,
   parser = remarkMarkdownCompatibilityParser,
   onMetricsChange,
+  onResolveConflict,
   onSave,
+  onSaveCopy,
   onSessionChange,
 }: DocumentEditorShellProps) {
   const sessionRef = useRef(session);
@@ -301,7 +305,9 @@ export function DocumentEditorShell({
         mode={session.mode}
         onCommand={executeCommand}
         onModeChange={(mode) => void switchMode(mode)}
+        onResolveConflict={onResolveConflict}
         onSave={onSave}
+        onSaveCopy={onSaveCopy}
         saveState={session.saveState}
         sourceOnlyReason={sourceOnlyReason}
       />

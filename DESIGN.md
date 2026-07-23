@@ -211,16 +211,20 @@ Key Characteristics：
 | 复用单元 | 代码事实源 | 当前消费者 | 稳定职责 |
 |---|---|---|---|
 | `focusContainment` | `src/components/focusContainment.ts` | `AppDialog`、P1 窄窗文件树抽屉 | 可聚焦元素筛选、进入焦点、Tab/Shift+Tab 圈定和安全焦点恢复；不持有页面业务状态 |
-| `AppDialog` | `src/components/AppDialog.tsx` | P1/P2 打开流程、文件操作、永久删除 | 原生 dialog、共享焦点圈定、Esc/遮罩关闭、关闭门禁、焦点返回和统一动作区 |
+| `AppDialog` | `src/components/AppDialog.tsx` | P1/P2 打开流程、文件操作、永久删除、恢复/冲突/另存 | 原生 dialog、共享焦点圈定、Esc/遮罩关闭、关闭门禁、焦点返回和统一动作区 |
 | `AsyncStatePanel` | `src/components/AsyncStatePanel.tsx` | 根启动状态、P1/P2 加载、错误、阻塞与恢复 | 类型化状态与优先级、可见非颜色标签、自动 tone/role/aria-live、说明和恢复动作 |
-| `WorkspaceLauncher` | `src/features/launcher/WorkspaceLauncher.tsx` | P2 | 本地打开主入口、最近记录、授权、窗口决策与根会话恢复 |
-| `WorkspaceWorkbench` | `src/features/workbench/WorkspaceWorkbench.tsx` | P1 | 当前根工作区壳、真实文件操作、单文档编辑会话、自动/手动保存、恢复快照触发、窗口结算与窄窗目录抽屉；恢复/冲突选择流程仍由后续任务接入 |
+| `WorkspaceLauncher` | `src/features/launcher/WorkspaceLauncher.tsx` | P2 | 本地打开主入口、最近记录、授权、窗口决策、根会话恢复和恢复快照的非阻塞入口；恢复正文由 P1 消费 |
+| `WorkspaceWorkbench` | `src/features/workbench/WorkspaceWorkbench.tsx` | P1 | 当前根工作区壳、真实文件操作、单文档编辑会话、自动/手动保存、恢复载入、冲突/另存、外部删除保护、窗口结算与窄窗目录抽屉 |
 | `WorkspaceTree` | `src/features/workbench/WorkspaceTree.tsx` | P1 | 渐进目录节点、磁盘提交后更新、只读标识、异步刷新期间也稳定的单一 Tab 停靠点，以及上下/首尾/父子方向键导航 |
 | `PermanentDeleteDialog` | `src/features/workbench/PermanentDeleteDialog.tsx` | P1 永久删除流程 | 复用 `AppDialog` 承载删除提案、显式不可逆确认、提交门禁、阶段化错误反馈与安全取消 |
 | `workspacePath` | `src/features/workbench/workspacePath.ts` | `workspaceTreeState`、`WorkspaceWorkbench` | 工作区相对路径的父级计算、同路径/子路径边界判断和前缀重映射；根目录键仍由树状态层适配 |
 | `DocumentEditorShell` | `src/features/editor/DocumentEditorShell.tsx` | P1 | 同一 `DocumentSession` 的排版/源码投影、模式切换前内容/选择/锚点提交、兼容性重评估、延迟加载和统一命令转发；不持有磁盘保存或第二份正文 |
 | `EditorToolbar` | `src/features/editor/EditorToolbar.tsx` | `DocumentEditorShell` | 排版/源码模式、统一撤销重做、排版格式和当前文档查找入口；窄宽度允许自身横向滚动，不挤压正文画布 |
 | `SaveStatus` | `src/features/editor/SaveStatus.tsx` | `EditorToolbar` | 将 `DocumentSaveState` 映射为文字、结构和语义色共同表达的紧凑状态；不自行宣称磁盘提交成功 |
+| `ContentSafetySummary` | `src/features/editor/recovery/ContentSafetySummary.tsx` | `ConflictDialog`、`SaveCopyDialog` | 统一呈现当前正文位于内存、恢复快照或磁盘的安全状态与保存状态；不自行改变 session |
+| `ConflictDialog` | `src/features/editor/recovery/ConflictDialog.tsx` | P1 外部冲突流程 | 展示路径、磁盘证据和内容安全，承载重新加载、保留、另存与二次覆盖确认；令牌过期或磁盘再变化时回到可重试状态 |
+| `RecoveryDialog` | `src/features/editor/recovery/RecoveryDialog.tsx` | P1、P2 恢复入口 | 按条目展示恢复元数据、隔离读取/删除失败并提供恢复或打开工作区动作；恢复正文不直接写入磁盘 |
+| `SaveCopyDialog` | `src/features/editor/recovery/SaveCopyDialog.tsx` | P1 只读、冲突、外部删除和主动另存 | 只消费原生选择器签发的单目标令牌，展示目标状态并对已有目标显式确认；不接收前端绝对路径 |
 | `remarkMarkdownParser` | `src/features/editor/remarkMarkdownParser.ts` | P1 文档载入、`DocumentEditorShell` 模式切换 | 使用 Remark/GFM AST 识别 source-only 语法并共同消费排版字节/非空内容行门槛；解析结果受 generation/editVersion 约束 |
 | `VisualMarkdownEditor` | `src/features/editor/adapters/milkdown/VisualMarkdownEditor.tsx` | `DocumentEditorShell` | 连续纸面上的 Milkdown 排版编辑、有效选区上下文工具栏、语义焦点/只读状态、受控链接与图片请求、三态复制反馈；不持有文件保存或跨模式历史 |
 | `MilkdownVisualAdapter` | `src/features/editor/adapters/milkdown/MilkdownVisualAdapter.ts` | `VisualMarkdownEditor` | CommonMark/GFM 与统一 `EditorAdapter` 事务桥接、选择/锚点、结构命令、session history 回调、异步生命周期和字节/非空内容行复杂度降级；不建立第二份 Markdown 或权威历史 |
@@ -304,7 +308,7 @@ Iteration Guide：
 
 ## 10. Known Gaps
 
-- P2、P1 工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；T17 已完成页面私有颜色/渐变收口，并让 `AppDialog` 与 P1 窄窗抽屉共同消费 `focusContainment`。P1 文件树 reducer 与工作台页面共同消费 `workspacePath`，避免重命名/移动后的树状态与页面选择状态使用两套路径规则。P1 已真实消费 `DocumentEditorShell`、Milkdown/CodeMirror adapter、生产 Remark/GFM 兼容性解析器、统一格式栏和紧凑保存状态；两种 editor chunk 按模式延迟加载，加载回退复用 `AsyncStatePanel`。自动/手动保存和窗口结算已接入真实 session/磁盘结果，保存状态不得由按钮点击或计时器伪造；恢复/冲突/另存与资源弹层仍未接入。`PathStatus`、`DesktopWindowStatus` 未形成两个同职责消费者，因此未登记为空组件。P1 的页签、大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
+- P2、P1 工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；T17 已完成页面私有颜色/渐变收口，并让 `AppDialog` 与 P1 窄窗抽屉共同消费 `focusContainment`。P1 文件树 reducer 与工作台页面共同消费 `workspacePath`，避免重命名/移动后的树状态与页面选择状态使用两套路径规则。P1 已真实消费 `DocumentEditorShell`、Milkdown/CodeMirror adapter、生产 Remark/GFM 兼容性解析器、统一格式栏和紧凑保存状态；两种 editor chunk 按模式延迟加载，加载回退复用 `AsyncStatePanel`。自动/手动保存和窗口结算已接入真实 session/磁盘结果；P1/P2 已接入受控恢复入口，P1 已提供冲突二次确认、另存副本和外部删除保护，全部消费真实 session、快照与一次性令牌。资源目录与图片输入弹层仍未接入。`PathStatus`、`DesktopWindowStatus` 未形成两个同职责消费者，因此未登记为空组件。P1 的页签、大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
 - 暗色主题尚无完整原型和 token；不得简单反转当前亮色值。R7/R15 阶段需补全明暗语义、派生状态和跨窗口预览测试。
 - `17px / 1.76`、约 `760–820px` 正文宽度及 `252/220px` 侧栏是 alpha 校准基线，仍需在不同 DPI、中英文长文和 Windows 字体渲染下验证。
 - 自定义主题“明暗两套调色板必须同时通过才允许保存”仍是待主题阶段确认的非阻塞决策；确认前不要写成用户已最终决定。

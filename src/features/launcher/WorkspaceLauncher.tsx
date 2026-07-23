@@ -5,6 +5,8 @@ import { AsyncStatePanel } from "../../components/AsyncStatePanel";
 import type {
   DesktopError,
   RecentWorkspace,
+  RecoverySnapshot,
+  RecoverySnapshotMetadata,
   WorkspaceDescriptor,
   WorkspaceId,
   WorkspaceLauncherSnapshot,
@@ -27,6 +29,7 @@ import {
   restorableWorkspaces,
   type RestorableWorkspace,
 } from "./launcherState";
+import { RecoveryDialog } from "../editor/recovery/RecoveryDialog";
 
 import "./WorkspaceLauncher.css";
 
@@ -80,6 +83,10 @@ export function WorkspaceLauncher({
   const [removeTarget, setRemoveTarget] = useState<RecentWorkspace | null>(null);
   const [restoreItems, setRestoreItems] = useState<RestoreItem[]>([]);
   const [restoreOpen, setRestoreOpen] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [recoverySnapshots, setRecoverySnapshots] = useState<
+    RecoverySnapshotMetadata[]
+  >([]);
   const mountedRef = useRef(true);
   const openInFlightRef = useRef(false);
   const retryActionRef = useRef<(() => Promise<void>) | null>(null);
@@ -100,9 +107,13 @@ export function WorkspaceLauncher({
     }
     setError(null);
     try {
-      const next = await gateway.snapshot();
+      const [next, snapshots] = await Promise.all([
+        gateway.snapshot(),
+        gateway.recoveryGateway.list().catch(() => []),
+      ]);
       if (!mountedRef.current) return;
       setSnapshot(next);
+      setRecoverySnapshots(snapshots);
       const restorable = restorableWorkspaces(next);
       setRestoreItems((current) => restorable.map((item) => {
         const previous = preserveRestoreProgress
@@ -383,6 +394,23 @@ export function WorkspaceLauncher({
     await loadSnapshot({ preserveRestoreProgress: true, showBusy: false });
   }
 
+  async function openRecoveryWorkspace(recovery: RecoverySnapshot) {
+    const recent = snapshot?.recentWorkspaces.find(
+      (workspace) => workspace.workspaceId === recovery.metadata.workspaceId,
+    );
+    if (!recent) {
+      throw {
+        code: "recent_workspace_not_found",
+        messageKey: "error.desktop.recent_workspace_not_found",
+        pathHint: recovery.metadata.relativePath,
+        contentSafe: true,
+        retryable: false,
+      } satisfies DesktopError;
+    }
+    await openRecent(recent);
+    setRecoveryOpen(false);
+  }
+
   const currentWorkspace = snapshot?.currentWorkspaceId
     ? snapshot.recentWorkspaces.find(
         (workspace) => workspace.workspaceId === snapshot.currentWorkspaceId,
@@ -421,6 +449,15 @@ export function WorkspaceLauncher({
             </button>
           </div>
           <p className="launcher__privacy">无需账号 · 不上传文档 · 可离线使用</p>
+          {recoverySnapshots.length > 0 ? (
+            <button
+              className="plainroot-button"
+              onClick={() => setRecoveryOpen(true)}
+              type="button"
+            >
+              检查 {recoverySnapshots.length} 份未保存恢复内容
+            </button>
+          ) : null}
         </aside>
 
         <section className="launcher__recent-panel" aria-labelledby="recent-title">
@@ -573,6 +610,20 @@ export function WorkspaceLauncher({
       >
         <div className="launcher-dialog-text"><p className="launcher__eyebrow">上次会话</p><h2 id="restore-title">恢复工作区窗口</h2><p id="restore-description">逐个核对本地目录；一个项目失败不会阻止其他项目恢复。</p><ul className="launcher__restore-list">{restoreItems.map((item) => <li key={item.session.workspaceId} data-status={item.status}><span><strong>{item.recent?.displayName ?? "未知工作区"}</strong><small>{item.message ?? item.recent?.canonicalRoot ?? "最近记录已移除"}</small></span><div className="launcher__restore-actions"><em>{restoreStatusLabel(item.status)}</em>{item.status === "failed" || item.status === "needs_confirmation" ? item.recent ? <button className="plainroot-button" onClick={() => void openRecent(item.recent!, item)} type="button">重试</button> : <button className="plainroot-button" onClick={() => void removeRestoreItem(item)} type="button">移除失效会话</button> : null}{item.status === "waiting" ? <button className="plainroot-button" onClick={() => markRestore(item.session.workspaceId, "failed", "本次已跳过")} type="button">跳过</button> : null}</div></li>)}</ul></div>
       </AppDialog>
+
+      <RecoveryDialog
+        actionLabel="打开工作区处理"
+        gateway={gateway.recoveryGateway}
+        onClose={() => setRecoveryOpen(false)}
+        onDeleted={(snapshotId) =>
+          setRecoverySnapshots((items) =>
+            items.filter((item) => item.snapshotId !== snapshotId),
+          )
+        }
+        onRestore={openRecoveryWorkspace}
+        open={recoveryOpen && recoverySnapshots.length > 0}
+        snapshots={recoverySnapshots}
+      />
     </main>
   );
 }

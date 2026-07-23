@@ -280,10 +280,20 @@ input {
 
 .workbench__document {
   display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   background: var(--color-paper);
+}
+
+.workbench__document > .document-editor-shell {
+  flex: 1 1 auto;
+}
+
+.workbench__document-warning {
+  flex: none;
+  padding: var(--space-sm) var(--space-md) 0;
 }
 
 .workbench__document > .async-state-panel {

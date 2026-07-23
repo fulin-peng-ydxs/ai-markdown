@@ -10,6 +10,9 @@ import type {
   DeleteResult,
   DesktopError,
   FsEntry,
+  RecoverySnapshot,
+  RecoverySnapshotMetadata,
+  SafeWriteResult,
   WorkspaceDescriptor,
   WorkspaceMutationResult,
   WorkspaceOpenDisposition,
@@ -22,10 +25,16 @@ import type {
 import { desktopErrorMessage, normalizeDesktopError } from "../../services/desktop/errors";
 import {
   beginDocumentLoad,
+  completeDocumentConflictOverwrite,
   createEmptyDocumentSession,
+  markDocumentExternalMissing,
+  restoreDocumentRecovery,
   type DocumentSessionState,
   type ReadyDocumentSession,
 } from "../editor/documentSession";
+import { ConflictDialog } from "../editor/recovery/ConflictDialog";
+import { RecoveryDialog } from "../editor/recovery/RecoveryDialog";
+import { SaveCopyDialog } from "../editor/recovery/SaveCopyDialog";
 import {
   DocumentSaveController,
   type DocumentSaveOutcome,
@@ -39,6 +48,7 @@ import {
   type DocumentEditorMetrics,
 } from "../editor/DocumentEditorShell";
 import { remarkMarkdownCompatibilityParser } from "../editor/remarkMarkdownParser";
+import { assessVisualEditingCompatibility } from "../editor/markdownCompatibility";
 import { PermanentDeleteDialog } from "./PermanentDeleteDialog";
 import { WorkspaceTree } from "./WorkspaceTree";
 import { isSameOrInside, parentPath, replacePrefix } from "./workspacePath";
@@ -111,6 +121,18 @@ export function WorkspaceWorkbench({
   const [decision, setDecision] = useState<PendingDecision | null>(null);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [lifecycleNotice, setLifecycleNotice] = useState<string | null>(null);
+  const [conflictOpen, setConflictOpen] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [saveCopyOpen, setSaveCopyOpen] = useState(false);
+  const [recoverySnapshots, setRecoverySnapshots] = useState<
+    RecoverySnapshotMetadata[]
+  >([]);
+  const [savedCopyEvidence, setSavedCopyEvidence] = useState<{
+    generation: number;
+    editVersion: number;
+    displayPath: string;
+  } | null>(null);
+  const promptedRecoveryIdsRef = useRef(new Set<string>());
   const [drawerOpen, setDrawerOpen] = useState(false);
   const drawerTriggerRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
@@ -231,6 +253,30 @@ export function WorkspaceWorkbench({
         if (!mountedRef.current || generation !== generationRef.current) break;
         commitTree((current) => applyWorkspaceWatchBatch(current, batch));
         if (batch.issue) setPageError(batch.issue);
+        const currentDocument = documentStateRef.current;
+        if (
+          currentDocument.status === "ready" &&
+          batch.events.some(
+            (event) =>
+              event.kind === "remove" &&
+              event.source !== "application" &&
+              event.paths.includes(currentDocument.relativePath),
+          )
+        ) {
+          const missing = markDocumentExternalMissing(currentDocument, {
+            code: "path_not_found",
+            messageKey: "error.desktop.path_not_found",
+            pathHint: currentDocument.relativePath,
+            contentSafe: true,
+            retryable: false,
+          });
+          if (missing.status === "applied") {
+            commitDocument(missing.session);
+            setLifecycleNotice(
+              "原文件已被外部删除；当前内容仍保留，可另存副本或在安全副本就绪后关闭。",
+            );
+          }
+        }
         for (const directory of batch.rescanDirectories) {
           void scanDirectory(targetWorkspace, directory, true, generation);
         }
@@ -244,7 +290,7 @@ export function WorkspaceWorkbench({
     } finally {
       if (activeWatchRef.current === watchId) activeWatchRef.current = null;
     }
-  }, [commitTree, gateway, scanDirectory]);
+  }, [commitDocument, commitTree, gateway, scanDirectory]);
 
   const loadWorkspace = useCallback((nextWorkspace: WorkspaceDescriptor) => {
     const generation = ++generationRef.current;
@@ -263,6 +309,7 @@ export function WorkspaceWorkbench({
     setExpanded(new Set());
     setSelectedPath(null);
     setDocumentMetrics(null);
+    setSavedCopyEvidence(null);
     commitDocument(
       createEmptyDocumentSession(documentStateRef.current.generation + 1),
     );
@@ -321,6 +368,24 @@ export function WorkspaceWorkbench({
     };
   }, [commitDocument, gateway]);
 
+  const loadRecoverySnapshots = useCallback(async () => {
+    try {
+      const snapshots = await gateway.recoveryGateway.list();
+      if (!mountedRef.current) return;
+      setRecoverySnapshots(
+        snapshots.filter((snapshot) => snapshot.workspaceId === workspace.id),
+      );
+    } catch (reason) {
+      if (mountedRef.current) {
+        setPageError(normalizeDesktopError(reason, "recovery_read_failed"));
+      }
+    }
+  }, [gateway.recoveryGateway, workspace.id]);
+
+  useEffect(() => {
+    void loadRecoverySnapshots();
+  }, [loadRecoverySnapshots]);
+
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     void gateway.listenMenu((action) => {
@@ -355,6 +420,24 @@ export function WorkspaceWorkbench({
       setLifecycleNotice(null);
     }
   }, [documentState, lifecycleNotice]);
+
+  useEffect(() => {
+    if (documentState.status !== "ready") return;
+    if (documentState.saveState.kind === "conflict") {
+      setConflictOpen(true);
+      return;
+    }
+    const matching = recoverySnapshots.find(
+      (snapshot) =>
+        snapshot.relativePath === documentState.relativePath &&
+        snapshot.contentHash !== documentState.diskRevision.contentHash &&
+        !promptedRecoveryIdsRef.current.has(snapshot.snapshotId),
+    );
+    if (matching) {
+      promptedRecoveryIdsRef.current.add(matching.snapshotId);
+      setRecoveryOpen(true);
+    }
+  }, [documentState, recoverySnapshots]);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -439,6 +522,181 @@ export function WorkspaceWorkbench({
       setLifecycleNotice(settlementMessage(result));
     }
     return result;
+  }
+
+  async function reloadConflictFromDisk() {
+    const current = documentStateRef.current;
+    if (current.status !== "ready") return;
+    if (current.conflictEvidence) {
+      await gateway.saveGateway
+        .cancelOverwrite(current.conflictEvidence.evidenceId)
+        .catch(() => false);
+    }
+    await saveControllerRef.current?.abandon();
+    await discardRecoveryFor(current);
+    setConflictOpen(false);
+    await loadDocumentWithoutSettlement(current.relativePath);
+  }
+
+  async function loadDocumentWithoutSettlement(path: WorkspaceRelativePath) {
+    const loading = beginDocumentLoad(documentStateRef.current, {
+      workspaceId: workspace.id,
+      relativePath: path,
+    });
+    commitDocument(loading);
+    const outcome = await requestDocumentLoad(
+      {
+        generation: loading.generation,
+        workspaceId: workspace.id,
+        relativePath: path,
+        writable:
+          workspace.writable && (treeRef.current.entries[path]?.writable ?? true),
+      },
+      gateway,
+      remarkMarkdownCompatibilityParser,
+    );
+    const resolved = applyDocumentLoadOutcome(documentStateRef.current, outcome);
+    commitDocument(resolved);
+  }
+
+  async function restoreSnapshot(snapshot: RecoverySnapshot) {
+    const current = documentStateRef.current;
+    if (
+      current.status === "ready" &&
+      (current.workspaceId !== snapshot.metadata.workspaceId ||
+        current.relativePath !== snapshot.metadata.relativePath ||
+        (current.markdown !== snapshot.content &&
+          current.saveState.kind !== "clean" &&
+          current.saveState.kind !== "saved" &&
+          current.saveState.kind !== "readonly"))
+    ) {
+      const settlement = await settleCurrentDocument();
+      if (settlement.status === "blocked") {
+        throw {
+          code: "recovery_snapshot_protected",
+          messageKey: "error.desktop.recovery_snapshot_protected",
+          pathHint: current.relativePath,
+          contentSafe: true,
+          retryable: false,
+        } satisfies DesktopError;
+      }
+    }
+    setBusyLabel("正在核对恢复副本与原文件");
+    try {
+      const loading = beginDocumentLoad(documentStateRef.current, {
+        workspaceId: snapshot.metadata.workspaceId,
+        relativePath: snapshot.metadata.relativePath,
+      });
+      commitDocument(loading);
+      const outcome = await requestDocumentLoad(
+        {
+          generation: loading.generation,
+          workspaceId: snapshot.metadata.workspaceId,
+          relativePath: snapshot.metadata.relativePath,
+          writable:
+            workspace.writable &&
+            (treeRef.current.entries[snapshot.metadata.relativePath]?.writable ??
+              true),
+        },
+        gateway,
+        remarkMarkdownCompatibilityParser,
+      );
+      const diskState = applyDocumentLoadOutcome(
+        documentStateRef.current,
+        outcome,
+      );
+      let compatibility;
+      try {
+        compatibility = assessVisualEditingCompatibility(
+          await remarkMarkdownCompatibilityParser.parse(snapshot.content),
+        );
+      } catch {
+        compatibility = { mode: "source-only" as const, reasons: ["parse-error"] };
+      }
+      const recovered = restoreDocumentRecovery(
+        diskState,
+        snapshot,
+        compatibility,
+        recoveryUnavailableError(diskState),
+      );
+      commitDocument(recovered);
+      setSelectedPath(snapshot.metadata.relativePath);
+      setRecoveryOpen(false);
+      setLifecycleNotice(
+        "恢复副本已载入为未保存内容；原 Markdown 文件尚未被覆盖。",
+      );
+    } finally {
+      setBusyLabel(null);
+    }
+  }
+
+  async function applyConflictOverwrite(result: SafeWriteResult) {
+    const current = documentStateRef.current;
+    if (current.status !== "ready") return;
+    const completed = completeDocumentConflictOverwrite(
+      current,
+      result,
+      Date.now(),
+    );
+    if (completed.status !== "applied") return;
+    const snapshotId =
+      current.recoveryState.kind === "available"
+        ? current.recoveryState.snapshotId
+        : null;
+    commitDocument(completed.session);
+    await saveControllerRef.current?.abandon();
+    if (snapshotId) {
+      await gateway.recoveryGateway
+        .delete(snapshotId, current.workspaceId)
+        .catch(() => false);
+      setRecoverySnapshots((items) =>
+        items.filter((item) => item.snapshotId !== snapshotId),
+      );
+    }
+    setConflictOpen(false);
+    setLifecycleNotice("当前内容已覆盖磁盘版本。");
+  }
+
+  async function closeExternallyDeletedDocument() {
+    const controller = saveControllerRef.current;
+    if (controller) await controller.settle();
+    const current = documentStateRef.current;
+    if (current.status !== "ready") return;
+    const copyCoversCurrent =
+      savedCopyEvidence?.generation === current.generation &&
+      savedCopyEvidence.editVersion === current.editVersion;
+    if (
+      current.contentSafety.kind !== "recovery" &&
+      !copyCoversCurrent
+    ) {
+      setLifecycleNotice(
+        "关闭已取消：恢复副本尚未覆盖当前内容，请先另存副本或等待恢复保护完成。",
+      );
+      return;
+    }
+    await controller?.abandon();
+    commitDocument(
+      createEmptyDocumentSession(documentStateRef.current.generation + 1),
+    );
+    setSelectedPath(null);
+    setSavedCopyEvidence(null);
+    setLifecycleNotice(
+      copyCoversCurrent
+        ? `文档已关闭；当前内容已另存到 ${savedCopyEvidence?.displayPath}。`
+        : "文档已关闭；未保存内容仍保留在本机恢复副本中。",
+    );
+    void gateway.setTitle(null).catch(() => undefined);
+  }
+
+  async function discardRecoveryFor(session: ReadyDocumentSession) {
+    if (session.recoveryState.kind !== "available") return;
+    const snapshotId = session.recoveryState.snapshotId;
+    await gateway.recoveryGateway
+      .delete(snapshotId, session.workspaceId)
+      .catch(() => false);
+    setRecoverySnapshots((items) =>
+      items.filter((item) => item.snapshotId !== snapshotId),
+    );
   }
 
   async function resolveSettlementIntent(intent: WindowSettlementIntent) {
@@ -778,6 +1036,15 @@ export function WorkspaceWorkbench({
         <button className="plainroot-button" onClick={() => void selectOtherWorkspace("folder")} type="button">
           打开其他目录
         </button>
+        {recoverySnapshots.length > 0 ? (
+          <button
+            className="plainroot-button"
+            onClick={() => setRecoveryOpen(true)}
+            type="button"
+          >
+            恢复内容 {recoverySnapshots.length}
+          </button>
+        ) : null}
       </header>
 
       {pageError ? (
@@ -835,10 +1102,42 @@ export function WorkspaceWorkbench({
         </aside>
 
         <section className="workbench__document" aria-label="文档编辑区">
+          {documentState.status === "ready" &&
+          documentState.saveState.kind === "save_failed" &&
+          documentState.saveState.error.code === "path_not_found" ? (
+            <div className="workbench__document-warning">
+              <AsyncStatePanel
+                actions={
+                  <>
+                    <button
+                      className="plainroot-button"
+                      onClick={() => setSaveCopyOpen(true)}
+                      type="button"
+                    >
+                      另存副本
+                    </button>
+                    <button
+                      className="plainroot-button"
+                      onClick={() => void closeExternallyDeletedDocument()}
+                      type="button"
+                    >
+                      安全关闭文档
+                    </button>
+                  </>
+                }
+                compact
+                description="原文件已被外部删除。Plainroot 不会在没有安全副本时丢弃当前内存内容。"
+                state="missing"
+                title="原文件已不存在"
+              />
+            </div>
+          ) : null}
           <DocumentView
             onMetricsChange={setDocumentMetrics}
+            onResolveConflict={() => setConflictOpen(true)}
             onRetry={(path) => void openMarkdown(path)}
             onSave={() => void saveControllerRef.current?.manualSave()}
+            onSaveCopy={() => setSaveCopyOpen(true)}
             onSessionChange={commitDocument}
             state={documentState}
           />
@@ -894,6 +1193,56 @@ export function WorkspaceWorkbench({
         />
       ) : null}
 
+      {documentState.status === "ready" ? (
+        <>
+          <ConflictDialog
+            gateway={gateway.saveGateway}
+            onClose={() => setConflictOpen(false)}
+            onOverwrite={(result) => void applyConflictOverwrite(result)}
+            onReload={reloadConflictFromDisk}
+            onSaveCopy={() => {
+              setConflictOpen(false);
+              setSaveCopyOpen(true);
+            }}
+            open={
+              conflictOpen && documentState.saveState.kind === "conflict"
+            }
+            session={documentState}
+          />
+          <SaveCopyDialog
+            gateway={gateway.saveGateway}
+            onClose={() => setSaveCopyOpen(false)}
+            onSaved={(result) => {
+              const current = documentStateRef.current;
+              if (current.status === "ready") {
+                setSavedCopyEvidence({
+                  generation: current.generation,
+                  editVersion: current.editVersion,
+                  displayPath: result.displayPath,
+                });
+              }
+              setSaveCopyOpen(false);
+              setLifecycleNotice(`副本已保存到 ${result.displayPath}`);
+            }}
+            open={saveCopyOpen}
+            session={documentState}
+          />
+        </>
+      ) : null}
+
+      <RecoveryDialog
+        gateway={gateway.recoveryGateway}
+        onClose={() => setRecoveryOpen(false)}
+        onDeleted={(snapshotId) =>
+          setRecoverySnapshots((items) =>
+            items.filter((item) => item.snapshotId !== snapshotId),
+          )
+        }
+        onRestore={restoreSnapshot}
+        open={recoveryOpen && recoverySnapshots.length > 0}
+        snapshots={recoverySnapshots}
+      />
+
       <AppDialog
         actions={<><button className="plainroot-button" onClick={() => void cancelPending()} type="button">取消</button><button className="plainroot-button plainroot-button--primary" onClick={() => void authorizePending()} type="button">授权并继续</button></>}
         describedBy="workbench-scope-description"
@@ -919,15 +1268,19 @@ export function WorkspaceWorkbench({
 
 function DocumentView({
   onMetricsChange,
+  onResolveConflict,
   state,
   onRetry,
   onSave,
+  onSaveCopy,
   onSessionChange,
 }: {
   onMetricsChange(metrics: DocumentEditorMetrics): void;
+  onResolveConflict(): void;
   state: DocumentSessionState;
   onRetry(path: WorkspaceRelativePath): void;
   onSave(): void;
+  onSaveCopy(): void;
   onSessionChange(session: ReadyDocumentSession): void;
 }) {
   if (state.status === "empty") {
@@ -947,10 +1300,27 @@ function DocumentView({
   return (
     <DocumentEditorShell
       onMetricsChange={onMetricsChange}
+      onResolveConflict={onResolveConflict}
       onSave={onSave}
+      onSaveCopy={onSaveCopy}
       onSessionChange={onSessionChange}
       session={state}
     />
+  );
+}
+
+function recoveryUnavailableError(
+  state: DocumentSessionState,
+): DesktopError | null {
+  if (state.status !== "unavailable") return null;
+  if (state.error) return state.error;
+  return normalizeDesktopError(
+    null,
+    state.reason === "too_large"
+      ? "file_too_large"
+      : state.reason === "unsupported_encoding"
+        ? "unsupported_text_encoding"
+        : "editor_save_unavailable",
   );
 }
 

@@ -43,6 +43,15 @@ function gateway(overrides: Partial<WorkspaceLauncherGateway> = {}): WorkspaceLa
     removeRecent: vi.fn().mockResolvedValue(true),
     removeSession: vi.fn().mockResolvedValue(false),
     listenMenu: vi.fn().mockResolvedValue(() => undefined),
+    recoveryGateway: {
+      list: vi.fn().mockResolvedValue([]),
+      get: vi.fn(),
+      registerActive: vi.fn().mockResolvedValue(true),
+      releaseActive: vi.fn().mockResolvedValue(true),
+      upsert: vi.fn(),
+      delete: vi.fn().mockResolvedValue(true),
+      cleanup: vi.fn(),
+    },
     ...overrides,
   };
 }
@@ -221,5 +230,48 @@ describe("WorkspaceLauncher", () => {
     expect(await screen.findByText(new RegExp(message))).toBeTruthy();
     expect(screen.getByRole("button", { name: "重试" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "关闭" })).toBeTruthy();
+  });
+
+  it("opens a recoverable workspace without writing the recovery content from P2", async () => {
+    const metadata = {
+      snapshotId: "snapshot-a",
+      workspaceId: "workspace-a",
+      relativePath: "note.md",
+      baseRevision: {
+        modifiedAt: 1,
+        size: 8,
+        contentHash: "disk",
+        encoding: "utf8" as const,
+        lineEnding: "lf" as const,
+      },
+      contentHash: "recovery",
+      createdAt: 1,
+      updatedAt: 2,
+      expiresAt: 3,
+      sizeBytes: 16,
+    };
+    const api = gateway();
+    vi.mocked(api.recoveryGateway.list).mockResolvedValue([metadata]);
+    vi.mocked(api.recoveryGateway.get).mockResolvedValue({
+      metadata,
+      content: "# 恢复",
+    });
+    const user = userEvent.setup();
+    render(<WorkspaceLauncher gateway={api} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "检查 1 份未保存恢复内容",
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "打开工作区处理" }),
+    );
+
+    await waitFor(() =>
+      expect(api.validateRecent).toHaveBeenCalledWith("workspace-a"),
+    );
+    expect(api.open).toHaveBeenCalledWith("workspace-a", undefined);
+    expect(api.recoveryGateway.delete).not.toHaveBeenCalled();
   });
 });

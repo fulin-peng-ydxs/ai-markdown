@@ -29,6 +29,8 @@ export function desktopErrorMessage(error: DesktopError): string {
     case "path_not_found":
     case "selection_not_found":
       return "原路径已经不存在或不可访问。可以重新选择目录，或安全移除这条记录。";
+    case "recent_workspace_not_found":
+      return "恢复副本仍被保留，但对应工作区不在最近记录中。请先重新打开原目录。";
     case "permission_denied":
       return "Plainroot 当前没有读取该目录的权限。请重新授权后再试。";
     case "unsupported_markdown_file":
@@ -64,6 +66,23 @@ export function desktopErrorMessage(error: DesktopError): string {
       return "该文件不是受支持的 UTF-8 编码，Plainroot 没有修改它。";
     case "file_too_large":
       return "该文件超过当前读取上限，Plainroot 没有修改它。";
+    case "recovery_unavailable":
+    case "recovery_read_failed":
+      return "无法读取本机恢复副本。原 Markdown 文件没有被修改，可以稍后重试。";
+    case "recovery_write_failed":
+      return "恢复副本没有更新。当前编辑内容仍保留在窗口中，请立即保存或另存。";
+    case "recovery_unsupported_version":
+      return "恢复数据来自不受支持的新版本。Plainroot 已保留它，没有自动覆盖或删除。";
+    case "recovery_snapshot_not_found":
+      return "这份恢复副本已经不存在。请刷新恢复列表。";
+    case "recovery_snapshot_corrupt":
+      return "这份恢复副本校验失败，Plainroot 没有把损坏内容载入编辑区。";
+    case "recovery_capacity_exceeded":
+      return "恢复空间已达到安全上限。当前编辑内容仅保留在窗口中，请立即保存或另存。";
+    case "recovery_session_not_active":
+      return "对应编辑会话已经结束，本次恢复写入已取消。";
+    case "recovery_snapshot_protected":
+      return "当前文档还有不能安全替换的修改。请先保存、另存或解决冲突，再载入这份恢复副本。";
     case "conflict_confirmation_not_found":
       return "覆盖确认已经过期或被使用。请重新检查磁盘版本后再决定。";
     case "conflict_content_changed":

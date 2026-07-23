@@ -5,17 +5,22 @@ import type {
   FileRevision,
   LineEnding,
   MarkdownReadResult,
+  RecoverySnapshot,
+  SafeWriteResult,
   TextEncoding,
 } from "../../services/desktop/contracts";
 import {
   applyDocumentEdit,
   beginDocumentLoad,
   beginDocumentSave,
+  completeDocumentConflictOverwrite,
   completeDocumentSave,
   createEmptyDocumentSession,
   failDocumentSave,
   lineEndingFromMarkdown,
+  markDocumentExternalMissing,
   reassessDocumentCompatibility,
+  restoreDocumentRecovery,
   resolveDocumentRead,
   undoDocumentSession,
   type ReadyDocumentSession,
@@ -510,6 +515,92 @@ describe("DocumentSession", () => {
       markdown: "unknown syntax",
       mode: "source",
       compatibility: { mode: "source-only", reasons: ["parse-error"] },
+    });
+  });
+
+  it("restores a snapshot into a dirty session without writing the disk baseline", () => {
+    const session = readySession();
+    const snapshot: RecoverySnapshot = {
+      metadata: {
+        snapshotId: "snapshot-a",
+        workspaceId: session.workspaceId,
+        relativePath: session.relativePath,
+        baseRevision: session.diskRevision,
+        contentHash: "recovery-content",
+        createdAt: 2,
+        updatedAt: 3,
+        expiresAt: 4,
+        sizeBytes: 18,
+      },
+      content: "# 恢复内容",
+    };
+
+    const restored = restoreDocumentRecovery(
+      session,
+      snapshot,
+      compatible,
+    );
+
+    expect(restored).toMatchObject({
+      status: "ready",
+      markdown: "# 恢复内容",
+      persistedContentHash: "disk-a",
+      saveState: { kind: "dirty" },
+      contentSafety: { kind: "recovery", snapshotId: "snapshot-a" },
+      recoveryState: { kind: "available", snapshotId: "snapshot-a" },
+    });
+  });
+
+  it("accepts a confirmed conflict overwrite only while the session is conflicted", () => {
+    const session: ReadyDocumentSession = {
+      ...readySession(),
+      markdown: "# 当前内容",
+      saveState: { kind: "conflict", evidenceId: "conflict-a" },
+      conflictEvidence: {
+        evidenceId: "conflict-a",
+        diskRevision: revision("utf8", "lf", "external"),
+      },
+      contentSafety: { kind: "memory" },
+    };
+    const result: SafeWriteResult = {
+      relativePath: session.relativePath,
+      revision: revision("utf8", "crlf", "saved"),
+      bytesWritten: 12,
+    };
+
+    expect(completeDocumentConflictOverwrite(session, result, 5)).toMatchObject({
+      status: "applied",
+      session: {
+        saveState: { kind: "saved", savedAt: 5 },
+        persistedContentHash: "saved",
+        sourceFormat: { encoding: "utf8", lineEnding: "crlf" },
+        contentSafety: { kind: "disk" },
+        recoveryState: { kind: "none" },
+        conflictEvidence: null,
+      },
+    });
+    expect(
+      completeDocumentConflictOverwrite(readySession(), result, 5).status,
+    ).toBe("stale");
+  });
+
+  it("keeps the current Markdown in memory when an external remove is observed", () => {
+    const current = readySession();
+    const missing: DesktopError = {
+      code: "path_not_found",
+      messageKey: "error.desktop.path_not_found",
+      pathHint: "note.md",
+      contentSafe: true,
+      retryable: false,
+    };
+
+    expect(markDocumentExternalMissing(current, missing)).toMatchObject({
+      status: "applied",
+      session: {
+        markdown: "# A",
+        saveState: { kind: "save_failed", error: missing },
+        contentSafety: { kind: "memory" },
+      },
     });
   });
 });

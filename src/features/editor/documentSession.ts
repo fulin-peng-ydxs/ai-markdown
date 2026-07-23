@@ -3,6 +3,8 @@ import type {
   FileRevision,
   LineEnding,
   MarkdownReadResult,
+  RecoverySnapshot,
+  SafeWriteResult,
   TextEncoding,
   WorkspaceId,
   WorkspaceRelativePath,
@@ -474,6 +476,111 @@ export function markDocumentConflict(
             }
           : { kind: "memory" },
     },
+  };
+}
+
+export function completeDocumentConflictOverwrite(
+  session: ReadyDocumentSession,
+  result: SafeWriteResult,
+  savedAt: number,
+): SessionMutationResult {
+  if (session.saveState.kind !== "conflict") {
+    return { status: "stale", session };
+  }
+  return {
+    status: "applied",
+    session: {
+      ...session,
+      diskRevision: result.revision,
+      persistedContentHash: result.revision.contentHash,
+      sourceFormat: sourceFormatFromRevision(result.revision),
+      saveState: { kind: "saved", savedAt },
+      contentSafety: { kind: "disk" },
+      recoveryState: { kind: "none" },
+      conflictEvidence: null,
+    },
+  };
+}
+
+export function markDocumentExternalMissing(
+  session: ReadyDocumentSession,
+  error: DesktopError,
+): SessionMutationResult {
+  if (error.code !== "path_not_found") {
+    return { status: "stale", session };
+  }
+  return {
+    status: "applied",
+    session: {
+      ...session,
+      saveState: { kind: "save_failed", error },
+      contentSafety:
+        session.recoveryState.kind === "available"
+          ? {
+              kind: "recovery",
+              snapshotId: session.recoveryState.snapshotId,
+            }
+          : { kind: "memory" },
+      conflictEvidence: null,
+    },
+  };
+}
+
+export function restoreDocumentRecovery(
+  current: DocumentSessionState,
+  snapshot: RecoverySnapshot,
+  compatibility: VisualEditingCompatibility,
+  unavailableError: DesktopError | null = null,
+): DocumentSessionState {
+  const metadata = snapshot.metadata;
+  if (
+    current.status === "empty" ||
+    current.status === "loading" ||
+    current.workspaceId !== metadata.workspaceId ||
+    current.relativePath !== metadata.relativePath
+  ) {
+    return current;
+  }
+
+  const sourceFormat = sourceFormatFromRevision(metadata.baseRevision);
+  const effectiveCompatibility = compatibilityForCurrentMarkdown(
+    snapshot.content,
+    compatibility,
+  );
+  const mode: EditorMode =
+    effectiveCompatibility.mode === "source-only" ? "source" : "visual";
+  const selection = initialSelection(mode);
+  const saveState: DocumentSaveState =
+    current.status === "ready" && current.saveState.kind !== "readonly"
+      ? { kind: "dirty" }
+      : unavailableError
+        ? { kind: "save_failed", error: unavailableError }
+        : { kind: "readonly", reason: "workspace" };
+
+  return {
+    status: "ready",
+    generation: current.generation,
+    workspaceId: metadata.workspaceId,
+    relativePath: metadata.relativePath,
+    markdown: snapshot.content,
+    diskRevision:
+      current.status === "ready" ? current.diskRevision : metadata.baseRevision,
+    persistedContentHash:
+      current.status === "ready"
+        ? current.persistedContentHash
+        : metadata.baseRevision.contentHash,
+    sourceFormat:
+      current.status === "ready" ? current.sourceFormat : sourceFormat,
+    editVersion: current.status === "ready" ? current.editVersion + 1 : 1,
+    mode,
+    saveState,
+    contentSafety: { kind: "recovery", snapshotId: metadata.snapshotId },
+    selection,
+    anchor: initialAnchor(mode),
+    history: createDocumentHistory(),
+    compatibility: effectiveCompatibility,
+    recoveryState: { kind: "available", snapshotId: metadata.snapshotId },
+    conflictEvidence: null,
   };
 }
 
