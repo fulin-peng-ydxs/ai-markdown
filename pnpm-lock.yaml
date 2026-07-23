@@ -11,9 +11,24 @@ importers:
 
   .:
     dependencies:
+      '@codemirror/commands':
+        specifier: 6.10.4
+        version: 6.10.4
       '@codemirror/lang-markdown':
         specifier: 6.5.1
         version: 6.5.1
+      '@codemirror/language':
+        specifier: 6.12.4
+        version: 6.12.4
+      '@codemirror/search':
+        specifier: 6.7.1
+        version: 6.7.1
+      '@codemirror/state':
+        specifier: 6.7.1
+        version: 6.7.1
+      '@codemirror/view':
+        specifier: 6.43.6
+        version: 6.43.6
       '@milkdown/kit':
         specifier: 7.21.3
         version: 7.21.3(@codemirror/language@6.12.4)(@codemirror/state@6.7.1)(@codemirror/view@6.43.6)(typescript@6.0.2)

@@ -11,8 +11,8 @@ import {
 import type {
   EditorAdapterChange,
   EditorAdapterDocument,
-  EditorCommand,
   EditorSelection,
+  EditorSurfaceHandle,
 } from "../../editorAdapter";
 import {
   MilkdownVisualAdapter,
@@ -25,11 +25,7 @@ import {
 import { visualEditorEligibility } from "./visualEditorPolicy";
 import "./VisualMarkdownEditor.css";
 
-export interface VisualMarkdownEditorHandle {
-  execute(command: EditorCommand): boolean;
-  focus(): void;
-  getSelection(): EditorSelection;
-  setSelection(selection: EditorSelection): void;
+export interface VisualMarkdownEditorHandle extends EditorSurfaceHandle {
   copySelection(format: VisualCopyFormat): Promise<boolean>;
   requestImage(): Promise<boolean>;
 }

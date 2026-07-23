@@ -3,6 +3,7 @@ import { act, render, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { EditorAdapterDocument } from "../../editorAdapter";
+import { editorAdapterTestDocument } from "../editorAdapterTestSupport";
 import {
   VisualMarkdownEditor,
   type VisualMarkdownEditorHandle,
@@ -129,16 +130,9 @@ describe("VisualMarkdownEditor", () => {
 });
 
 function editorDocument(markdown: string): EditorAdapterDocument {
-  return {
-    generation: 2,
-    editVersion: 3,
+  return editorAdapterTestDocument(
     markdown,
-    selection: { kind: "visual", from: 0, to: 0 },
-    anchor: {
-      kind: "semantic",
-      blockId: null,
-      fallbackOffset: 0,
-      scrollTop: 0,
-    },
-  };
+    { kind: "visual", from: 0, to: 0 },
+    { generation: 2, editVersion: 3 },
+  );
 }

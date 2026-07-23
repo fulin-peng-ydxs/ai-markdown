@@ -41,15 +41,13 @@ import type {
   EditorCommand,
   EditorSelection,
 } from "../../editorAdapter";
+import { utf8ByteLength } from "../../documentMetrics";
 import {
   clipboardPayloadFromSlice,
   sanitizeRichClipboardHtml,
   type VisualClipboardPayload,
 } from "./clipboard";
-import {
-  utf8ByteLength,
-  visualEditorEligibility,
-} from "./visualEditorPolicy";
+import { visualEditorEligibility } from "./visualEditorPolicy";
 
 export interface MilkdownVisualAdapterOptions {
   readOnly?: boolean;

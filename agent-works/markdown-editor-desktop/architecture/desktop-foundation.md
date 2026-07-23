@@ -4,7 +4,7 @@
 
 本文描述 Plainroot 当前已经落地的桌面底座模块、数据流、权限边界和运行约束。产品范围与最终验收以 `../requirement.md` 为准，第一阶段任务状态与验证证据以 `../stage-1-desktop-foundation/plan.md` 为准；代码、清单、配置和自动化测试是实现事实源。
 
-当前架构覆盖 P2 工作区启动页、P1 只读工作台、本地文件与窗口底座，以及尚未接入 P1 页面流程的单文档会话、Milkdown 排版 adapter、恢复快照仓储、冲突覆盖、安全另存、资源偏好和受控图片导入底座。源码编辑器、多页签、大纲、全文搜索、自动保存触发、恢复/冲突/资源弹层、完整图片输入消费者、主题工作室和分页阅读仍未落地。
+当前架构覆盖 P2 工作区启动页、P1 只读工作台、本地文件与窗口底座，以及尚未接入 P1 页面流程的单文档会话、Milkdown 排版 adapter、CodeMirror 源码 adapter、恢复快照仓储、冲突覆盖、安全另存、资源偏好和受控图片导入底座。可见编辑器壳与模式切换、多页签、大纲、全文搜索、自动保存触发、恢复/冲突/资源弹层、完整图片输入消费者、主题工作室和分页阅读仍未落地。
 
 ## 2. 总体结构
 
@@ -45,6 +45,7 @@ flowchart LR
 | P1 只读工作台 | `src/features/workbench/` | 渐进文件树、只读 Markdown、文件 CRUD、删除、定位、监听、窄窗目录抽屉和工作区切换 | 不包含编辑器、页签、大纲、搜索或虚假保存状态 |
 | 共享前端组件 | `src/components/` | `AppDialog`、`AsyncStatePanel` 与 `focusContainment` 统一对话框、状态优先级和焦点生命周期 | 页面业务状态保持在各自 feature；仅在第二个同职责消费者出现后抽取 |
 | 排版编辑 adapter | `src/features/editor/adapters/milkdown/` | 将 Milkdown CommonMark/GFM、选择/锚点、格式与结构命令、三态剪贴板载荷、受控图片请求和性能门槛映射为统一 `EditorAdapter`；支持只读与异步销毁 | 不持有文件保存、跨模式内容或第二套权威撤销历史；超过 2 MiB 或 2000 个非空内容行时前置返回源码降级；T25 才接入 P1 |
+| 源码编辑 adapter | `src/features/editor/adapters/codemirror/` | 将 CodeMirror Markdown、高亮、行号、括号匹配、当前文档查找替换、选择/滚动和只读映射为统一 `EditorAdapter`；原始文本投影把规范化编辑变更映射回 raw Markdown | 不持有文件保存、工作区搜索或第二套 history；CRLF/CR/mixed 未触及部分不得被内部 LF 视图静默归一；T25 才接入 P1 |
 | 桌面契约与网关 | `src/services/desktop/` | Rust↔TypeScript 类型、错误码和 IPC 调用封装 | 不把原始系统堆栈或任意绝对路径暴露为前端操作能力 |
 | Rust 命令入口 | `src-tauri/src/commands/` | 对外暴露选择、授权、扫描、读取、CRUD、删除、监听和安全写命令 | 命令只接收受控标识与相对路径，磁盘成功后才返回可提交结果 |
 | 文件系统服务 | `src-tauri/src/fs/` | 路径与身份、扫描、读取、变更、删除、监听、原子替换和安全写 | 默认不跟随根内符号链接；平台差异由适配层收口 |
@@ -73,6 +74,7 @@ flowchart LR
 - 工作区源副本保留可验证的 UTF-8 BOM 与单一换行风格；mixed 或不支持编码必须明确选择 UTF-8 输出格式，全新无基线内容默认 UTF-8 + LF。
 - 图片资源目录只能是授权根内的规范化相对目录，不能经过符号链接。资源先以私有随机临时文件写入并同步，再通过平台 no-replace 提交唯一名称；编辑器只能消费返回的相对路径，不能把任意绝对目标交给导入命令。
 - 排版 adapter 只消费统一会话投影并发出带 generation/editVersion 的变更；Cmd/Ctrl+Z 与重做桥接会话 history，不启用 Milkdown 第二套权威历史。富文本粘贴只保留可表达结构，主动内容、危险 URL 和外部图片不能绕过受控资源导入。
+- 源码 adapter 与排版 adapter 使用同一 generation/editVersion 事务和 session history。CodeMirror 内部文本模型以 LF 工作，raw 投影负责 raw/editor 选择偏移和变更反投影；这层边界是 CRLF、CR 与 mixed 文件可安全源码编辑的前提，不能用 `state.doc.toString()` 直接覆盖 session Markdown。
 - 排版可交互性同时受 UTF-8 字节数和非空内容行数约束；当前证据门槛为 `≤2 MiB 且 ≤2000 个非空内容行`，超出时在创建 Milkdown 前转源码模式。行数采用不拆分全文的流式计数，能覆盖没有空行分隔的紧凑列表和表格；该门槛是可复测的保守技术安全值，不是 Markdown 文件总上限。
 - 资源服务返回的 `assetPath` 是工作区相对路径；编辑器插入 Markdown 前必须根据当前文档所在目录转换为文档相对链接。根目录与多层子目录文档不能共用未经转换的链接文本。
 - 图片落盘与 Markdown 插入是显式两阶段：落盘返回 import token，插入成功后确认保留，插入失败/取消时仅凭原生文件身份、长度与 SHA-256 清理本次未变化副本。强制进程终止可能在两阶段之间留下孤立资源，缺少持久证据时不得猜测删除。
@@ -108,7 +110,7 @@ flowchart LR
 
 ## 7. 测试与跨平台边界
 
-- `pnpm test` 覆盖许可证策略、路径代数、文件树 reducer、fixture 和 React 页面/组件状态；Rust 测试覆盖授权、路径、状态/恢复/偏好仓储、文件操作、安全写、监听、窗口事务和资源导入。T22 的资源测试覆盖签名、上限、重名、symlink、原子失败、错误工作区、令牌生命周期、取消换靶和 raw IPC body 类型。
+- `pnpm test` 覆盖许可证策略、路径代数、文件树 reducer、fixture、React 页面/组件状态，以及 Milkdown/CodeMirror adapter。T24 源码专项测试覆盖异常语法、CRLF/CR/mixed 反投影、查找替换、统一 history、composition、只读、外部 projection、选择/滚动、5 MiB 输入和销毁；Rust 测试继续覆盖授权、路径、状态/恢复/偏好仓储、文件操作、安全写、监听、窗口事务和资源导入。
 - `pnpm test:e2e` 使用独立 identifier 与临时状态目录，覆盖 P2/P1 的真实 Tauri IPC、关键窗口宽度和 fixture 工作区扫描读取。
 - GitHub Actions 在 macOS/Windows 运行许可证、类型、前端/Rust、桌面 E2E 和未签名生产构建。远端已确认的基线提交为 `9a1690a`；其后的本地审查修正不能外推为新的远端 Windows 证据。
 - macOS 已有系统选择器、Finder、废纸篓、多窗口、监听和单实例人工证据。Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍需人工实机验收；网络卷、休眠、文件系统卸载和超大目录长时行为也没有产品级证据。

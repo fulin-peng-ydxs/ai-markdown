@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import commonmarkGfm from "../../../../../tests/fixtures/markdown/commonmark-gfm.md?raw";
 import type { EditorAdapterDocument } from "../../editorAdapter";
+import { utf8ByteLength } from "../../documentMetrics";
+import { editorAdapterTestDocument } from "../editorAdapterTestSupport";
 import { MilkdownVisualAdapter } from "./MilkdownVisualAdapter";
 import {
   sanitizeRichClipboardHtml,
@@ -12,7 +14,6 @@ import {
   MAX_INTERACTIVE_VISUAL_BYTES,
   MAX_INTERACTIVE_VISUAL_CONTENT_LINES,
   countMarkdownContentLines,
-  utf8ByteLength,
   visualEditorEligibility,
 } from "./visualEditorPolicy";
 
@@ -277,16 +278,9 @@ function mountRoot(): HTMLElement {
 }
 
 function editorDocument(markdown: string): EditorAdapterDocument {
-  return {
-    generation: 7,
-    editVersion: 4,
-    markdown,
-    selection: { kind: "visual", from: 0, to: 0 },
-    anchor: {
-      kind: "semantic",
-      blockId: null,
-      fallbackOffset: 0,
-      scrollTop: 0,
-    },
-  };
+  return editorAdapterTestDocument(markdown, {
+    kind: "visual",
+    from: 0,
+    to: 0,
+  });
 }

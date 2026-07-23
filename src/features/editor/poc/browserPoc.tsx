@@ -9,12 +9,18 @@ import {
   type VisualMarkdownEditorHandle,
 } from "../adapters/milkdown/VisualMarkdownEditor";
 import type { VisualEditorPerformanceSample } from "../adapters/milkdown/MilkdownVisualAdapter";
+import {
+  SourceMarkdownEditor,
+  type SourceMarkdownEditorHandle,
+} from "../adapters/codemirror/SourceMarkdownEditor";
+import type { SourceEditorPerformanceSample } from "../adapters/codemirror/CodeMirrorSourceAdapter";
 import { createCodeMirrorPoc } from "./codeMirrorPoc";
 import { MilkdownReactPoc } from "./MilkdownReactPoc";
 
 function BrowserPoc() {
   const codeMirrorRoot = useRef<HTMLDivElement>(null);
   const visualEditorRef = useRef<VisualMarkdownEditorHandle>(null);
+  const sourceEditorRef = useRef<SourceMarkdownEditorHandle>(null);
   const [milkdownReadyMs, setMilkdownReadyMs] = useState<number | null>(null);
   const [codeMirrorReadyMs, setCodeMirrorReadyMs] = useState<number | null>(null);
   const [visualDocument, setVisualDocument] = useState<EditorAdapterDocument>({
@@ -27,6 +33,15 @@ function BrowserPoc() {
   const [visualKey, setVisualKey] = useState(0);
   const [visualSample, setVisualSample] = useState<VisualEditorPerformanceSample | null>(null);
   const [visualUnavailable, setVisualUnavailable] = useState("");
+  const [sourceDocument, setSourceDocument] = useState<EditorAdapterDocument>({
+    generation: 1,
+    editVersion: 0,
+    markdown: commonmarkGfm,
+    selection: { kind: "source", anchor: 0, head: 0 },
+    anchor: { kind: "source", offset: 0, scrollTop: 0 },
+  });
+  const [sourceSample, setSourceSample] =
+    useState<SourceEditorPerformanceSample | null>(null);
 
   useEffect(() => {
     const host = codeMirrorRoot.current;
@@ -101,6 +116,46 @@ function BrowserPoc() {
       <section aria-label="CodeMirror PoC">
         <h2>CodeMirror</h2>
         <div ref={codeMirrorRoot} />
+      </section>
+      <section aria-label="T24 生产源码编辑器">
+        <h2>T24 生产源码编辑器</h2>
+        <p data-testid="source-runtime-report">
+          {sourceSample
+            ? `${sourceSample.phase}: ${sourceSample.durationMs.toFixed(1)}ms · ${sourceSample.byteLength} bytes`
+            : "loading"}
+        </p>
+        <button
+          onClick={() => sourceEditorRef.current?.execute({ kind: "find" })}
+          type="button"
+        >
+          开发验证：查找
+        </button>
+        <button
+          onClick={() =>
+            sourceEditorRef.current?.setSelection({
+              kind: "source",
+              anchor: 0,
+              head: 12,
+            })
+          }
+          type="button"
+        >
+          开发验证：选择源码
+        </button>
+        <SourceMarkdownEditor
+          document={sourceDocument}
+          onChange={(change) => {
+            setSourceDocument((current) => ({
+              ...current,
+              editVersion: current.editVersion + 1,
+              markdown: change.markdown,
+              selection: change.selection,
+              anchor: change.anchor,
+            }));
+          }}
+          onPerformance={setSourceSample}
+          ref={sourceEditorRef}
+        />
       </section>
     </main>
   );

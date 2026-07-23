@@ -220,6 +220,8 @@ Key Characteristics：
 | `workspacePath` | `src/features/workbench/workspacePath.ts` | `workspaceTreeState`、`WorkspaceWorkbench` | 工作区相对路径的父级计算、同路径/子路径边界判断和前缀重映射；根目录键仍由树状态层适配 |
 | `VisualMarkdownEditor` | `src/features/editor/adapters/milkdown/VisualMarkdownEditor.tsx` | T23 adapter 隔离验证；T25 接入 P1 | 连续纸面上的 Milkdown 排版编辑、有效选区上下文工具栏、语义焦点/只读状态、受控链接与图片请求、三态复制反馈；不持有文件保存或跨模式历史 |
 | `MilkdownVisualAdapter` | `src/features/editor/adapters/milkdown/MilkdownVisualAdapter.ts` | `VisualMarkdownEditor` | CommonMark/GFM 与统一 `EditorAdapter` 事务桥接、选择/锚点、结构命令、session history 回调、异步生命周期和字节/非空内容行复杂度降级；不建立第二份 Markdown 或权威历史 |
+| `SourceMarkdownEditor` | `src/features/editor/adapters/codemirror/SourceMarkdownEditor.tsx` | T24 adapter 隔离验证；T25 接入 P1 | 连续源码画布、行号、中文当前文档查找/替换、键盘焦点、只读与共享 editor surface 命令；不注册工作区搜索或独立保存通道 |
+| `CodeMirrorSourceAdapter` | `src/features/editor/adapters/codemirror/CodeMirrorSourceAdapter.ts` | `SourceMarkdownEditor` | Markdown 高亮、括号匹配、选择/滚动、统一 session history 回调、generation/editVersion 事务和原始换行投影；CodeMirror 内部 LF 视图不得反向归一 CRLF/CR/mixed raw Markdown |
 
 布局规则：
 
@@ -298,7 +300,7 @@ Iteration Guide：
 
 ## 10. Known Gaps
 
-- P2、P1 第一阶段工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；T17 已完成页面私有颜色/渐变收口，并让 `AppDialog` 与 P1 窄窗抽屉共同消费 `focusContainment`。P1 文件树 reducer 与工作台页面共同消费 `workspacePath`，避免重命名/移动后的树状态与页面选择状态使用两套路径规则。`PathStatus`、`DesktopWindowStatus` 未形成两个同职责消费者，因此未登记为空组件。P1 的编辑器、页签、大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
+- P2、P1 第一阶段工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；T17 已完成页面私有颜色/渐变收口，并让 `AppDialog` 与 P1 窄窗抽屉共同消费 `focusContainment`。P1 文件树 reducer 与工作台页面共同消费 `workspacePath`，避免重命名/移动后的树状态与页面选择状态使用两套路径规则。T23/T24 已建立可嵌入的排版/源码编辑组件并共享 `EditorSurfaceHandle`、UTF-8 计量和测试文档工厂，但仍只在隔离 PoC/组件测试中验证，T25 才接入 P1。`PathStatus`、`DesktopWindowStatus` 未形成两个同职责消费者，因此未登记为空组件。P1 的可见编辑器壳、页签、大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
 - 暗色主题尚无完整原型和 token；不得简单反转当前亮色值。R7/R15 阶段需补全明暗语义、派生状态和跨窗口预览测试。
 - `17px / 1.76`、约 `760–820px` 正文宽度及 `252/220px` 侧栏是 alpha 校准基线，仍需在不同 DPI、中英文长文和 Windows 字体渲染下验证。
 - 自定义主题“明暗两套调色板必须同时通过才允许保存”仍是待主题阶段确认的非阻塞决策；确认前不要写成用户已最终决定。

@@ -1,0 +1,137 @@
+.source-markdown-editor {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  color: var(--color-text);
+  background: var(--color-paper);
+}
+
+.source-markdown-editor__canvas {
+  min-width: 0;
+  min-height: 100%;
+}
+
+.source-markdown-editor__canvas .cm-editor {
+  min-height: 100%;
+  color: var(--color-text);
+  background: transparent;
+  font: var(--font-code);
+}
+
+.source-markdown-editor__canvas .cm-editor.cm-focused {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.source-markdown-editor__canvas .cm-scroller {
+  min-height: 100%;
+  overflow: auto;
+  font: var(--font-code);
+}
+
+.source-markdown-editor__canvas .cm-content {
+  min-height: 100%;
+  padding: var(--space-lg) var(--space-xl) var(--space-2xl);
+  caret-color: var(--color-accent);
+}
+
+.source-markdown-editor__canvas .cm-line {
+  padding: 0;
+}
+
+.source-markdown-editor__canvas .cm-gutters {
+  color: var(--color-quiet);
+  background: var(--color-paper-deep);
+  border-right: 1px solid var(--color-line);
+}
+
+.source-markdown-editor__canvas .cm-lineNumbers .cm-gutterElement {
+  min-width: 3ch;
+  padding: 0 var(--space-sm);
+}
+
+.source-markdown-editor__canvas .cm-activeLine,
+.source-markdown-editor__canvas .cm-activeLineGutter {
+  background: var(--color-paper-hover);
+}
+
+.source-markdown-editor__canvas .cm-selectionBackground,
+.source-markdown-editor__canvas ::selection {
+  background: var(--color-accent-soft) !important;
+}
+
+.source-markdown-editor__canvas .cm-cursor {
+  border-left-color: var(--color-accent);
+}
+
+.source-markdown-editor__canvas .cm-matchingBracket {
+  color: var(--color-heading);
+  background: var(--color-accent-soft);
+  outline: 1px solid var(--color-accent);
+}
+
+.source-markdown-editor__canvas .cm-panels {
+  color: var(--color-text);
+  background: var(--color-chrome);
+  border-bottom: 1px solid var(--color-line-strong);
+  font: var(--font-ui-sm);
+}
+
+.source-markdown-editor__canvas .cm-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: center;
+  padding: var(--space-sm);
+}
+
+.source-markdown-editor__canvas .cm-search label {
+  display: inline-flex;
+  gap: var(--space-xs);
+  align-items: center;
+  color: var(--color-muted);
+}
+
+.source-markdown-editor__canvas .cm-search input,
+.source-markdown-editor__canvas .cm-search button {
+  min-height: 28px;
+  color: var(--color-text);
+  background: var(--color-paper);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  font: var(--font-ui-sm);
+}
+
+.source-markdown-editor__canvas .cm-search input {
+  padding: var(--space-xs) var(--space-sm);
+}
+
+.source-markdown-editor__canvas .cm-search button {
+  padding: var(--space-xs) var(--space-sm);
+}
+
+.source-markdown-editor__canvas .cm-search button:hover:not(:disabled) {
+  background: var(--color-paper-hover);
+  border-color: var(--color-line-strong);
+}
+
+.source-markdown-editor__canvas .cm-search input:focus-visible,
+.source-markdown-editor__canvas .cm-search button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.source-markdown-editor__canvas .cm-search button[name="close"] {
+  color: var(--color-muted);
+}
+
+.source-markdown-editor[data-readonly] .cm-content {
+  caret-color: transparent;
+}
+
+@media (max-width: 560px) {
+  .source-markdown-editor__canvas .cm-content {
+    padding-right: var(--space-md);
+    padding-left: var(--space-md);
+  }
+}

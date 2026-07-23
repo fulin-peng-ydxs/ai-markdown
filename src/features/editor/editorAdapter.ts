@@ -61,3 +61,10 @@ export interface EditorAdapter {
   execute(command: EditorCommand): boolean;
   destroy(): void;
 }
+
+export interface EditorSurfaceHandle {
+  execute(command: EditorCommand): boolean;
+  focus(): void;
+  getSelection(): EditorSelection;
+  setSelection(selection: EditorSelection): void;
+}

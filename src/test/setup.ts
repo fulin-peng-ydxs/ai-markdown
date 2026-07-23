@@ -13,4 +13,8 @@ if (!HTMLDialogElement.prototype.close) {
   };
 }
 
+if (!Range.prototype.getClientRects) {
+  Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
+}
+
 afterEach(() => cleanup());
