@@ -651,21 +651,20 @@ mod tests {
     };
 
     struct Fixture {
+        _directory: TestDirectory,
         root: PathBuf,
         app_data: PathBuf,
     }
 
     impl Fixture {
         fn new(bytes: &[u8]) -> Self {
-            let root = std::env::temp_dir().join(format!(
-                "plainroot-safe-write-{}-{}",
-                std::process::id(),
-                rand_suffix()
-            ));
+            let directory = TestDirectory::create("safe-write");
+            let root = directory.path().to_path_buf();
             let app_data = root.join("app-data");
             fs::create_dir_all(&app_data).unwrap();
             fs::write(root.join("note.md"), bytes).unwrap();
             Self {
+                _directory: directory,
                 root: fs::canonicalize(root).unwrap(),
                 app_data,
             }
@@ -682,19 +681,6 @@ mod tests {
                 vec![self.root.clone()],
             )
         }
-    }
-
-    impl Drop for Fixture {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.root);
-        }
-    }
-
-    fn rand_suffix() -> u128 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
     }
 
     fn write_with_fault(
@@ -792,6 +778,40 @@ mod tests {
                 0
             );
         }
+    }
+
+    #[test]
+    fn parallel_fixtures_never_share_a_cleanup_journal() {
+        let barrier = Arc::new(Barrier::new(17));
+        let handles = (0..16)
+            .map(|_| {
+                let barrier = Arc::clone(&barrier);
+                thread::spawn(move || {
+                    barrier.wait();
+                    let fixture = Fixture::new(b"original\n");
+                    let root = fixture.root.clone();
+                    let journal = fixture.app_data.join(SAFE_WRITE_CLEANUP_FILE_NAME);
+                    (fixture, root, journal)
+                })
+            })
+            .collect::<Vec<_>>();
+        barrier.wait();
+
+        let fixtures = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("fixture thread should finish"))
+            .collect::<Vec<_>>();
+        let roots = fixtures
+            .iter()
+            .map(|(_, root, _)| root)
+            .collect::<std::collections::BTreeSet<_>>();
+        let journals = fixtures
+            .iter()
+            .map(|(_, _, journal)| journal)
+            .collect::<std::collections::BTreeSet<_>>();
+
+        assert_eq!(roots.len(), fixtures.len());
+        assert_eq!(journals.len(), fixtures.len());
     }
 
     #[test]

@@ -93,7 +93,7 @@ describe("DocumentSaveController", () => {
     resolveFirst(savedResult("# first", "saved-first"));
     await save;
     await duplicate;
-    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
+    expect(write).toHaveBeenCalledTimes(2);
     await vi.waitFor(() => expect(current.saveState.kind).toBe("saved"));
     expect(write.mock.calls[1]?.[2]).toBe("# second");
     expect(current.diskRevision.contentHash).toBe("saved-second");

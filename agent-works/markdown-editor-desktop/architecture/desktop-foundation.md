@@ -60,6 +60,7 @@ flowchart LR
 | 排版编辑 adapter | `src/features/editor/adapters/milkdown/` | 将 Milkdown CommonMark/GFM、选择/锚点、格式与结构命令、三态剪贴板载荷、受控图片节点、缺失占位/重新定位和性能门槛映射为统一 `EditorAdapter`；支持只读与异步销毁 | 不持有文件保存、跨模式内容或第二套权威撤销历史；图片只消费编辑器壳提供的受控解析与重新定位回调；超过 2 MiB 或 2000 个非空内容行时前置返回源码降级；由编辑器壳按需加载 |
 | 源码编辑 adapter | `src/features/editor/adapters/codemirror/` | 将 CodeMirror Markdown、高亮、行号、括号匹配、当前文档查找替换、选择/滚动和只读映射为统一 `EditorAdapter`；原始文本投影把规范化编辑变更映射回 raw Markdown | 不持有文件保存、工作区搜索或第二套 history；CRLF/CR/mixed 未触及部分不得被内部 LF 视图静默归一；由编辑器壳按需加载 |
 | 桌面契约与网关 | `src/services/desktop/` | Rust↔TypeScript 类型、错误码和 IPC 调用封装 | 不把原始系统堆栈或任意绝对路径暴露为前端操作能力 |
+| 契约与非桌面回归门禁 | `src-tauri/src/contract_test.rs`、`src/features/editor/roundtripCorpus.test.ts`、`package.json` | 对每个 TypeScript 导出 interface、字符串枚举/标签登记 Rust parity 断言；用生产 Milkdown/CodeMirror adapter 验证 CommonMark/GFM、HTML 和 source-only 语料；统一执行 Node、Vitest 与 Rust 服务测试 | 不替代 Tauri IPC、系统输入法、原生选择器或双平台桌面 E2E；测试文件系统只使用隔离临时目录 |
 | Rust 命令入口 | `src-tauri/src/commands/` | 对外暴露选择、授权、扫描、读取、CRUD、删除、监听和安全写命令 | 命令只接收受控标识与相对路径，磁盘成功后才返回可提交结果 |
 | 文件系统服务 | `src-tauri/src/fs/` | 路径与身份、扫描、读取、变更、删除、监听、原子替换和安全写 | 默认不跟随根内符号链接；平台差异由适配层收口 |
 | 窗口与菜单 | `src-tauri/src/window.rs`、`src-tauri/src/menu.rs` | 一目录一窗口、当前/新窗口决策、根会话协调、单实例转交、原生菜单、按窗口保存编辑菜单状态，以及系统关闭/菜单关闭/当前窗口根替换/应用退出的非阻塞结算意图 | 当前只结算每窗口一个文档，不承担页签集合门禁；coordinator mutex 不跨越前端等待；只有聚焦窗口真实 session 可消费的菜单项启用 |
@@ -133,7 +134,8 @@ flowchart LR
 
 ## 7. 测试与跨平台边界
 
-- 前端测试覆盖许可证策略、路径代数、文件树 reducer、fixture、React 页面/组件状态、统一编辑器壳、Milkdown/CodeMirror adapter、恢复/冲突/另存交互、资源目录、文档相对图片路径、选择/剪贴板部分失败、缺失占位/重新定位和移动链接确认，以及保存控制器的尺寸分级、单飞/追赶、快照限频、失败与结算；Rust 测试继续覆盖授权、路径、状态/恢复/偏好仓储、文件操作、安全写、监听、窗口事务、结算 intent、资源导入和受控图片读取。
+- 前端测试覆盖许可证策略、路径代数、文件树 reducer、fixture、React 页面/组件状态、统一编辑器壳、Milkdown/CodeMirror adapter、生产 Markdown 往返语料、恢复/冲突/另存交互、资源目录、文档相对图片路径、选择/剪贴板部分失败、缺失占位/重新定位和移动链接确认，以及保存控制器的尺寸分级、单飞/立即追赶、快照限频、失败与结算；Rust 测试继续覆盖授权、路径、状态/恢复/偏好仓储、文件操作、安全写、监听、窗口事务、结算 intent、资源导入和受控图片读取。契约总守卫要求每个 TypeScript 导出 interface 和字符串常量都能追溯到 Rust 字段或枚举 parity 断言。
+- 所有文件系统测试必须使用带进程 ID、时间与原子序号的统一临时目录工厂；仅依赖时间戳的夹具会在并行测试中碰撞清理日志或临时文件，禁止新增。
 - `pnpm test:e2e` 使用独立 identifier 与临时状态目录，覆盖 P2/P1 的真实 Tauri IPC、关键窗口宽度和 fixture 工作区扫描读取。
 - GitHub Actions 在 macOS/Windows 运行许可证、类型、前端/Rust、桌面 E2E 和未签名生产构建。远端已确认的基线提交为 `9a1690a`；其后的本地审查修正不能外推为新的远端 Windows 证据。
 - macOS 已有系统选择器、Finder、废纸篓、多窗口、监听和单实例人工证据。Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍需人工实机验收；网络卷、休眠、文件系统卸载和超大目录长时行为也没有产品级证据。

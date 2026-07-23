@@ -4,7 +4,7 @@
 >
 > 当前阶段：阶段 2——统一 Markdown 文档模型、排版编辑/源码编辑和完整单文档保存、恢复、冲突、图片资源链路
 >
-> 计划状态：进行中（T18～T29 已完成，T30 待开始）
+> 计划状态：进行中（T18～T30 已完成，T31 待开始）
 >
 > 需求编号规则：完全沿用 `requirement.md` 的 R1～R34，不新增、重排或改变 R 编号含义。
 
@@ -77,20 +77,20 @@
 
 | 需求编号 | 需求内容 | 第二阶段覆盖 | 开发状态 | 对应任务 | 验证方式 |
 | --- | --- | --- | --- | --- | --- |
-| R1 | Windows/macOS 本地优先桌面应用 | 在既有桌面壳内增加离线编辑、保存、恢复和另存；不重做安装/授权 | 进行中 | T18、T29～T32 | T29 已在最新 macOS `.app` 验证真实 P1 编辑器、状态栏和原生菜单状态/模式切换；双平台 E2E 与最新 Windows 证据仍待 T30～T32，Windows 原生 UI 保持人工项 |
-| R2 | 文件与目录管理 | 复用读取、watch、安全写并接入当前编辑会话和图片资源文件；不改变文件树 CRUD 语义 | 进行中 | T19、T21、T22、T26、T28、T30～T31 | T28 已把受控图片写入、受限图片读取与 watcher 登记接入 P1；图片只以授权根内相对路径读写，完整桌面回归仍待 T30～T31 |
-| R3 | 所见即所得 Markdown 编辑 | 完整纳入本阶段 | 进行中 | T18、T19、T23、T25、T30～T32 | T25 已把 Milkdown 排版编辑、格式栏和统一历史接入 P1，并以生产 Remark/GFM AST 兼容性解析及尺寸/结构复杂度门槛决定排版或源码安全路径；系统输入法候选流程与桌面 E2E 仍待 T30～T32 |
+| R1 | Windows/macOS 本地优先桌面应用 | 在既有桌面壳内增加离线编辑、保存、恢复和另存；不重做安装/授权 | 进行中 | T18、T29～T32 | T30 已完成本机非桌面契约/服务门禁；双平台 E2E 与最新 Windows 证据仍待 T31～T32，Windows 原生 UI 保持人工项 |
+| R2 | 文件与目录管理 | 复用读取、watch、安全写并接入当前编辑会话和图片资源文件；不改变文件树 CRUD 语义 | 进行中 | T19、T21、T22、T26、T28、T30～T31 | T30 已把 safe-write、恢复、资源和路径服务纳入统一门禁并修复并行测试夹具碰撞；完整桌面回归仍待 T31 |
+| R3 | 所见即所得 Markdown 编辑 | 完整纳入本阶段 | 进行中 | T18、T19、T23、T25、T30～T32 | T30 已增加生产 adapter CommonMark/GFM/图片/raw HTML 往返语料；系统输入法候选流程与桌面 E2E 仍待 T31～T32 |
 | R4 | 当前文档大纲 | 阶段 6 实现；本阶段只提供增量内容事件，不渲染大纲 | 跳过 | - | 映射审查确认没有假大纲或占位任务 |
-| R5 | 自动保存、恢复与外部冲突 | 完成单文档链路；多页签关闭检查由阶段 3 扩展，搜索索引异常协同由阶段 7 承接 | 进行中 | T19～T21、T25～T27、T29～T32 | T19～T27 已落地单文档保存、恢复、冲突、另存与窗口结算；T29 已让原生保存/另存菜单和持续保存状态跟随当前 session，桌面 E2E、故障矩阵与双平台验收仍待 T30～T32 |
-| R6 | 图片粘贴、拖放与资源管理 | 完整纳入本阶段 | 进行中 | T18、T22、T23、T28、T30～T32 | T28 已接入选择、剪贴板与拖放图片、per-workspace 资源目录、两阶段确认/回滚、根/多层文档相对链接、缺失占位/重新定位和移动链接确认；真实 Tauri 选择器/拖放与双平台验收仍待 T30～T32 |
+| R5 | 自动保存、恢复与外部冲突 | 完成单文档链路；多页签关闭检查由阶段 3 扩展，搜索索引异常协同由阶段 7 承接 | 进行中 | T19～T21、T25～T27、T29～T32 | T30 已统一保存/恢复/冲突服务测试并强化保存中编辑立即追赶断言；桌面 E2E 与双平台验收仍待 T31～T32 |
+| R6 | 图片粘贴、拖放与资源管理 | 完整纳入本阶段 | 进行中 | T18、T22、T23、T28、T30～T32 | T30 已统一资源服务、tagged union 和图片 Markdown 往返门禁；真实 Tauri 选择器/拖放与双平台验收仍待 T31～T32 |
 | R7 | 中性主题与颜色语义 | 只消费既有 token，不在本阶段实现主题产品能力 | 跳过 | - | token 扫描只作为页面合规回归，不计 R7 完成 |
 | R8 | 自适应与区域调宽 | 保留第一阶段 P1 窄窗抽屉；完整调宽/持久化由阶段 4 实现 | 跳过 | - | T31 回归现有 820/760 px，不新增 R8 完成声明 |
 | R9 | 编辑/专注/分页阅读 | 阶段 6 实现 | 跳过 | - | 确认阅读入口隐藏/禁用且无假反馈 |
-| R10 | Markdown 源码模式 | 完整纳入本阶段 | 进行中 | T18、T19、T24、T25、T30～T32 | T25 已把 CodeMirror 源码模式、当前文档查找和排版/源码切换接入 P1；切换前同步提交当前 adapter 内容/选择/锚点，源码回排版时按当前 editVersion 重解析，异常语法不被静默删除。系统 IME 与桌面 E2E 仍待 T30～T32 |
-| R11 | 操作与文件状态反馈 | 完成本阶段编辑、保存、恢复、只读、冲突和图片异步状态 | 进行中 | T19～T32 | T29 已增加持续状态栏，真实显示模式、保存状态、字/字符数、编码、换行、光标和工作区可写性；菜单忙态/只读态与当前 session 同步。完整异常矩阵、系统辅助技术和双平台验收仍待 T30～T32 |
+| R10 | Markdown 源码模式 | 完整纳入本阶段 | 进行中 | T18、T19、T24、T25、T30～T32 | T30 已用生产 CodeMirror adapter 锁定 source-only 语料字节保留；系统 IME 与桌面 E2E 仍待 T31～T32 |
+| R11 | 操作与文件状态反馈 | 完成本阶段编辑、保存、恢复、只读、冲突和图片异步状态 | 进行中 | T19～T32 | T30 已通过非桌面状态/异常门禁；系统辅助技术、真实桌面异常矩阵和双平台验收仍待 T31～T32 |
 | R12 | 工作区全文搜索 | 阶段 7 实现；CodeMirror 文档内查找不等同 R12 | 跳过 | - | 映射与菜单审查，工作区搜索继续禁用 |
 | R13 | 多文档页签 | 阶段 3 实现；本阶段每窗口只维护一个 `DocumentSession` | 跳过 | - | 确认未以单文档下拉或隐藏页签模拟 R13 |
-| R14 | 一目录一窗口与多窗口生命周期 | 仅将当前单文档保存门禁接入关闭/当前窗口替换；阶段 3 扩展为全部页签 | 进行中 | T26、T29～T32 | T26 已用非阻塞 intent/resolution 握手保护系统关闭、菜单关闭、当前窗口根替换和多窗口应用退出；T29 已按窗口保存编辑菜单状态并在窗口聚焦/销毁时切换或清理，当前仍是每窗口单文档，完整桌面与双平台回归待 T30～T31 |
+| R14 | 一目录一窗口与多窗口生命周期 | 仅将当前单文档保存门禁接入关闭/当前窗口替换；阶段 3 扩展为全部页签 | 进行中 | T26、T29～T32 | T30 已完成窗口结算相关非桌面回归；当前仍是每窗口单文档，完整桌面与双平台回归待 T31 |
 | R15 | 颜色预设与实时预览 | 阶段 5 实现；P1 只消费当前 Neutral token | 跳过 | - | P3 路由/状态不存在，映射审查 |
 | R30 | 核心命令键盘操作 | 编辑、撤销/重做、保存/另存、模式切换、查找和弹层焦点子集 | 进行中 | T23～T25、T27～T32 | T29 已启用且只启用有真实消费者的原生保存、另存、撤销/重做、当前文档查找和模式命令；macOS `.app` 已验证菜单状态与源码切换，Windows 快捷键与完整 E2E 仍待 T31～T32 |
 | R31 | 无障碍基础 | 编辑器、保存状态、冲突/恢复/资源弹层子集 | 进行中 | T23～T25、T27～T32 | T29 状态栏使用语义分组且只让活动反馈进入 live-region，窄窗保留主要状态；原生辅助功能树已验证 P1 模式、菜单和状态文本，系统辅助技术与 Windows 仍待 T31～T32 |
@@ -279,18 +279,18 @@ plainroot-recovery-v1/
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 必须实现 | R1 | 双平台、本地优先 | 既有桌面壳内增加离线编辑/恢复/另存并做双平台回归 | T18、T29～T32 | 进行中 | 部分覆盖 | T29 已取得最新 macOS `.app` 的 P1、状态栏和原生菜单证据；双平台回归与 Windows 原生人工项尚未完成 |
 | 必须实现 | R2 | 文件/目录管理 | 编辑会话接入读取、watch、安全写和资源文件 | T19、T21、T22、T26、T28、T30～T31 | 进行中 | 部分覆盖 | T26 已把 P1 自动/手动保存接入既有 safe-write、revision 和 watcher 自身写入链；T28 已把资源写入/受控读取、文档相对链接与移动后改写接入 P1，桌面回归及后续大纲/搜索联动仍待对应任务 |
-| 必须实现 | R3 | 所见即所得编辑 | Milkdown、统一模型、格式化、粘贴和往返 | T18、T19、T23、T25、T28、T30～T32 | 进行中 | 部分覆盖 | T25 已完成 P1 排版编辑器壳、格式栏、统一历史及生产 AST/性能降级；T28 已接入受控图片输入和排版图片节点，系统 IME 与桌面验收仍待 T30～T32 |
+| 必须实现 | R3 | 所见即所得编辑 | Milkdown、统一模型、格式化、粘贴和往返 | T18、T19、T23、T25、T28、T30～T32 | 进行中 | 部分覆盖 | T30 已增加生产 adapter 往返语料与统一门禁；系统 IME 与桌面验收仍待 T31～T32 |
 | 必须实现 | R4 | 大纲 | 暂不纳入 | - | 跳过 | 未覆盖 | 阶段 6 |
-| 必须实现 | R5 | 保存/恢复/冲突 | 完整单文档链路和当前窗口门禁 | T19～T21、T25～T27、T29～T32 | 进行中 | 部分覆盖 | T29 已把保存/另存菜单和持续状态接入当前 session；T30～T32 仍需契约、E2E/双平台验收，阶段 3 扩展全部页签关闭检查 |
-| 必须实现 | R6 | 图片/资源 | 粘贴、拖放、选择、资源偏好与相对链接 | T18、T22、T23、T28、T30～T32 | 进行中 | 部分覆盖 | T28 已完成选择、粘贴、拖放、资源偏好、文档相对链接、导入确认/取消、缺失重定位和移动链接调整；真实桌面输入与双平台验收仍待 T30～T32 |
+| 必须实现 | R5 | 保存/恢复/冲突 | 完整单文档链路和当前窗口门禁 | T19～T21、T25～T27、T29～T32 | 进行中 | 部分覆盖 | T30 已完成契约、状态与服务门禁；E2E/双平台验收仍待 T31～T32，阶段 3 扩展全部页签关闭检查 |
+| 必须实现 | R6 | 图片/资源 | 粘贴、拖放、选择、资源偏好与相对链接 | T18、T22、T23、T28、T30～T32 | 进行中 | 部分覆盖 | T30 已完成资源契约/服务与 Markdown 往返门禁；真实桌面输入与双平台验收仍待 T31～T32 |
 | 必须实现 | R7 | 主题颜色 | 只消费现有 token | - | 跳过 | 未覆盖 | 阶段 4/5 |
 | 必须实现 | R8 | 布局调宽 | 只做现有响应式回归 | - | 跳过 | 未覆盖 | 阶段 4，不以 T31 回归冒充实现 |
 | 必须实现 | R9 | 专注/分页阅读 | 暂不纳入 | - | 跳过 | 未覆盖 | 阶段 6 |
-| 必须实现 | R10 | 源码模式 | CodeMirror、统一内容源、异常语法保留 | T18、T19、T24、T25、T30～T32 | 进行中 | 部分覆盖 | T25 已完成 P1 可见排版/源码切换、源码当前文档查找和兼容性重评估；系统 IME 与桌面验收仍待 T30～T32 |
-| 必须实现 | R11 | 真实反馈 | 编辑/保存/恢复/冲突/图片全状态 | T19～T32 | 进行中 | 部分覆盖 | T29 已完成原生菜单状态和持续文档状态栏；完整异常矩阵、系统辅助技术和双平台验收仍待 T30～T32 |
+| 必须实现 | R10 | 源码模式 | CodeMirror、统一内容源、异常语法保留 | T18、T19、T24、T25、T30～T32 | 进行中 | 部分覆盖 | T30 已完成生产源码 adapter 的 source-only 原文门禁；系统 IME 与桌面验收仍待 T31～T32 |
+| 必须实现 | R11 | 真实反馈 | 编辑/保存/恢复/冲突/图片全状态 | T19～T32 | 进行中 | 部分覆盖 | T30 已完成非桌面状态/异常门禁；完整桌面异常矩阵、系统辅助技术和双平台验收仍待 T31～T32 |
 | 必须实现 | R12 | 全文搜索 | 暂不纳入 | - | 跳过 | 未覆盖 | 阶段 7；文档内查找不替代它 |
 | 必须实现 | R13 | 多页签 | 暂不纳入 | - | 跳过 | 未覆盖 | 阶段 3 |
-| 必须实现 | R14 | 多窗口生命周期 | 当前单文档关闭/根替换门禁 | T26、T29～T32 | 进行中 | 部分覆盖 | T29 已完成每窗口菜单状态的聚焦恢复和销毁清理；完整桌面/双平台回归仍待 T30～T31，阶段 3 扩展为全部页签 |
+| 必须实现 | R14 | 多窗口生命周期 | 当前单文档关闭/根替换门禁 | T26、T29～T32 | 进行中 | 部分覆盖 | T30 已完成非桌面窗口结算回归；完整桌面/双平台回归仍待 T31，阶段 3 扩展为全部页签 |
 | 必须实现 | R15 | 主题预设 | 暂不纳入 | - | 跳过 | 未覆盖 | 阶段 5 |
 | 必须实现 | R30 | 键盘流程 | 编辑/保存/模式/当前文档查找/弹层焦点 | T23～T25、T27～T32 | 进行中 | 部分覆盖 | T29 已启用原生保存/另存、撤销/重做、查找和模式菜单，并以 macOS `.app` 验证模式动作；页签/阅读/工作区搜索快捷键仍待对应阶段 |
 | 必须实现 | R31 | 无障碍 | 编辑器与本阶段弹层/状态子集 | T23～T25、T27～T32 | 进行中 | 部分覆盖 | T29 已增加语义状态栏、受控 live-region、窄窗主要状态和原生辅助功能树证据；跨平台系统辅助技术仍待 T31～T32 |
@@ -401,7 +401,7 @@ plainroot-recovery-v1/
 - 实际落地情况：已在 `src/features/editor/adapters/milkdown/` 建立生产 `MilkdownVisualAdapter` 与 `VisualMarkdownEditor`。adapter 使用 CommonMark/GFM、listener 与 clipboard，只接受/输出 `EditorAdapterDocument`/`EditorAdapterChange`，不持有独立文件保存副本；撤销/重做及 Cmd/Ctrl+Z/重做通过回调交给统一 `DocumentSession` history，不启用 Milkdown 第二套权威 history。已实现 H1～H6、粗体、斜体、删除线、行内代码、链接、引用、有序/无序/任务列表、表格、分隔线和受控图片命令；有效选区才显示上下文工具栏，支持纯文本、Markdown、富文本三种复制载荷。富文本粘贴仅保留 CommonMark/GFM 可表达标签，移除事件属性、危险 URL、图片与主动/未知容器，外部图片必须走 `requestImage` 受控 hook；T28 再负责资源导入与按当前文档目录换算链接。只读、焦点、选择/语义锚点、异步创建/销毁、StrictMode 晚到实例清理和 adapter 性能采样均已落地。
   - 性能策略经真实 Chromium 校准为双门槛：UTF-8 内容超过 2 MiB，或非空内容行超过 2000，均在 Milkdown 分配前返回明确源码模式降级。普通约 100 KiB/100 段语料实测挂载 148.6 ms、输入到 Markdown 更新 225.6 ms（包含 listener 200 ms 合并窗口）；约 100 KiB/5680 段极端语料在策略校准前曾测得挂载 813 ms、单次更新约 7.8 秒。初版空行块数代理会漏掉紧凑列表/表格，复核整改后改为流式非空内容行计数；低于 2 MiB 的 2001 项紧凑列表和 2002 行紧凑表格均已前置拒绝。5/20/64 MiB 均由字节门槛前置拒绝，不冻结页面。
   - 新增 22 个 adapter/组件/策略测试，覆盖统一事务、结构命令、三态剪贴板载荷、剪贴板权限失败、富文本清洗、只读、session history 桥接、composition 分组、受控图片 hook 及其异常收敛、100 KiB 挂载、5/20/64 MiB 与高内容行数降级、紧凑列表/表格、LF/CRLF/CR 行计数、已挂载投影跨越门槛时移除陈旧正文、StrictMode 创建中销毁和组件卸载。`pnpm typecheck`、93/93 Vitest、生产构建、许可证 727/508/0 和生产 CSS 私有颜色扫描已通过。真实 Chromium 已验证单实例、格式变更、Markdown 复制、中文 contenteditable 输入、740 px 无横向溢出和干净会话零告警。
-  - 尚未完成的范围保持诚实：T23 组件尚未替换 P1 只读视图，P1/session 保存接线属于 T25；系统输入法候选窗、WebKit/Windows 原生剪贴板和独立峰值内存采样仍由 T30/T31 验收，不能由 Chromium 证据外推。
+  - 尚未完成的范围保持诚实：T23 组件尚未替换 P1 只读视图，P1/session 保存接线属于 T25；T30 仅补生产往返与非桌面门禁，系统输入法候选窗、WebKit/Windows 原生剪贴板和独立峰值内存采样仍由 T31 验收，不能由 Chromium 证据外推。
 
 ### 6.7 任务 T24：CodeMirror 6 源码编辑 adapter
 
@@ -415,7 +415,7 @@ plainroot-recovery-v1/
 - 边界与异常：非法 Markdown 仍可编辑保存；大文档保持可输入；模式切换的外部同步不污染 adapter 内部历史；销毁释放 view。
 - 验证方式：高亮/行号/查找替换/括号/键盘、异常语法、100 KB/5 MB 文档、只读、选择恢复和卸载测试。
 - 完成标准：源码模式直接编辑统一 `markdown`，不支持语法不会被静默删除，文档内查找没有冒充工作区搜索。
-- 实际落地情况：已在 `src/features/editor/adapters/codemirror/` 建立生产 `CodeMirrorSourceAdapter` 与 `SourceMarkdownEditor`，显式组合 Markdown language、行号、语法高亮、括号匹配、当前行、中文当前文档查找/替换、选择/滚动锚点、只读和生命周期，不使用会隐式安装内部 history 的 `basicSetup`。Markdown 本身允许未知语法，adapter 不伪造“通用语法错误”；source-only/解析证据继续由 T19 session compatibility 在 T25 切换时消费。平台撤销/重做与 `execute(history)` 都只回调统一 session，外部 projection 使用 annotation 阻止回环，所有用户变化携带 generation/editVersion/composition group。CodeMirror 内部只能使用单一换行符，故新增原始源码投影层：编辑区以 LF 规范化显示，但变更按原始偏移反投影到 raw Markdown，CRLF、CR 与 mixed 未触及部分不会被静默改成 LF，session 选择仍使用 raw Markdown 偏移。复用审查同时抽取 `EditorSurfaceHandle`、无分配 UTF-8 字节计数和 adapter 测试文档工厂，Milkdown/CodeMirror 不再维护第三份同职责工具。15 个新测试覆盖高亮/行号、异常语法、混合换行投影、真实查找替换、统一 history、composition、只读、外部投影、选择/滚动、5 MiB 输入、组件更新和销毁；`pnpm test` 108/108、类型检查、生产构建和许可证 727/508/0 通过。真实 Chromium 隔离 PoC 已验证中文输入、中文查找面板、匹配定位及 1100/740 px 无横向溢出。P1 仍未消费该组件，模式切换、系统 IME、WebKit/Windows 与桌面 E2E 留给 T25/T30/T31，不能由本任务外推为 R10 完整验收。证据见 `t24-source-editor.md`。
+- 实际落地情况：已在 `src/features/editor/adapters/codemirror/` 建立生产 `CodeMirrorSourceAdapter` 与 `SourceMarkdownEditor`，显式组合 Markdown language、行号、语法高亮、括号匹配、当前行、中文当前文档查找/替换、选择/滚动锚点、只读和生命周期，不使用会隐式安装内部 history 的 `basicSetup`。Markdown 本身允许未知语法，adapter 不伪造“通用语法错误”；source-only/解析证据继续由 T19 session compatibility 在 T25 切换时消费。平台撤销/重做与 `execute(history)` 都只回调统一 session，外部 projection 使用 annotation 阻止回环，所有用户变化携带 generation/editVersion/composition group。CodeMirror 内部只能使用单一换行符，故新增原始源码投影层：编辑区以 LF 规范化显示，但变更按原始偏移反投影到 raw Markdown，CRLF、CR 与 mixed 未触及部分不会被静默改成 LF，session 选择仍使用 raw Markdown 偏移。复用审查同时抽取 `EditorSurfaceHandle`、无分配 UTF-8 字节计数和 adapter 测试文档工厂，Milkdown/CodeMirror 不再维护第三份同职责工具。15 个新测试覆盖高亮/行号、异常语法、混合换行投影、真实查找替换、统一 history、composition、只读、外部投影、选择/滚动、5 MiB 输入、组件更新和销毁；`pnpm test` 108/108、类型检查、生产构建和许可证 727/508/0 通过。真实 Chromium 隔离 PoC 已验证中文输入、中文查找面板、匹配定位及 1100/740 px 无横向溢出。T25 已完成 P1 接线，T30 已补生产 source-only 往返门禁；系统 IME、WebKit/Windows 与桌面 E2E 仍留给 T31，不能由本任务外推为 R10 完整验收。证据见 `t24-source-editor.md`。
 
 ### 6.8 任务 T25：统一编辑器壳、模式切换、格式栏和跨模式历史
 
@@ -429,7 +429,7 @@ plainroot-recovery-v1/
 - 边界与异常：切换或 adapter 初始化失败保留旧模式；busy 时拒绝重入；跨模式 undo/redo 不丢 source-only 语法；只读仅允许选择/复制/查找/另存。
 - 验证方式：visual→source→visual 语料往返、跨模式连续撤销重做、锚点、快速切换、空文档、解析错误、焦点和只读测试；接入时回归超过 2000 个非空内容行的紧凑列表/表格会切换源码降级且不残留陈旧排版正文。
 - 完成标准：用户可在两个模式编辑同一内容，模式、状态和历史都来自同一 session。
-- 实际落地情况：已新增 `DocumentEditorShell`、`EditorToolbar` 与 `SaveStatus`，由 P1 真实消费同一个 `DocumentSession` 和 T23/T24 两种 adapter；中央只读 `<pre>` 已替换为可编辑排版/源码表面。模式切换会先同步读取当前 adapter 的 Markdown、选择与锚点并提交 session，源码回排版再使用生产 `remark` + `remark-gfm` AST 解析器按 generation/editVersion 重评估兼容性；未知语法、mixed 换行、超过 2 MiB 或超过 2000 个非空内容行时保留源码安全路径，陈旧解析结果不会覆盖新内容。只读文档允许模式投影、选择和查找但拒绝正文修改；空文档 placeholder 只存在于 UI。两种 editor chunk 采用 `React.lazy` 按需加载，启动主包为 391.16 kB，排版 chunk 为 334.02 kB，源码 chunk 为 543.59 kB；源码独立 chunk 仍有 Vite 大块告警，但不再进入启动页首包。真实 editor 性能用例按测试文件串行执行，避免 5 MiB CodeMirror 与 Milkdown 实例并发竞争导致时间阈值失真。专项 46/46、全量 Vitest 124/124、类型检查、生产构建、许可证策略/清单及真实 Chromium 排版↔源码往返、即时输入切换、700 px 无溢出均通过。未执行 Rust 测试与桌面 E2E，因为本任务未改 Rust/IPC/capability/menu，且 T25 的真实 Tauri P1、系统 IME、WebKit/Windows 证据仍由 T30/T31 承接。证据见 `t25-editor-shell.md`。
+- 实际落地情况：已新增 `DocumentEditorShell`、`EditorToolbar` 与 `SaveStatus`，由 P1 真实消费同一个 `DocumentSession` 和 T23/T24 两种 adapter；中央只读 `<pre>` 已替换为可编辑排版/源码表面。模式切换会先同步读取当前 adapter 的 Markdown、选择与锚点并提交 session，源码回排版再使用生产 `remark` + `remark-gfm` AST 解析器按 generation/editVersion 重评估兼容性；未知语法、mixed 换行、超过 2 MiB 或超过 2000 个非空内容行时保留源码安全路径，陈旧解析结果不会覆盖新内容。只读文档允许模式投影、选择和查找但拒绝正文修改；空文档 placeholder 只存在于 UI。两种 editor chunk 采用 `React.lazy` 按需加载，启动主包为 391.16 kB，排版 chunk 为 334.02 kB，源码 chunk 为 543.59 kB；源码独立 chunk 仍有 Vite 大块告警，但不再进入启动页首包。真实 editor 性能用例按测试文件串行执行，避免 5 MiB CodeMirror 与 Milkdown 实例并发竞争导致时间阈值失真。专项 46/46、全量 Vitest 124/124、类型检查、生产构建、许可证策略/清单及真实 Chromium 排版↔源码往返、即时输入切换、700 px 无溢出均通过。T30 已补非桌面生产往返与服务门禁；真实 Tauri P1、系统 IME、WebKit/Windows 与桌面 E2E 仍由 T31 承接。证据见 `t25-editor-shell.md`。
 
 ### 6.9 任务 T26：自动/手动保存控制器与窗口结算门禁
 
@@ -504,7 +504,7 @@ plainroot-recovery-v1/
 
 ### 6.13 任务 T30：契约 parity、单元测试与服务集成测试
 
-- 状态：待开始
+- 状态：已完成
 - 依赖：T18～T29。
 - 涉及文件/模块：`tests/fixtures/markdown/`、`src/**/*.test.tsx`、Rust tests、`src-tauri/src/contract_test.rs`、`package.json` 单元/集成脚本、`t30-contract-unit-integration.md`。
 - 目标：为统一模型、编辑器、保存、恢复、冲突和图片建立字段/枚举防漂移、纯状态单测和 Rust 服务集成门禁；桌面 E2E 与跨模块回归留给 T31。
@@ -514,7 +514,13 @@ plainroot-recovery-v1/
 - 边界与异常：测试只用临时 workspace/app data，不读取用户目录；契约测试必须能通过注入字段/tag 漂移真实失败；不可用只改 snapshot 的方式掩盖行为回归。
 - 验证方式：`pnpm test`、新增专项脚本、typecheck/build、Rust fmt/clippy/test、许可证；分别注入 DTO 字段、枚举值、save reducer 和 recovery 容量回归并确认测试如期失败后还原。
 - 完成标准：新增契约没有自动防漂移空洞，核心状态与服务失败路径都有自动化断言，非桌面测试可在新 checkout 重复执行。
-- 实际落地情况：待实施。
+- 实际落地情况：
+  - 已新增 `test:editor`、`test:roundtrip`、`test:rust` 稳定脚本，并让既有 `pnpm test` 统一执行 Node 独立回归、全部 Vitest 与无桌面 feature 的 Rust 服务测试；现有 CI 已调用 `pnpm test`，无需在 T30 修改 workflow，桌面 E2E 与双平台矩阵仍由 T31 承接。
+  - 已用生产 `MilkdownVisualAdapter` 与 `CodeMirrorSourceAdapter` 建立 CommonMark/GFM、图片、受支持 raw HTML 和 source-only 原文的往返语料门禁；不再只依赖 T18 PoC 适配器证明生产链路。
+  - `contract_test.rs` 新增全局登记守卫：`contracts.ts` 每个导出 interface 和字符串常量都必须在 Rust 测试源码中存在字段或枚举/tag parity 断言；图片选择 tagged union 又补充取消形状与 ready proposal 字段断言。
+  - 修复既有安全写测试夹具只使用时间纳秒命名导致的并行目录碰撞。修复前默认全量 `cargo test` 在第 3 次复现两个 `SafeWriteUnavailable`；改用统一 `TestDirectory` 并增加 16 路并发唯一性测试后，默认全量命令连续 10/10 通过，未通过单线程或缩小范围掩盖。
+  - 保存追赶测试从 fake timer 最终补偿收紧为首个写入完成后必须立即启动下一次写入，避免自动保存延迟掩盖追赶状态回归。DTO 字段、枚举值、保存追赶和 128 MiB 恢复容量四类故障注入均如期失败并已还原。
+  - 最终本机验证：Node 独立回归 30/30、Vitest 171/171、Rust 176/176（另 1 项手动性能探针忽略）、`test:editor` 125/125、`test:roundtrip` 3/3、类型检查、生产构建、fmt、Clippy、默认全量 Cargo 测试及许可证 727/508/0 均通过。依赖未变化；`pnpm install --offline --frozen-lockfile --trust-lockfile` 已验证锁文件与本地依赖状态。未执行 T31 的桌面 E2E、远端 CI、Windows 或新增页面验证。
 
 ### 6.14 任务 T31：桌面 E2E、跨模块回归与 macOS/Windows CI
 
@@ -600,12 +606,12 @@ plainroot-recovery-v1/
 ### 8.1 单元测试
 
 - 计划：覆盖 DocumentSession union、save reducer、generation、patch history、跨模式 undo、锚点、autosave debounce/single-flight、editor adapter 生命周期、配置校验、token 生命周期、恢复清理和错误文案。
-- 具体完成情况：T19 已覆盖 session/history；T20 已覆盖恢复仓储；T21 已新增冲突/另存/契约测试；T22 已新增偏好、图片资源和 raw IPC 契约测试；T23/T24 已覆盖两种 adapter；T25 已覆盖生产 AST 兼容性与统一编辑壳；T26 已覆盖 autosave、恢复调度和窗口结算；T27 已覆盖恢复载入、冲突覆盖、另存、P1/P2 入口、外部删除保护和安全关闭；T28 已覆盖图片路径/签名、资源目录、选择/剪贴板部分失败、缺失重定位、单飞/确认失败回滚和移动链接确认；T29 已覆盖每窗口菜单状态、原生动作路由、状态栏内容和 P2 菜单重置。当前 Vitest 为 168 项。
+- 具体完成情况：T19 已覆盖 session/history；T20 已覆盖恢复仓储；T21 已新增冲突/另存/契约测试；T22 已新增偏好、图片资源和 raw IPC 契约测试；T23/T24 已覆盖两种 adapter；T25 已覆盖生产 AST 兼容性与统一编辑壳；T26 已覆盖 autosave、恢复调度和窗口结算；T27 已覆盖恢复载入、冲突覆盖、另存、P1/P2 入口、外部删除保护和安全关闭；T28 已覆盖图片路径/签名、资源目录、选择/剪贴板部分失败、缺失重定位、单飞/确认失败回滚和移动链接确认；T29 已覆盖每窗口菜单状态、原生动作路由、状态栏内容和 P2 菜单重置；T30 增加生产 adapter 往返语料，并收紧保存中继续编辑必须立即追赶的断言。当前 Vitest 为 171 项。
 
 ### 8.2 接口与集成测试
 
 - 计划：在临时 workspace/app data 中测试读取→编辑→safe-write→revision、外部修改→冲突、恢复 upsert/list/delete、另存单目标、资源导入/取消、窗口 close/replace intent；Rust↔TS 对所有新增 struct/tag/enum 做 parity。
-- 具体完成情况：T20 已覆盖 recovery CRUD/授权；T21 已覆盖外部修改→冲突覆盖、工作区内外另存、一次性令牌、源/目标 revision 与 Rust↔TS parity；T22 已覆盖偏好仓储、资源导入/确认/取消、唯一命名、失败清理和资源 DTO/tag/enum parity；T26 已把读取→编辑→safe-write→revision/recovery 接入 P1，并覆盖 close/replace/quit intent、重复请求、拒绝回滚和契约 parity。T28 已接入资源到 Markdown 的选择/粘贴/拖放、受控读取、文档相对路径、缺失重定位和移动后链接重写；T29 已增加 Rust↔TS 菜单状态字段/动作值 parity 和聚焦窗口菜单策略测试。真实桌面保存、图片输入与结算 E2E 仍待 T31。
+- 具体完成情况：T20 已覆盖 recovery CRUD/授权；T21 已覆盖外部修改→冲突覆盖、工作区内外另存、一次性令牌、源/目标 revision 与 Rust↔TS parity；T22 已覆盖偏好仓储、资源导入/确认/取消、唯一命名、失败清理和资源 DTO/tag/enum parity；T26 已把读取→编辑→safe-write→revision/recovery 接入 P1，并覆盖 close/replace/quit intent、重复请求、拒绝回滚和契约 parity。T28 已接入资源到 Markdown 的选择/粘贴/拖放、受控读取、文档相对路径、缺失重定位和移动后链接重写；T29 已增加 Rust↔TS 菜单状态字段/动作值 parity 和聚焦窗口菜单策略测试；T30 增加所有导出 interface/字符串常量的 parity 登记总守卫、图片选择 tagged union 形状断言和统一 Rust 服务门禁。真实桌面保存、图片输入与结算 E2E 仍待 T31。
 
 ### 8.3 页面与交互测试
 
@@ -625,7 +631,7 @@ plainroot-recovery-v1/
 ### 8.6 回归测试
 
 - 计划：T30 先把 editor/roundtrip/recovery/assets 的单元、服务集成和 parity 纳入统一 `pnpm test` 或明确的 CI 必跑脚本；T31 再运行第一阶段全部文件树、CRUD、watch、安全写、窗口、一目录一窗口、P1/P2、焦点和桌面 E2E 跨模块回归。
-- 具体完成情况：待验证。
+- 具体完成情况：T30 已新增 `test:editor`、`test:roundtrip`、`test:rust`，并由 `pnpm test` 统一运行 Node、Vitest 和 Rust 非桌面门禁；Node 30/30、Vitest 171/171、Rust 176/176 通过。默认全量 `cargo test` 的既有并发 flaky 已以统一临时目录修复并连续 10/10 通过。第一阶段跨模块与桌面 E2E 仍由 T31 执行。
 
 ### 8.7 异常与边界测试
 
@@ -653,6 +659,9 @@ nvm use
 pnpm install --frozen-lockfile
 pnpm typecheck
 pnpm test
+pnpm test:editor
+pnpm test:roundtrip
+pnpm test:rust
 pnpm test:licenses
 pnpm licenses:check
 pnpm build
@@ -682,13 +691,13 @@ T18/T30/T31 若新增稳定脚本，必须同步 `package.json`、README、AGENT
 - 冲突、恢复、资源目录和另存副本弹层没有 P1 HTML 原型证据。缓解：明确以 requirement 5.5/5.6/7.1.2、现有 AppDialog/AsyncStatePanel/focusContainment 和 DESIGN 弹层规范为事实源；T27/T29 在编码前审查信息层级、危险动作、键盘焦点和 1280/820/740 px，若出现会改变流程或验收的布局歧义则暂停并补原型/确认。
 - Milkdown/Remark 序列化可能规范化空白、列表或表格写法，并可能无法原样承载未知扩展语法。缓解：T18 硬门禁、raw 节点/源码降级、语义往返语料；失败即停，不静默缩需求。
 - 两个 editor 的事务模型不同，跨模式统一撤销可能出现历史分叉或高内存。缓解：app-level 可逆 patch、adapter 内部 history 不作事实源、内存上限和大文档压力测试。
-- 当前 app-level patch、hash 与撤销校验对每次变更仍为 O(全文长度)，64 MiB 小编辑虽只保存 1 B patch，本机单次记录/撤销仍约 486/255 ms。T26 又在本机 debug 测试路径测得 5/20/64 MiB 完整 safe-write 约 430/1650/5558 ms，证明大源码文档保存仍有可见延迟。缓解：现已采用尺寸分级防抖、保存/快照分别单飞和 pending edit 追赶，T30/T31 继续测量 release/WebView 路径；不得把内存有界或写入次数受控误写成大文件性能通过。
+- 当前 app-level patch、hash 与撤销校验对每次变更仍为 O(全文长度)，64 MiB 小编辑虽只保存 1 B patch，本机单次记录/撤销仍约 486/255 ms。T26 又在本机 debug 测试路径测得 5/20/64 MiB 完整 safe-write 约 430/1650/5558 ms，证明大源码文档保存仍有可见延迟。缓解：现已采用尺寸分级防抖、保存/快照分别单飞和 pending edit 追赶；T30 只固化非桌面正确性门禁，release/WebView 性能仍由 T31 测量。不得把内存有界或写入次数受控误写成大文件性能通过。
 - 恢复快照包含敏感正文。缓解：只在 app data、opaque 名称、Unix `0600`、短期限/有界容量、用户可删除，不上传、不记录日志正文。
 - 自动保存与 watch 竞态可能把自身写入误判为外部冲突或漏掉真实外部变化。缓解：继续使用 operation id 一批次消费，同时以 revision/hash 为最终权威。
 - 关闭/退出握手可能与 window coordinator 锁形成死锁。缓解：锁内只创建 intent/记录状态，绝不持锁等待前端；重复/失效 intent 有明确幂等测试。
 - 工作区外另存扩大单次写入面。缓解：原生选择器、一次性目标 token、再次校验父目录/链接/目标状态，不持久化目录权限。
 - 图片输入可能伪造 MIME、体积过大或留下孤儿副本。已实现 Rust 文件签名/20 MiB 大小校验、唯一 no-replace 命名和 import token 确认/取消；正常失败/取消/过期/进程释放只按身份与 hash 清理本次新建副本。强制终止发生在写盘与插入之间时仍可能遗留孤立资源，应用不会在缺少持久证据时猜测删除。
-- Milkdown/CodeMirror 增加包体和首开耗时。T25 已按模式将两种 editor 懒加载，启动主包降为 391.16 kB，排版 chunk 为 334.02 kB，源码 chunk 为 543.59 kB；源码独立 chunk 仍触发 500 kB 告警。后续缓解：T30/T31 测量 Tauri/WebView 首次进入源码模式的可见延迟，必要时进一步拆分 CodeMirror language/search；加载态不显示旧内容。
+- Milkdown/CodeMirror 增加包体和首开耗时。T25 已按模式将两种 editor 懒加载；T30 最新生产构建为入口 442.85 kB、排版 chunk 336.88 kB、源码 chunk 544.22 kB，源码独立 chunk 仍触发 500 kB 告警。后续缓解：T31 测量 Tauri/WebView 首次进入源码模式的可见延迟，必要时进一步拆分 CodeMirror language/search；加载态不显示旧内容。
 - 安全写与恢复快照都需要写入完整 Markdown；若对 5～64 MiB 文档固定使用 800 ms 自动保存和 2 秒快照，会产生明显磁盘写放大、hash/序列化开销和输入抖动。缓解：T26 已按 5/20 MiB 阈值延长防抖，大文件快照连续输入期最多每 10 秒一次，保存/快照分别单飞并合并陈旧请求；后续只能依据 release/WebView 与双平台证据再校准，不能为性能绕过关闭结算或 revision 校验。
 - 中文/日文 IME、macOS/Windows 剪贴板和拖放事件存在 WebView 差异。T23 已验证浏览器 composition 分组与 Chromium 中文 contenteditable 输入，但没有系统输入法候选窗证据；缓解仍为组件自动化 + macOS 实机 + Windows CI，Windows 原生人工项诚实保留。
 - Milkdown 性能不仅取决于字节数，也取决于节点密度。T23 初版空行块数代理经复核发现会漏掉紧凑列表/表格，现已收敛为 `2 MiB + 2000 个非空内容行` 双门槛并在挂载前降级；T25 已让生产 AST 兼容性解析与 P1 共同消费该门槛，并以密集列表回归确认不会残留陈旧排版实例。T26 继续记录 session patch/hash 和保存开销，T31 复核 WebKit/Windows 与峰值内存，未取得证据前不得提高门槛。
@@ -704,7 +713,7 @@ T18/T30/T31 若新增稳定脚本，必须同步 `package.json`、README、AGENT
 
 ### 10.3 非阻塞假设
 
-- 自动保存 800 ms/2 秒/5 秒尺寸分级和大文件快照 10 秒限频已由 T26 接入并用 fake timer 锁定；它们是基于当前全量写入成本的保守运行常量，不等于性能最终定稿。T23 的排版门槛仍为 `≤2 MiB 且 ≤2000 个非空内容行`，更大的文档进入源码模式；T30/T31 若取得 release/WebView 或双平台证据，可在保持单飞、最终结算和 revision 校验不变的前提下重新校准频率。
+- 自动保存 800 ms/2 秒/5 秒尺寸分级和大文件快照 10 秒限频已由 T26 接入并用 fake timer 锁定；它们是基于当前全量写入成本的保守运行常量，不等于性能最终定稿。T23 的排版门槛仍为 `≤2 MiB 且 ≤2000 个非空内容行`，更大的文档进入源码模式；T30 未取得 release/WebView 或双平台性能证据，T31 若取得此类证据，可在保持单飞、最终结算和 revision 校验不变的前提下重新校准频率。
 - 首版图片导入支持 PNG/JPEG/GIF/WebP，SVG 因主动内容风险明确拒绝；若要支持 SVG，需先补安全渲染规则和验收后另行确认。
 - 单次图片大小上限已在 T22 固化为 20 MiB；Web 输入使用 raw IPC 避免 JSON 数字数组放大，超限和格式错误返回稳定错误且不产生 Markdown 断链。
 - 文档内查找使用 CodeMirror 能力；T25 已让排版模式的“查找”先安全切换到源码并打开当前文档查找，不注册工作区索引、菜单或结果页，仍不构成 R12 工作区搜索。

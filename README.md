@@ -1,6 +1,6 @@
 # Plainroot
 
-Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成本地、macOS 实机与 macOS/Windows 双平台 CI 验收：当前具备 Tauri/React 工程、受控工作区授权、文件扫描与安全写入底座、文件操作/监听、原生窗口菜单、工作区窗口协调、真实 P2 启动页以及隔离的 P1/P2 桌面 E2E。第二阶段 T18～T29 已完成编辑器技术门禁、统一单文档会话、有界跨模式历史、Milkdown/CodeMirror adapter、自动/手动保存、窗口结算、恢复/冲突/另存、图片资源链，以及按聚焦窗口 session 驱动的原生保存/历史/查找/模式菜单和持续文档状态栏；当前仍没有页签、大纲，第二阶段契约/服务门禁、完整桌面 E2E 与双平台验收尚未完成。
+Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成本地、macOS 实机与 macOS/Windows 双平台 CI 验收：当前具备 Tauri/React 工程、受控工作区授权、文件扫描与安全写入底座、文件操作/监听、原生窗口菜单、工作区窗口协调、真实 P2 启动页以及隔离的 P1/P2 桌面 E2E。第二阶段 T18～T30 已完成编辑器技术门禁、统一单文档会话、有界跨模式历史、Milkdown/CodeMirror adapter、自动/手动保存、窗口结算、恢复/冲突/另存、图片资源链、原生菜单与状态栏，以及统一的编辑器/往返/Rust 服务测试门禁；当前仍没有页签、大纲，第二阶段完整桌面 E2E 与最新双平台验收尚未完成。
 
 ## 工具链
 
@@ -18,6 +18,9 @@ pnpm install --frozen-lockfile
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm test:editor
+pnpm test:roundtrip
+pnpm test:rust
 pnpm test:ui
 pnpm test:workspace-path
 pnpm test:workspace-tree

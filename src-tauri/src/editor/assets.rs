@@ -1301,5 +1301,8 @@ mod tests {
                 .collect::<Vec<_>>(),
             typescript_string_constant_values("ASSET_IMPORT_SELECTION_STATUSES")
         );
+        assert_eq!(values[0], serde_json::json!({ "status": "cancelled" }));
+        assert_eq!(values[1]["status"], "ready");
+        assert!(values[1].get("proposal").is_some());
     }
 }

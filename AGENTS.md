@@ -15,7 +15,7 @@
 - T1 已建立并验证技术基线：Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以当前清单和锁文件为准。
 - Markdown 内容事实源始终是用户授权目录中的真实 `.md` 文件；首版不建立云端账号、在线协作、插件市场或私有内容数据库。
 - 当前仓库已完成第一阶段 T1～T17 的本地开发、macOS 实机与 macOS/Windows 双平台 CI 验收；提交 `9a1690a` 的远端矩阵已确认许可证、类型、前端/Rust 测试、4/4 桌面 E2E、未签名生产构建和 artifact 上传全部通过。当前具备真实系统选择器、最近记录、根目录决策、渐进文件树、单文档编辑工作台、文件 CRUD/删除/定位入口、窄窗目录抽屉、多窗口打开和可重复隔离的 P1/P2 桌面测试；Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍无人工实机证据。第一阶段完成不得表述为完整 R1、R2、R5 或 R14 完成。
-- 第二阶段当前分支为 `codex/plainroot-stage-2`，执行计划位于 `agent-works/markdown-editor-desktop/stage-2-markdown-editing/plan.md`；T18～T29 已完成，T30 待开始。当前已建立单一 `DocumentSession`、两种编辑 adapter、自动/手动保存与窗口结算、恢复/冲突/另存、受控图片链路，以及由聚焦窗口真实 session 驱动的原生保存/历史/查找/模式菜单和持续文档状态栏。图片只通过 Rust 授权根命令读写，导入成功落盘后才插入链接，插入失败或文档版本变化会取消未使用资源；完整桌面 E2E、系统 IME、峰值内存与最新 WebKit/Windows 产品证据仍由后续任务验证。
+- 第二阶段当前分支为 `codex/plainroot-stage-2`，执行计划位于 `agent-works/markdown-editor-desktop/stage-2-markdown-editing/plan.md`；T18～T30 已完成，T31 待开始。当前已建立单一 `DocumentSession`、两种编辑 adapter、自动/手动保存与窗口结算、恢复/冲突/另存、受控图片链路，以及由聚焦窗口真实 session 驱动的原生保存/历史/查找/模式菜单和持续文档状态栏。非桌面门禁已统一覆盖生产 Markdown 往返语料、编辑器状态、Rust 服务与全部 Rust↔TypeScript interface/枚举登记；完整桌面 E2E、系统 IME、峰值内存与最新 WebKit/Windows 产品证据仍由后续任务验证。
 
 ## 当前与目标代码边界
 
@@ -67,16 +67,16 @@
 
 ## 命令与验证状态
 
-- 2026-07-22 已在 macOS arm64 实际验证第一阶段锁定工具链、前端/Rust 测试、桌面 E2E 与生产构建；精确命令见第一阶段验收留痕。2026-07-23 的第二阶段 T18～T29 另实际通过编辑器/session/recovery/conflict/assets/save/menu 专项、174 个 Rust 测试（另 1 项手动性能探针忽略）、Rust fmt/Clippy、168 个 Vitest、30 个 Node 独立回归、前端生产构建、macOS `.app` 打包和许可证 727/508/0。T29 浏览器验证覆盖 1280/1050/820/740 px 与 740×460 低高度；最新 macOS `.app` 已验证 P2/P1、fixture 文档、状态栏和原生菜单状态/模式切换。完整编辑保存/恢复/冲突/图片桌面 E2E、系统 IME、峰值内存与最新 Windows 证据仍未验证。
+- 2026-07-22 已在 macOS arm64 实际验证第一阶段锁定工具链、前端/Rust 测试、桌面 E2E 与生产构建；精确命令见第一阶段验收留痕。2026-07-24 的第二阶段 T18～T30 已实际通过编辑器/session/recovery/conflict/assets/save/menu 专项、176 个 Rust 测试（另 1 项手动性能探针忽略）、Rust fmt/Clippy、171 个 Vitest、30 个 Node 独立回归、前端生产构建和许可证 727/508/0。默认全量 `cargo test` 在修复安全写测试夹具目录碰撞后连续 10 次通过；四类故障注入确认 DTO 字段、枚举、保存追赶和恢复容量守卫会真实失败。T29 的页面与 `.app` 证据仍是最新可见交互证据；完整编辑保存/恢复/冲突/图片桌面 E2E、系统 IME、峰值内存与最新 Windows 证据仍未验证。
 - `pnpm test:e2e` 每次使用独立临时状态目录，真实 macOS Tauri/WebKit 4/4 通过：P2 IPC、1100/740px 布局、入口焦点顺序，以及 fixture 工作区经真实授权/窗口绑定/启动快照/文件树扫描读取 P1 Markdown。默认生产依赖图、前端产物和 release 二进制均确认不含 WDIO/WebDriver 或测试命令。T17 另在生产 `.app` 实测 P1/P2、窄窗抽屉焦点链、原生多窗口、Finder、系统废纸篓、外部监听和同状态目录第二实例退出；这些 macOS 证据不替代 Windows 原生人工验收。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。T16 已在 GitHub `windows-latest` 上验证锁定的 Node/Rust 工具链、Windows 编译、测试、WebView2 E2E 和未签名生产构建；原生系统交互仍保留人工未验证状态。
-- 当前自动化测试在既有底座、编辑器、恢复/冲突/资源与菜单链路上共 174 个 Rust 测试通过（另 1 项手动性能探针忽略）、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、168 个 React UI/状态/编辑器测试、1 个 fixture 测试、4 个许可证策略测试和 4 个既有桌面 E2E。提交 `9a1690a` 的 Windows runner 证据只覆盖第一阶段；T18～T29 改动尚无远端 Windows 证据。许可证扫描为 727 个 Node 包、508 个 Rust 包、0 个阻断项。
+- 当前自动化测试在既有底座、编辑器、恢复/冲突/资源与菜单链路上共 176 个 Rust 测试通过（另 1 项手动性能探针忽略）、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、171 个 React UI/状态/编辑器测试、1 个 fixture 测试、4 个许可证策略测试和 4 个既有桌面 E2E。`pnpm test` 已统一执行 Node、Vitest 与无桌面 feature 的 Rust 服务门禁；`test:editor`、`test:roundtrip`、`test:rust` 可单独定位。提交 `9a1690a` 的 Windows runner 证据只覆盖第一阶段；T18～T30 改动尚无远端 Windows 证据。许可证扫描为 727 个 Node 包、508 个 Rust 包、0 个阻断项。
 
 ## 文档、协作与 Git
 
 - 除命令、代码、日志和原文外，面向用户使用简体中文。
 - 需求、计划、开发留痕、业务核查、测试证据和 SQL（若未来确有）放入 `agent-works/{feature-slug}/`；同一功能复用同一语义目录，不在根目录堆零散 Markdown。
 - 已确认任务在既有功能目录内的常规开发留痕，随代码、计划状态和验证证据直接同步，不再单独请求确认；只有功能目录、范围拆分或归档边界存在真实歧义时才确认。
-- 修改代码或文档前检查最近一次远端同步时间；超过 2 小时先同步并解决冲突。最近一次远端同步：2026-07-23 21:12 CST（已抓取 `origin`；当前 `codex/plainroot-stage-2` 尚无 upstream，未推送）。
+- 修改代码或文档前检查最近一次远端同步时间；超过 2 小时先同步并解决冲突。最近一次远端同步：2026-07-24 00:34 CST（已抓取 `origin`；当前 `codex/plainroot-stage-2` 尚无 upstream，未推送）。
 - 工作区可能包含用户未提交改动；先读 `git status`，保留无关改动，不覆盖、不清理、不顺手格式化。
 - 未经用户要求不创建提交或推送。需要提交时按用户确认范围处理，提交信息使用中文语义化描述。

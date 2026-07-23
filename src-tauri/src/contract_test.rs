@@ -3,6 +3,24 @@ use std::collections::BTreeSet;
 use serde::Serialize;
 
 const TYPESCRIPT_CONTRACTS: &str = include_str!("../../src/services/desktop/contracts.ts");
+const RUST_CONTRACT_ASSERTION_SOURCES: &[&str] = &[
+    include_str!("commands/workspace.rs"),
+    include_str!("editor/assets.rs"),
+    include_str!("editor/recovery.rs"),
+    include_str!("editor/save_copy.rs"),
+    include_str!("error.rs"),
+    include_str!("fs/delete.rs"),
+    include_str!("fs/model.rs"),
+    include_str!("fs/mutate.rs"),
+    include_str!("fs/read.rs"),
+    include_str!("fs/safe_write.rs"),
+    include_str!("fs/scan.rs"),
+    include_str!("fs/watch.rs"),
+    include_str!("menu.rs"),
+    include_str!("preferences.rs"),
+    include_str!("state.rs"),
+    include_str!("window.rs"),
+];
 
 pub fn rust_fields(value: &impl Serialize) -> BTreeSet<String> {
     serde_json::to_value(value)
@@ -52,5 +70,49 @@ pub fn assert_interface_matches(interface_name: &str, value: &impl Serialize) {
         rust_fields(value),
         typescript_interface_fields(interface_name),
         "Rust serialization and TypeScript {interface_name} fields drifted"
+    );
+}
+
+fn typescript_export_names(prefix: &str) -> BTreeSet<String> {
+    TYPESCRIPT_CONTRACTS
+        .lines()
+        .filter_map(|line| line.strip_prefix(prefix))
+        .filter_map(|remainder| {
+            remainder
+                .split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+                .next()
+        })
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+fn rust_contract_assertion_names(function_name: &str) -> BTreeSet<String> {
+    RUST_CONTRACT_ASSERTION_SOURCES
+        .iter()
+        .flat_map(|source| {
+            source
+                .match_indices(function_name)
+                .map(move |(index, _)| &source[index + function_name.len()..])
+        })
+        .filter_map(|tail| {
+            let arguments = tail.trim_start().strip_prefix('(')?;
+            let quoted = arguments.split_once('"')?.1;
+            Some(quoted.split_once('"')?.0.to_owned())
+        })
+        .collect()
+}
+
+#[test]
+fn every_exported_typescript_contract_has_a_rust_parity_assertion() {
+    assert_eq!(
+        typescript_export_names("export interface "),
+        rust_contract_assertion_names("assert_interface_matches"),
+        "every exported TypeScript interface must have a Rust serialized-field parity assertion"
+    );
+    assert_eq!(
+        typescript_export_names("export const "),
+        rust_contract_assertion_names("typescript_string_constant_values"),
+        "every exported TypeScript string constant must have a Rust enum/tag parity assertion"
     );
 }
