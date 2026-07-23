@@ -24,3 +24,12 @@ export function utf8ByteLength(value: string): number {
   }
   return bytes;
 }
+
+/**
+ * Counts Han characters individually and groups Latin/digit runs as words.
+ * It is presentation metadata only; Markdown content remains the sole source.
+ */
+export function countDocumentWords(value: string): number {
+  const matches = value.match(/[\p{Script=Han}]|[\p{L}\p{N}_]+/gu);
+  return matches?.length ?? 0;
+}

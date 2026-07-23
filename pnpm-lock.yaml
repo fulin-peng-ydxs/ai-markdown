@@ -47,6 +47,12 @@ importers:
       react-dom:
         specifier: 19.2.7
         version: 19.2.7(react@19.2.7)
+      remark:
+        specifier: 15.0.1
+        version: 15.0.1
+      remark-gfm:
+        specifier: 4.0.1
+        version: 4.0.1
     devDependencies:
       '@tauri-apps/cli':
         specifier: 2.11.4

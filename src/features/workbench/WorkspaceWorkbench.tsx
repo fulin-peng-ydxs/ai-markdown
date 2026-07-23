@@ -22,11 +22,18 @@ import { desktopErrorMessage, normalizeDesktopError } from "../../services/deskt
 import {
   beginDocumentLoad,
   createEmptyDocumentSession,
-  rejectDocumentRead,
-  resolveDocumentRead,
   type DocumentSessionState,
+  type ReadyDocumentSession,
 } from "../editor/documentSession";
-import type { VisualEditingCompatibility } from "../editor/markdownCompatibility";
+import {
+  applyDocumentLoadOutcome,
+  requestDocumentLoad,
+} from "../editor/editorGateway";
+import {
+  DocumentEditorShell,
+  type DocumentEditorMetrics,
+} from "../editor/DocumentEditorShell";
+import { remarkMarkdownCompatibilityParser } from "../editor/remarkMarkdownParser";
 import { PermanentDeleteDialog } from "./PermanentDeleteDialog";
 import { WorkspaceTree } from "./WorkspaceTree";
 import { isSameOrInside, parentPath, replacePrefix } from "./workspacePath";
@@ -51,11 +58,6 @@ import {
 import "./WorkspaceWorkbench.css";
 
 type OperationKind = "create_file" | "create_directory" | "rename" | "move";
-
-const readonlyWorkbenchCompatibility: VisualEditingCompatibility = {
-  mode: "source-only",
-  reasons: ["visual-adapter-not-mounted"],
-};
 
 interface PendingOperation {
   kind: OperationKind;
@@ -91,6 +93,8 @@ export function WorkspaceWorkbench({
   const [documentState, setDocumentState] = useState<DocumentSessionState>(
     createEmptyDocumentSession,
   );
+  const [documentMetrics, setDocumentMetrics] =
+    useState<DocumentEditorMetrics | null>(null);
   const documentStateRef = useRef(documentState);
   const [pageError, setPageError] = useState<DesktopError | null>(null);
   const [operation, setOperation] = useState<PendingOperation | null>(null);
@@ -247,6 +251,7 @@ export function WorkspaceWorkbench({
     treeRef.current = createWorkspaceTreeState();
     setExpanded(new Set());
     setSelectedPath(null);
+    setDocumentMetrics(null);
     commitDocument(
       createEmptyDocumentSession(documentStateRef.current.generation + 1),
     );
@@ -320,41 +325,39 @@ export function WorkspaceWorkbench({
       relativePath: path,
     });
     commitDocument(loading);
-    try {
-      const result = await gateway.read(targetWorkspace.id, path);
-      if (!mountedRef.current || generation !== generationRef.current) return;
-      const resolved = resolveDocumentRead(
-        documentStateRef.current,
-        loading.generation,
-        result,
-        readonlyWorkbenchCompatibility,
-        false,
-      );
-      commitDocument(resolved);
-      if (
-        resolved.status !== "empty" &&
-        resolved.generation === loading.generation &&
-        resolved.relativePath === path
-      ) {
-        void gateway.setTitle(path).catch((reason) => {
-          if (
-            mountedRef.current &&
-            generation === generationRef.current &&
-            documentStateRef.current.generation === loading.generation
-          ) {
-            setPageError(normalizeDesktopError(reason, "window_title_failed"));
-          }
-        });
-      }
-    } catch (reason) {
-      if (!mountedRef.current || generation !== generationRef.current) return;
-      commitDocument(
-        rejectDocumentRead(
-          documentStateRef.current,
-          loading.generation,
-          normalizeDesktopError(reason, "io_failure"),
-        ),
-      );
+    setDocumentMetrics(null);
+    const outcome = await requestDocumentLoad(
+      {
+        generation: loading.generation,
+        workspaceId: targetWorkspace.id,
+        relativePath: path,
+        writable:
+          targetWorkspace.writable &&
+          (treeRef.current.entries[path]?.writable ?? true),
+      },
+      gateway,
+      remarkMarkdownCompatibilityParser,
+    );
+    if (!mountedRef.current || generation !== generationRef.current) return;
+    const resolved = applyDocumentLoadOutcome(
+      documentStateRef.current,
+      outcome,
+    );
+    commitDocument(resolved);
+    if (
+      resolved.status !== "empty" &&
+      resolved.generation === loading.generation &&
+      resolved.relativePath === path
+    ) {
+      void gateway.setTitle(path).catch((reason) => {
+        if (
+          mountedRef.current &&
+          generation === generationRef.current &&
+          documentStateRef.current.generation === loading.generation
+        ) {
+          setPageError(normalizeDesktopError(reason, "window_title_failed"));
+        }
+      });
     }
   }
 
@@ -626,7 +629,7 @@ export function WorkspaceWorkbench({
     if (tree.watch.status === "permission_denied") return "工作区权限已撤销";
     if (tree.watch.status === "failed") return "文件监听已停止，可手动刷新";
     if (rootLoading) return `正在读取文件树${rootScan?.processed ? ` · ${rootScan.processed} 项` : ""}`;
-    return "磁盘状态已同步";
+    return "文件树已同步";
   }, [busyLabel, rootLoading, rootScan?.processed, tree.watch.status]);
 
   return (
@@ -705,14 +708,19 @@ export function WorkspaceWorkbench({
           </div>
         </aside>
 
-        <section className="workbench__document" aria-label="文档查看区">
-          <DocumentView state={documentState} onRetry={(path) => void openMarkdown(path)} />
+        <section className="workbench__document" aria-label="文档编辑区">
+          <DocumentView
+            onMetricsChange={setDocumentMetrics}
+            onRetry={(path) => void openMarkdown(path)}
+            onSessionChange={commitDocument}
+            state={documentState}
+          />
         </section>
       </div>
 
       <footer className="workbench__statusbar" aria-live="polite">
         <span>{statusText}</span>
-        <span>{documentMetric(documentState)}</span>
+        <span>{documentMetric(documentState, documentMetrics)}</span>
         <span>{workspace.writable ? "工作区可写" : "工作区只读"}</span>
       </footer>
 
@@ -783,14 +791,18 @@ export function WorkspaceWorkbench({
 }
 
 function DocumentView({
+  onMetricsChange,
   state,
   onRetry,
+  onSessionChange,
 }: {
+  onMetricsChange(metrics: DocumentEditorMetrics): void;
   state: DocumentSessionState;
   onRetry(path: WorkspaceRelativePath): void;
+  onSessionChange(session: ReadyDocumentSession): void;
 }) {
   if (state.status === "empty") {
-    return <div className="workbench__document-empty"><span aria-hidden="true">M↓</span><h1>选择一份 Markdown 文档</h1><p>当前阶段提供真实只读查看；编辑与页签将在后续阶段接入，不会用假控件占位。</p></div>;
+    return <div className="workbench__document-empty"><span aria-hidden="true">M↓</span><h1>选择一份 Markdown 文档</h1><p>文档会在当前窗口打开；页签将在后续阶段接入。</p></div>;
   }
   if (state.status === "loading") {
     return <AsyncStatePanel description={state.relativePath} state="loading" title="正在读取文档" />;
@@ -804,15 +816,22 @@ function DocumentView({
     return <AsyncStatePanel actions={<button className="plainroot-button" onClick={() => onRetry(state.relativePath)} type="button">重试读取</button>} description={`${error ? desktopErrorMessage(error) : "文档读取结果不完整。"} 当前内存中没有可安全展示的旧内容。`} state={error?.code === "permission_denied" ? "permission_denied" : error?.code === "path_not_found" ? "missing" : "error"} title="无法读取文档" />;
   }
   return (
-    <article className="workbench__reader">
-      <header><span>只读 Markdown</span><strong>{state.relativePath}</strong></header>
-      <pre>{state.markdown}</pre>
-    </article>
+    <DocumentEditorShell
+      onMetricsChange={onMetricsChange}
+      onSessionChange={onSessionChange}
+      session={state}
+    />
   );
 }
 
-function documentMetric(state: Parameters<typeof DocumentView>[0]["state"]): string {
-  return state.status === "ready" ? `${state.markdown.length} 字符` : "未打开文档";
+function documentMetric(
+  state: Parameters<typeof DocumentView>[0]["state"],
+  metrics: DocumentEditorMetrics | null,
+): string {
+  if (state.status !== "ready") return "未打开文档";
+  return metrics
+    ? `${metrics.wordCount} 字/词 · ${metrics.characterCount} 字符`
+    : `${state.markdown.length} 字符`;
 }
 
 function supportsPageRetry(error: DesktopError, hasSelectedEntry: boolean) {

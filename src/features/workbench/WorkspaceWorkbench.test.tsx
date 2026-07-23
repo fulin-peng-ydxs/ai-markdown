@@ -97,7 +97,8 @@ describe("WorkspaceWorkbench", () => {
     await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
 
     expect(await screen.findByText(/真实文档/)).toBeTruthy();
-    expect(screen.getByText("只读 Markdown")).toBeTruthy();
+    expect(screen.getByRole("toolbar", { name: "文档编辑工具" })).toBeTruthy();
+    expect(screen.getByText("磁盘版本")).toBeTruthy();
     expect(api.read).toHaveBeenCalledWith("workspace-a", "note.md");
     await waitFor(() => expect(api.setTitle).toHaveBeenCalledWith("note.md"));
   });
@@ -158,6 +159,42 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.queryByText(/过期文档/)).toBeNull();
   });
 
+  it("opens a dense Markdown document directly in source mode without stale visual content", async () => {
+    const denseList = Array.from(
+      { length: 2_001 },
+      (_, index) => `- item ${index}`,
+    ).join("\n");
+    const api = gateway({
+      read: vi.fn().mockResolvedValue({
+        relativePath: "note.md",
+        status: "ready",
+        content: denseList,
+        revision: {
+          modifiedAt: 1,
+          size: denseList.length,
+          contentHash: "dense",
+          encoding: "utf8",
+          lineEnding: "lf",
+        },
+      }),
+    });
+    const user = userEvent.setup();
+    const rendered = render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await waitFor(() =>
+      expect(rendered.container.querySelector(".cm-editor")).not.toBeNull(),
+    );
+    expect(rendered.container.querySelector(".ProseMirror")).toBeNull();
+    expect(screen.getByText(/文档结构过密/)).toBeTruthy();
+  });
+
   it("adds a created file only after the disk gateway succeeds", async () => {
     const api = gateway();
     const user = userEvent.setup();
@@ -173,7 +210,7 @@ describe("WorkspaceWorkbench", () => {
 
     await waitFor(() => expect(api.createFile).toHaveBeenCalledWith("workspace-a", "new.md", null));
     expect(await screen.findByRole("treeitem", { name: /new\.md/ })).toBeTruthy();
-    expect(screen.getByText("磁盘状态已同步")).toBeTruthy();
+    expect(screen.getByText("文件树已同步")).toBeTruthy();
   });
 
   it("keeps the last safe tree when a disk mutation fails", async () => {

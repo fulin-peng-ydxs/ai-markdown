@@ -40,6 +40,7 @@ export interface VisualMarkdownEditorProps {
   }): void;
   onPerformance?(sample: VisualEditorPerformanceSample): void;
   onHistoryCommand?(direction: "undo" | "redo"): boolean;
+  onSelectionChange?(selection: EditorSelection): void;
   onRequestImage?(
     selection: EditorSelection,
   ): Promise<{ src: string; alt?: string; title?: string } | null>;
@@ -59,6 +60,7 @@ export const VisualMarkdownEditor = forwardRef<
     onPerformance,
     onRequestImage,
     onRequestLink,
+    onSelectionChange,
   },
   forwardedRef,
 ) {
@@ -71,6 +73,7 @@ export const VisualMarkdownEditor = forwardRef<
   const onPerformanceRef = useRef(onPerformance);
   const onRequestImageRef = useRef(onRequestImage);
   const onUnavailableRef = useRef(onUnavailable);
+  const onSelectionChangeRef = useRef(onSelectionChange);
   const [selection, setSelection] = useState<EditorSelection>(document.selection);
   const [ready, setReady] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -85,14 +88,24 @@ export const VisualMarkdownEditor = forwardRef<
   onPerformanceRef.current = onPerformance;
   onRequestImageRef.current = onRequestImage;
   onUnavailableRef.current = onUnavailable;
+  onSelectionChangeRef.current = onSelectionChange;
 
   useImperativeHandle(
     forwardedRef,
     () => ({
       execute: (command) => adapterRef.current?.execute(command) ?? false,
       focus: () => adapterRef.current?.focus(),
+      getMarkdown: () =>
+        adapterRef.current?.getMarkdown() ?? loadedDocumentRef.current?.markdown ?? "",
       getSelection: () =>
         adapterRef.current?.getSelection() ?? { kind: "visual", from: 0, to: 0 },
+      getAnchor: () =>
+        adapterRef.current?.getAnchor() ?? {
+          kind: "semantic",
+          blockId: null,
+          fallbackOffset: 0,
+          scrollTop: 0,
+        },
       setSelection: (nextSelection) => adapterRef.current?.setSelection(nextSelection),
       copySelection: async (format) => copy(format),
       requestImage: async () => requestImage(),
@@ -118,7 +131,10 @@ export const VisualMarkdownEditor = forwardRef<
     const adapter = new MilkdownVisualAdapter(root, {
       readOnly,
       onSelectionChange: (nextSelection) => {
-        if (active) setSelection(nextSelection);
+        if (active) {
+          setSelection(nextSelection);
+          onSelectionChangeRef.current?.(nextSelection);
+        }
       },
       onPerformance: (sample) => onPerformanceRef.current?.(sample),
       onHistoryCommand: (direction) => onHistoryCommandRef.current?.(direction) ?? false,

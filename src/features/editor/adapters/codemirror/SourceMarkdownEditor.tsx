@@ -8,6 +8,7 @@ import {
 import type {
   EditorAdapterChange,
   EditorAdapterDocument,
+  EditorSelection,
   EditorSurfaceHandle,
 } from "../../editorAdapter";
 import {
@@ -24,6 +25,7 @@ export interface SourceMarkdownEditorProps {
   onChange(change: EditorAdapterChange): void;
   onHistoryCommand?(direction: "undo" | "redo"): boolean;
   onPerformance?(sample: SourceEditorPerformanceSample): void;
+  onSelectionChange?(selection: EditorSelection): void;
   onUnavailable?(reason: { code: "adapter_failed"; message: string }): void;
 }
 
@@ -37,6 +39,7 @@ export const SourceMarkdownEditor = forwardRef<
     onChange,
     onHistoryCommand,
     onPerformance,
+    onSelectionChange,
     onUnavailable,
   },
   forwardedRef,
@@ -47,11 +50,13 @@ export const SourceMarkdownEditor = forwardRef<
   const onChangeRef = useRef(onChange);
   const onHistoryCommandRef = useRef(onHistoryCommand);
   const onPerformanceRef = useRef(onPerformance);
+  const onSelectionChangeRef = useRef(onSelectionChange);
   const onUnavailableRef = useRef(onUnavailable);
 
   onChangeRef.current = onChange;
   onHistoryCommandRef.current = onHistoryCommand;
   onPerformanceRef.current = onPerformance;
+  onSelectionChangeRef.current = onSelectionChange;
   onUnavailableRef.current = onUnavailable;
 
   useImperativeHandle(
@@ -59,11 +64,19 @@ export const SourceMarkdownEditor = forwardRef<
     () => ({
       execute: (command) => adapterRef.current?.execute(command) ?? false,
       focus: () => adapterRef.current?.focus(),
+      getMarkdown: () =>
+        adapterRef.current?.getMarkdown() ?? loadedDocumentRef.current?.markdown ?? "",
       getSelection: () =>
         adapterRef.current?.getSelection() ?? {
           kind: "source",
           anchor: 0,
           head: 0,
+        },
+      getAnchor: () =>
+        adapterRef.current?.getAnchor() ?? {
+          kind: "source",
+          offset: 0,
+          scrollTop: 0,
         },
       setSelection: (selection) => adapterRef.current?.setSelection(selection),
     }),
@@ -77,6 +90,8 @@ export const SourceMarkdownEditor = forwardRef<
 
     const adapter = new CodeMirrorSourceAdapter(root, {
       readOnly,
+      onSelectionChange: (selection) =>
+        onSelectionChangeRef.current?.(selection),
       onHistoryCommand: (direction) =>
         onHistoryCommandRef.current?.(direction) ?? false,
       onPerformance: (sample) => onPerformanceRef.current?.(sample),

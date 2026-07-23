@@ -65,6 +65,8 @@ export interface EditorAdapter {
 export interface EditorSurfaceHandle {
   execute(command: EditorCommand): boolean;
   focus(): void;
+  getMarkdown(): string;
   getSelection(): EditorSelection;
+  getAnchor(): DocumentAnchor;
   setSelection(selection: EditorSelection): void;
 }

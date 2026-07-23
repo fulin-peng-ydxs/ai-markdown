@@ -226,9 +226,6 @@ export function applyDocumentEdit(
   ) {
     return { status: "stale", session };
   }
-  if (session.saveState.kind === "readonly") {
-    return { status: "readonly", session };
-  }
   if (
     transaction.mode === "visual" &&
     session.compatibility.mode === "source-only"
@@ -245,6 +242,9 @@ export function applyDocumentEdit(
         anchor: transaction.anchor,
       },
     };
+  }
+  if (session.saveState.kind === "readonly") {
+    return { status: "readonly", session };
   }
 
   const history = recordDocumentChange(session.history, {

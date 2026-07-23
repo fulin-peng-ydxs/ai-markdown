@@ -147,6 +147,10 @@ export class CodeMirrorSourceAdapter implements EditorAdapter {
     this.view?.focus();
   }
 
+  getMarkdown(): string {
+    return this.rawMarkdown;
+  }
+
   getSelection(): EditorSelection {
     const main = this.view?.state.selection.main;
     return main

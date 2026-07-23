@@ -191,6 +191,28 @@ describe("DocumentSession", () => {
     ).toBe("mode_unavailable");
   });
 
+  it("allows readonly sessions to change projection without changing content", () => {
+    const session = readySession({ writable: false });
+    expect(
+      applyDocumentEdit(session, {
+        generation: session.generation,
+        expectedEditVersion: session.editVersion,
+        markdown: session.markdown,
+        mode: "source",
+        selection: { kind: "source", anchor: 2, head: 2 },
+        anchor: { kind: "source", offset: 2, scrollTop: 10 },
+        transactionGroup: null,
+      }),
+    ).toMatchObject({
+      status: "applied",
+      session: {
+        markdown: "# A",
+        mode: "source",
+        saveState: { kind: "readonly" },
+      },
+    });
+  });
+
   it("reassesses current source after unsupported syntax or mixed endings are removed", () => {
     const mixedLoading = beginDocumentLoad(createEmptyDocumentSession(), {
       workspaceId: "workspace-a",

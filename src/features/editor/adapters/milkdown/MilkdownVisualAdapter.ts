@@ -80,6 +80,7 @@ export class MilkdownVisualAdapter implements EditorAdapter {
   private readonly listeners = new Set<(change: EditorAdapterChange) => void>();
   private destroyed = false;
   private compositionGroup: string | null = null;
+  private currentMarkdown = "";
   private lastAppliedMarkdown = "";
   private lastInputStartedAt: number | null = null;
   private applyingExternalDocument = false;
@@ -101,6 +102,7 @@ export class MilkdownVisualAdapter implements EditorAdapter {
     this.lastInputStartedAt = null;
     if (this.editor) await this.editor.destroy();
     this.document = document;
+    this.currentMarkdown = document.markdown;
     this.lastAppliedMarkdown = document.markdown;
     this.mountHost?.remove();
     const mountHost = this.root.ownerDocument.createElement("div");
@@ -217,11 +219,19 @@ export class MilkdownVisualAdapter implements EditorAdapter {
     } else {
       this.lastAppliedMarkdown = markdown;
     }
+    this.currentMarkdown = document.markdown;
     this.setSelection(document.selection);
   }
 
   focus(): void {
     this.view()?.focus();
+  }
+
+  getMarkdown(): string {
+    if (!this.editor) return this.currentMarkdown;
+    return this.lastInputStartedAt === null
+      ? this.currentMarkdown
+      : this.editor.action(getMarkdown());
   }
 
   getSelection(): EditorSelection {
@@ -261,7 +271,9 @@ export class MilkdownVisualAdapter implements EditorAdapter {
       kind: "semantic",
       blockId,
       fallbackOffset: selection.from,
-      scrollTop: this.root.closest(".workbench__document")?.scrollTop ?? this.root.scrollTop,
+      scrollTop:
+        this.root.closest<HTMLElement>("[data-editor-scroll-owner]")?.scrollTop ??
+        this.root.scrollTop,
     };
   }
 
@@ -340,6 +352,7 @@ export class MilkdownVisualAdapter implements EditorAdapter {
     this.creationPromise = null;
     this.mountHost = null;
     this.document = null;
+    this.currentMarkdown = "";
     mountHost?.remove();
     if (editor) {
       void (creationPromise ?? Promise.resolve())
@@ -372,6 +385,7 @@ export class MilkdownVisualAdapter implements EditorAdapter {
 
   private emitMarkdownChange(markdown: string): void {
     if (this.destroyed || !this.document || markdown === this.lastAppliedMarkdown) return;
+    this.currentMarkdown = markdown;
     if (this.lastInputStartedAt !== null) {
       this.recordPerformance("input_to_markdown", this.lastInputStartedAt, markdown);
       this.lastInputStartedAt = null;

@@ -1,0 +1,34 @@
+body {
+  margin: 0;
+  color: var(--color-text);
+  background: var(--color-paper-deep);
+  font: var(--font-ui-md);
+}
+
+body > #root > main {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: var(--space-xl);
+}
+
+body > #root > main > section {
+  margin-top: var(--space-2xl);
+}
+
+.editor-shell-poc {
+  height: min(680px, calc(100vh - 140px));
+  min-height: 420px;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+}
+
+.editor-shell-poc[data-narrow] {
+  width: min(700px, 100%);
+}
+
+@media (max-width: 560px) {
+  body > #root > main {
+    padding: var(--space-md);
+  }
+}

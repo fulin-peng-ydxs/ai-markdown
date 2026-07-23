@@ -3,6 +3,13 @@ import { createRoot } from "react-dom/client";
 
 import commonmarkGfm from "../../../../tests/fixtures/markdown/commonmark-gfm.md?raw";
 import "../../../styles/tokens.css";
+import {
+  beginDocumentLoad,
+  createEmptyDocumentSession,
+  resolveDocumentRead,
+  type ReadyDocumentSession,
+} from "../documentSession";
+import { DocumentEditorShell } from "../DocumentEditorShell";
 import type { EditorAdapterDocument } from "../editorAdapter";
 import {
   VisualMarkdownEditor,
@@ -16,6 +23,7 @@ import {
 import type { SourceEditorPerformanceSample } from "../adapters/codemirror/CodeMirrorSourceAdapter";
 import { createCodeMirrorPoc } from "./codeMirrorPoc";
 import { MilkdownReactPoc } from "./MilkdownReactPoc";
+import "./poc.css";
 
 function BrowserPoc() {
   const codeMirrorRoot = useRef<HTMLDivElement>(null);
@@ -42,6 +50,10 @@ function BrowserPoc() {
   });
   const [sourceSample, setSourceSample] =
     useState<SourceEditorPerformanceSample | null>(null);
+  const [shellSession, setShellSession] = useState<ReadyDocumentSession>(() =>
+    createShellSession(commonmarkGfm),
+  );
+  const [shellNarrow, setShellNarrow] = useState(false);
 
   useEffect(() => {
     const host = codeMirrorRoot.current;
@@ -157,6 +169,21 @@ function BrowserPoc() {
           ref={sourceEditorRef}
         />
       </section>
+      <section aria-label="T25 统一编辑器壳">
+        <h2>T25 统一编辑器壳</h2>
+        <button onClick={() => setShellNarrow((current) => !current)} type="button">
+          开发验证：{shellNarrow ? "恢复宽窗" : "窄窗 700px"}
+        </button>
+        <div
+          className="editor-shell-poc"
+          data-narrow={shellNarrow || undefined}
+        >
+          <DocumentEditorShell
+            onSessionChange={setShellSession}
+            session={shellSession}
+          />
+        </div>
+      </section>
     </main>
   );
 }
@@ -169,3 +196,30 @@ createRoot(root).render(
     <BrowserPoc />
   </StrictMode>,
 );
+
+function createShellSession(markdown: string): ReadyDocumentSession {
+  const loading = beginDocumentLoad(createEmptyDocumentSession(), {
+    workspaceId: "poc-workspace",
+    relativePath: "commonmark-gfm.md",
+  });
+  const resolved = resolveDocumentRead(
+    loading,
+    loading.generation,
+    {
+      relativePath: "commonmark-gfm.md",
+      status: "ready",
+      content: markdown,
+      revision: {
+        modifiedAt: 1,
+        size: markdown.length,
+        contentHash: "poc",
+        encoding: "utf8",
+        lineEnding: "lf",
+      },
+    },
+    { mode: "visual", reasons: [] },
+    true,
+  );
+  if (resolved.status !== "ready") throw new Error("T25 PoC session failed");
+  return resolved;
+}

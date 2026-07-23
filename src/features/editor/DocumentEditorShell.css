@@ -1,0 +1,168 @@
+.document-editor-shell {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-paper);
+}
+
+.document-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  padding: var(--space-xs) var(--space-md);
+  overflow-x: auto;
+  color: var(--color-muted);
+  background: var(--color-chrome);
+  border-bottom: 1px solid var(--color-line);
+  scrollbar-width: thin;
+}
+
+.document-editor-toolbar__modes,
+.document-editor-toolbar__group {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+}
+
+.document-editor-toolbar button {
+  flex: none;
+  min-width: 30px;
+  min-height: 28px;
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--color-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font: var(--font-ui-sm);
+}
+
+.document-editor-toolbar button:hover:not(:disabled) {
+  color: var(--color-heading);
+  background: var(--color-paper-hover);
+  border-color: var(--color-line);
+}
+
+.document-editor-toolbar button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.document-editor-toolbar button[aria-pressed="true"] {
+  color: var(--color-heading);
+  background: var(--color-accent-soft);
+  border-color: var(--color-line-strong);
+  font-weight: 600;
+}
+
+.document-editor-toolbar button:disabled {
+  color: var(--color-quiet);
+  cursor: not-allowed;
+}
+
+.document-editor-toolbar__divider {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 0 var(--space-xs);
+  background: var(--color-line);
+}
+
+.document-save-status {
+  display: inline-flex;
+  flex: none;
+  gap: var(--space-xs);
+  align-items: center;
+  margin-left: auto;
+  padding-left: var(--space-sm);
+  color: var(--color-muted);
+  font: var(--font-ui-sm);
+  white-space: nowrap;
+}
+
+.document-save-status__dot {
+  width: 7px;
+  height: 7px;
+  background: var(--color-quiet);
+  border-radius: 50%;
+}
+
+.document-save-status[data-state="dirty"] .document-save-status__dot,
+.document-save-status[data-state="saving"] .document-save-status__dot {
+  background: var(--color-warning);
+}
+
+.document-save-status[data-state="saved"] .document-save-status__dot,
+.document-save-status[data-state="clean"] .document-save-status__dot {
+  background: var(--color-success);
+}
+
+.document-save-status[data-state="save_failed"] .document-save-status__dot,
+.document-save-status[data-state="conflict"] .document-save-status__dot {
+  background: var(--color-danger);
+}
+
+.document-editor-shell__notice {
+  padding: 5px var(--space-md);
+  color: var(--color-muted);
+  background: var(--color-paper-deep);
+  border-bottom: 1px solid var(--color-line);
+  font: var(--font-ui-sm);
+}
+
+.document-editor-shell__notice[data-error] {
+  color: var(--color-danger);
+}
+
+.document-editor-shell__surface {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.document-editor-shell__surface[data-mode="visual"] {
+  padding: clamp(var(--space-lg), 3vw, var(--space-2xl));
+}
+
+.document-editor-shell__surface[data-mode="source"] {
+  overflow: hidden;
+}
+
+.document-editor-shell__surface[data-mode="source"] .source-markdown-editor,
+.document-editor-shell__surface[data-mode="source"] .source-markdown-editor__canvas,
+.document-editor-shell__surface[data-mode="source"] .cm-editor,
+.document-editor-shell__surface[data-mode="source"] .cm-scroller {
+  height: 100%;
+}
+
+.document-editor-shell__placeholder {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-xl);
+  left: clamp(var(--space-lg), 3vw, var(--space-2xl));
+  margin: 0;
+  color: var(--color-quiet);
+  font: var(--font-ui-md);
+  pointer-events: none;
+}
+
+.document-editor-shell__surface[data-mode="source"] .document-editor-shell__placeholder {
+  top: var(--space-lg);
+  left: calc(3ch + (var(--space-sm) * 3));
+}
+
+@media (max-width: 560px) {
+  .document-editor-toolbar {
+    padding-right: var(--space-sm);
+    padding-left: var(--space-sm);
+  }
+
+  .document-save-status {
+    margin-left: var(--space-xs);
+  }
+}
