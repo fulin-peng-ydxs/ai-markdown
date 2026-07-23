@@ -12,6 +12,8 @@ export interface EditorToolbarProps {
   onResolveConflict?(): void;
   onSave?(): void;
   onSaveCopy?(): void;
+  onAssetSettings?(): void;
+  onInsertImage?(): void;
   onCommand(command: EditorCommand): void;
   onModeChange(mode: EditorMode): void;
 }
@@ -26,6 +28,8 @@ export function EditorToolbar({
   onResolveConflict,
   onSave,
   onSaveCopy,
+  onAssetSettings,
+  onInsertImage,
   onCommand,
   onModeChange,
 }: EditorToolbarProps) {
@@ -151,6 +155,26 @@ export function EditorToolbar({
           onClick={onSaveCopy}
         >
           另存副本
+        </ToolbarButton>
+      ) : null}
+
+      {onInsertImage ? (
+        <ToolbarButton
+          disabled={readonly || busy}
+          label="从本机选择并插入图片"
+          onClick={onInsertImage}
+        >
+          图片
+        </ToolbarButton>
+      ) : null}
+
+      {onAssetSettings ? (
+        <ToolbarButton
+          disabled={busy}
+          label="设置图片资源目录"
+          onClick={onAssetSettings}
+        >
+          资源目录
         </ToolbarButton>
       ) : null}
 

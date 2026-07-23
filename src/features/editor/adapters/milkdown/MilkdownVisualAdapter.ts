@@ -24,6 +24,7 @@ import {
   wrapInBulletListCommand,
   wrapInHeadingCommand,
   wrapInOrderedListCommand,
+  imageSchema,
   commonmark,
 } from "@milkdown/kit/preset/commonmark";
 import {
@@ -31,7 +32,7 @@ import {
   insertTableCommand,
   toggleStrikethroughCommand,
 } from "@milkdown/kit/preset/gfm";
-import { $prose, callCommand, getMarkdown, replaceAll } from "@milkdown/kit/utils";
+import { $prose, $view, callCommand, getMarkdown, replaceAll } from "@milkdown/kit/utils";
 
 import type {
   DocumentAnchor,
@@ -48,12 +49,23 @@ import {
   type VisualClipboardPayload,
 } from "./clipboard";
 import { visualEditorEligibility } from "./visualEditorPolicy";
+import {
+  createWorkspaceImageNodeView,
+  type PreparedImageRelocation,
+  type ResolvedWorkspaceImage,
+} from "./workspaceImageNodeView";
 
 export interface MilkdownVisualAdapterOptions {
   readOnly?: boolean;
   onSelectionChange?: (selection: EditorSelection) => void;
   onPerformance?: (sample: VisualEditorPerformanceSample) => void;
   onHistoryCommand?: (direction: "undo" | "redo") => boolean;
+  onRelocateImage?: (
+    source: string,
+  ) => Promise<PreparedImageRelocation | null>;
+  onResolveImage?: (
+    source: string,
+  ) => Promise<ResolvedWorkspaceImage | null>;
 }
 
 export interface VisualEditorPerformanceSample {
@@ -137,6 +149,13 @@ export class MilkdownVisualAdapter implements EditorAdapter {
           },
         }),
     );
+    const workspaceImageView = $view(imageSchema.node, () => (node, view, getPos) =>
+      createWorkspaceImageNodeView(node, view, getPos, {
+        readOnly: Boolean(this.options.readOnly),
+        relocate: this.options.onRelocateImage,
+        resolve: this.options.onResolveImage,
+      }),
+    );
     const editor = Editor.make()
       .config((ctx) => {
         ctx.set(rootCtx, mountHost);
@@ -178,6 +197,7 @@ export class MilkdownVisualAdapter implements EditorAdapter {
           });
       })
       .use(commonmark)
+      .use(workspaceImageView)
       .use(gfm)
       .use(clipboard)
       .use(sessionHistoryBridge)
@@ -250,6 +270,17 @@ export class MilkdownVisualAdapter implements EditorAdapter {
     view.dispatch(
       view.state.tr.setSelection(
         TextSelection.between(view.state.doc.resolve(from), view.state.doc.resolve(to)),
+      ),
+    );
+  }
+
+  setSelectionAtCoordinates(x: number, y: number): void {
+    const view = this.view();
+    const position = view?.posAtCoords({ left: x, top: y })?.pos;
+    if (!view || position === undefined) return;
+    view.dispatch(
+      view.state.tr.setSelection(
+        TextSelection.near(view.state.doc.resolve(position)),
       ),
     );
   }
@@ -414,7 +445,8 @@ export class MilkdownVisualAdapter implements EditorAdapter {
   }
 
   private view() {
-    return this.editor?.ctx.get(editorViewCtx) ?? null;
+    const view = this.editor?.ctx.get(editorViewCtx);
+    return view?.state ? view : null;
   }
 
   private recordPerformance(

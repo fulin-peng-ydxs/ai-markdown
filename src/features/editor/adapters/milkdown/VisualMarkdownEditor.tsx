@@ -18,6 +18,10 @@ import {
   MilkdownVisualAdapter,
   type VisualEditorPerformanceSample,
 } from "./MilkdownVisualAdapter";
+import type {
+  PreparedImageRelocation,
+  ResolvedWorkspaceImage,
+} from "./workspaceImageNodeView";
 import {
   writeVisualClipboard,
   type VisualCopyFormat,
@@ -45,6 +49,12 @@ export interface VisualMarkdownEditorProps {
     selection: EditorSelection,
   ): Promise<{ src: string; alt?: string; title?: string } | null>;
   onRequestLink?(selection: EditorSelection): Promise<{ href: string; title?: string } | null>;
+  onRelocateImage?(
+    source: string,
+  ): Promise<PreparedImageRelocation | null>;
+  onResolveImage?(
+    source: string,
+  ): Promise<ResolvedWorkspaceImage | null>;
 }
 
 export const VisualMarkdownEditor = forwardRef<
@@ -60,6 +70,8 @@ export const VisualMarkdownEditor = forwardRef<
     onPerformance,
     onRequestImage,
     onRequestLink,
+    onRelocateImage,
+    onResolveImage,
     onSelectionChange,
   },
   forwardedRef,
@@ -73,6 +85,8 @@ export const VisualMarkdownEditor = forwardRef<
   const onPerformanceRef = useRef(onPerformance);
   const onRequestImageRef = useRef(onRequestImage);
   const onUnavailableRef = useRef(onUnavailable);
+  const onRelocateImageRef = useRef(onRelocateImage);
+  const onResolveImageRef = useRef(onResolveImage);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const [selection, setSelection] = useState<EditorSelection>(document.selection);
   const [ready, setReady] = useState(false);
@@ -88,6 +102,8 @@ export const VisualMarkdownEditor = forwardRef<
   onPerformanceRef.current = onPerformance;
   onRequestImageRef.current = onRequestImage;
   onUnavailableRef.current = onUnavailable;
+  onRelocateImageRef.current = onRelocateImage;
+  onResolveImageRef.current = onResolveImage;
   onSelectionChangeRef.current = onSelectionChange;
 
   useImperativeHandle(
@@ -107,6 +123,8 @@ export const VisualMarkdownEditor = forwardRef<
           scrollTop: 0,
         },
       setSelection: (nextSelection) => adapterRef.current?.setSelection(nextSelection),
+      setSelectionAtCoordinates: (x, y) =>
+        adapterRef.current?.setSelectionAtCoordinates(x, y),
       copySelection: async (format) => copy(format),
       requestImage: async () => requestImage(),
     }),
@@ -138,6 +156,10 @@ export const VisualMarkdownEditor = forwardRef<
       },
       onPerformance: (sample) => onPerformanceRef.current?.(sample),
       onHistoryCommand: (direction) => onHistoryCommandRef.current?.(direction) ?? false,
+      onRelocateImage: (source) =>
+        onRelocateImageRef.current?.(source) ?? Promise.resolve(null),
+      onResolveImage: (source) =>
+        onResolveImageRef.current?.(source) ?? Promise.resolve(null),
     });
     adapterRef.current = adapter;
     loadedDocumentRef.current = document;

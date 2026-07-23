@@ -43,6 +43,7 @@ import {
   cancelAssetImport,
   confirmAssetImport,
   getWorkspaceAssetPreference,
+  readWorkspaceImage,
   resetWorkspaceAssetDirectory,
   selectAssetImage,
   setWorkspaceAssetDirectory,
@@ -163,6 +164,10 @@ export interface EditorAssetGateway {
     importId: string,
   ): Promise<AssetImportResult>;
   cancel(workspaceId: WorkspaceId, importId: string): Promise<boolean>;
+  read(
+    workspaceId: WorkspaceId,
+    relativePath: WorkspaceRelativePath,
+  ): Promise<Uint8Array>;
 }
 
 export const desktopAssetGateway: EditorAssetGateway = {
@@ -174,6 +179,7 @@ export const desktopAssetGateway: EditorAssetGateway = {
   select: selectAssetImage,
   confirm: confirmAssetImport,
   cancel: cancelAssetImport,
+  read: readWorkspaceImage,
 };
 
 export interface MarkdownCompatibilityParser {

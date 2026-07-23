@@ -4,7 +4,7 @@
 >
 > 当前阶段：阶段 2——统一 Markdown 文档模型、排版编辑/源码编辑和完整单文档保存、恢复、冲突、图片资源链路
 >
-> 计划状态：进行中（T18～T27 已完成，T28 待开始）
+> 计划状态：进行中（T18～T28 已完成，T29 待开始）
 >
 > 需求编号规则：完全沿用 `requirement.md` 的 R1～R34，不新增、重排或改变 R 编号含义。
 
@@ -39,11 +39,11 @@
 - Milkdown 官方能力采用插件化接入：CommonMark/GFM、history、clipboard、listener、upload；生产实现不得直接复制原型中的 `contenteditable`/`textarea` 演示逻辑。
 - CodeMirror 6 负责源码高亮、行号、查找替换、括号匹配和源码选择；不建立第二份 Markdown 文件或独立保存通道。
 - 选型依据：[Milkdown 官方文档](https://milkdown.dev/docs)、[Milkdown 插件说明](https://milkdown.dev/docs/plugin/using-plugins)、[ProseMirror Guide](https://prosemirror.net/docs/guide/) 和 [CodeMirror Markdown 官方仓库](https://github.com/codemirror/lang-markdown)。
-- 第一阶段测试基线为 115 个 Rust 单测、3 个路径工具测试、18 个树状态测试、4 个永久删除反馈测试、35 个 React 测试、1 个 fixture 测试、4 个许可证测试和 4 个桌面 E2E。T18 新增 7 个编辑器 PoC 测试，T19 新增 28 个 session/history/AST 契约测试与 1 个 P1 陈旧读取回归，T20 及其整改新增 21 个恢复仓储/契约测试，T21 新增 16 个冲突/另存/契约测试，T22 新增 15 个资源偏好、导入和 raw IPC 契约测试，T23 新增 22 个 Milkdown adapter/组件/性能与安全策略测试，T24 新增 15 个 CodeMirror adapter/组件/原始换行投影测试，T25 新增生产 AST 兼容性、统一编辑壳、只读投影和 P1 降级回归，T26 新增保存控制器、窗口结算契约和工作台接线回归，T27 新增恢复/冲突/另存弹层、P1/P2 接线、外部删除保护和安全关闭门禁测试；当前 Rust 全量为 171 项通过、1 项手动性能探针忽略，Vitest 汇总为 150 项。第二阶段不得删除或弱化这些基线来换取绿灯。
+- 第一阶段测试基线为 115 个 Rust 单测、3 个路径工具测试、18 个树状态测试、4 个永久删除反馈测试、35 个 React 测试、1 个 fixture 测试、4 个许可证测试和 4 个桌面 E2E。T18～T27 已逐步补齐编辑器、session/history、恢复、冲突、另存、资源后端、两种 adapter、保存与页面状态测试；T28 新增工作区图片受控读取、资源目录、文档相对路径、选择/剪贴板部分失败、缺失占位/重新定位、单飞/确认失败回滚和移动链接确认测试。当前 Rust 全量为 172 项通过、1 项手动性能探针忽略，Vitest 汇总为 166 项。第二阶段不得删除或弱化这些基线来换取绿灯。
 
 ### 2.2 已有代码与可复用能力
 
-- `src/features/workbench/WorkspaceWorkbench.tsx` 当前已接入文件树、读取、CRUD、watch、窗口决策、真实 `DocumentEditorShell` 和 `DocumentSaveController`，并消费单一 `DocumentSession`、生产 Remark/GFM 兼容性解析、文档级陈旧读取保护、排版/源码 adapter、恢复快照服务、冲突/恢复/另存可见流程与窗口结算意图；仍没有图片输入消费者。
+- `src/features/workbench/WorkspaceWorkbench.tsx` 当前已接入文件树、读取、CRUD、watch、窗口决策、真实 `DocumentEditorShell` 和 `DocumentSaveController`，并消费单一 `DocumentSession`、生产 Remark/GFM 兼容性解析、文档级陈旧读取保护、排版/源码 adapter、恢复快照、冲突/恢复/另存、图片资源和窗口结算意图；菜单与完整状态栏仍由 T29 收口。
 - `src/features/workbench/workbenchGateway.ts` 已封装读取、扫描、监听、CRUD、删除、定位、安全写、恢复快照和窗口结算命令；P1 的自动/手动保存统一消费现有 `safeWriteMarkdownFile`，不另建磁盘写入通道。
 - `src/services/desktop/contracts.ts` 已定义 `FileRevision`、`MarkdownReadResult`、`SafeWriteResult` 和稳定错误码；Rust↔TypeScript parity 测试已经存在，新契约必须纳入同一防漂移机制。
 - `src-tauri/src/fs/safe_write.rs` 已实现受授权根约束、双重修订校验、同目录临时文件、平台原子替换、清理日志和失败不破坏原文件；本阶段必须复用，不另写前端文件覆盖逻辑。
@@ -78,22 +78,22 @@
 | 需求编号 | 需求内容 | 第二阶段覆盖 | 开发状态 | 对应任务 | 验证方式 |
 | --- | --- | --- | --- | --- | --- |
 | R1 | Windows/macOS 本地优先桌面应用 | 在既有桌面壳内增加离线编辑、保存、恢复和另存；不重做安装/授权 | 进行中 | T18、T29～T32 | T18 已完成本机技术门禁；双平台类型/构建/E2E、离线编辑保存仍待 T29～T32，Windows 原生 UI 保持人工项 |
-| R2 | 文件与目录管理 | 复用读取、watch、安全写并接入当前编辑会话和图片资源文件；不改变文件树 CRUD 语义 | 进行中 | T19、T21、T22、T26、T28、T30～T31 | T19 已让 P1 读取进入统一 session；T21 已让冲突覆盖复用安全写；T22 已让资源写入复用 workspace mutation lock、根授权与 watcher 自身写入登记；T26 已接入自动/手动安全写与修订回传，P1 图片消费者仍待 T28 |
+| R2 | 文件与目录管理 | 复用读取、watch、安全写并接入当前编辑会话和图片资源文件；不改变文件树 CRUD 语义 | 进行中 | T19、T21、T22、T26、T28、T30～T31 | T28 已把受控图片写入、受限图片读取与 watcher 登记接入 P1；图片只以授权根内相对路径读写，完整桌面回归仍待 T30～T31 |
 | R3 | 所见即所得 Markdown 编辑 | 完整纳入本阶段 | 进行中 | T18、T19、T23、T25、T30～T32 | T25 已把 Milkdown 排版编辑、格式栏和统一历史接入 P1，并以生产 Remark/GFM AST 兼容性解析及尺寸/结构复杂度门槛决定排版或源码安全路径；系统输入法候选流程与桌面 E2E 仍待 T30～T32 |
 | R4 | 当前文档大纲 | 阶段 6 实现；本阶段只提供增量内容事件，不渲染大纲 | 跳过 | - | 映射审查确认没有假大纲或占位任务 |
 | R5 | 自动保存、恢复与外部冲突 | 完成单文档链路；多页签关闭检查由阶段 3 扩展，搜索索引异常协同由阶段 7 承接 | 进行中 | T19～T21、T25～T27、T29～T32 | T19～T21 已落地 session、恢复仓储、冲突证据/一次性覆盖与原生单目标另存后端；T26 已接入自动/手动保存、恢复快照和窗口结算；T27 已接入 P1/P2 恢复入口、冲突四选项/覆盖二次确认、只读与冲突另存、外部删除保护，桌面 E2E 与双平台验收仍待 T29～T32 |
-| R6 | 图片粘贴、拖放与资源管理 | 完整纳入本阶段 | 进行中 | T18、T22、T23、T28、T30～T32 | T22 已完成受控资源后端；T23 已提供只接收受控相对 `src` 的图片命令与 `requestImage` hook，富文本粘贴不直接接收外部图片；T28 仍需接入选择/粘贴/拖放、文档相对链接换算和导入确认 |
+| R6 | 图片粘贴、拖放与资源管理 | 完整纳入本阶段 | 进行中 | T18、T22、T23、T28、T30～T32 | T28 已接入选择、剪贴板与拖放图片、per-workspace 资源目录、两阶段确认/回滚、根/多层文档相对链接、缺失占位/重新定位和移动链接确认；真实 Tauri 选择器/拖放与双平台验收仍待 T30～T32 |
 | R7 | 中性主题与颜色语义 | 只消费既有 token，不在本阶段实现主题产品能力 | 跳过 | - | token 扫描只作为页面合规回归，不计 R7 完成 |
 | R8 | 自适应与区域调宽 | 保留第一阶段 P1 窄窗抽屉；完整调宽/持久化由阶段 4 实现 | 跳过 | - | T31 回归现有 820/760 px，不新增 R8 完成声明 |
 | R9 | 编辑/专注/分页阅读 | 阶段 6 实现 | 跳过 | - | 确认阅读入口隐藏/禁用且无假反馈 |
 | R10 | Markdown 源码模式 | 完整纳入本阶段 | 进行中 | T18、T19、T24、T25、T30～T32 | T25 已把 CodeMirror 源码模式、当前文档查找和排版/源码切换接入 P1；切换前同步提交当前 adapter 内容/选择/锚点，源码回排版时按当前 editVersion 重解析，异常语法不被静默删除。系统 IME 与桌面 E2E 仍待 T30～T32 |
-| R11 | 操作与文件状态反馈 | 完成本阶段编辑、保存、恢复、只读、冲突和图片异步状态 | 进行中 | T19～T32 | T27 已让恢复、冲突、另存与外部删除反馈消费真实 session、快照和一次性令牌，并明确内容安全位置；图片异步消费者与桌面验收仍待 T28～T31 |
+| R11 | 操作与文件状态反馈 | 完成本阶段编辑、保存、恢复、只读、冲突和图片异步状态 | 进行中 | T19～T32 | T28 已提供图片导入忙态、部分失败、失败不插链、缺失路径和目录校验反馈；菜单、状态栏与桌面验收仍待 T29～T31 |
 | R12 | 工作区全文搜索 | 阶段 7 实现；CodeMirror 文档内查找不等同 R12 | 跳过 | - | 映射与菜单审查，工作区搜索继续禁用 |
 | R13 | 多文档页签 | 阶段 3 实现；本阶段每窗口只维护一个 `DocumentSession` | 跳过 | - | 确认未以单文档下拉或隐藏页签模拟 R13 |
 | R14 | 一目录一窗口与多窗口生命周期 | 仅将当前单文档保存门禁接入关闭/当前窗口替换；阶段 3 扩展为全部页签 | 进行中 | T26、T29～T32 | T26 已用非阻塞 intent/resolution 握手保护系统关闭、菜单关闭、当前窗口根替换和多窗口应用退出；当前仍是每窗口单文档，真实桌面与双平台回归待 T29～T31 |
 | R15 | 颜色预设与实时预览 | 阶段 5 实现；P1 只消费当前 Neutral token | 跳过 | - | P3 路由/状态不存在，映射审查 |
-| R30 | 核心命令键盘操作 | 编辑、撤销/重做、保存/另存、模式切换、查找和弹层焦点子集 | 进行中 | T23～T25、T27～T32 | T27 已提供工具栏另存/处理冲突与 AppDialog 键盘焦点/取消契约；原生保存/另存菜单和双平台快捷键仍待 T29～T32 |
-| R31 | 无障碍基础 | 编辑器、保存状态、冲突/恢复/资源弹层子集 | 进行中 | T23～T25、T27～T32 | T27 的三类弹层复用 AppDialog 焦点圈定/返回和 AsyncStatePanel live-region，状态与危险结果不只依赖颜色；资源弹层、完整键盘遍历、对比度与系统辅助技术仍待 T28～T32 |
+| R30 | 核心命令键盘操作 | 编辑、撤销/重做、保存/另存、模式切换、查找和弹层焦点子集 | 进行中 | T23～T25、T27～T32 | T28 已增加工具栏图片/资源目录入口并保持 AppDialog 键盘关闭和焦点返回；原生菜单与双平台快捷键仍待 T29～T32 |
+| R31 | 无障碍基础 | 编辑器、保存状态、冲突/恢复/资源弹层子集 | 进行中 | T23～T25、T27～T32 | T28 资源弹层复用焦点圈定/返回、明确 label 与 live-region；缺失图片同时显示状态文字、原路径和可执行重定位入口，系统辅助技术仍待 T30～T32 |
 | R32 | 长文阅读排版 | 阶段 4 定稿；本阶段只保证编辑器基础可读与不溢出 | 跳过 | - | 不把编辑器基础样式记为 R32 完成 |
 
 ### 3.2 可选增强
@@ -243,7 +243,7 @@ plainroot-recovery-v1/
 | 页面功能点 | 对应需求编号 | 需求交互要点 | 技术实现 | 涉及组件/模块 | 数据/API | 状态与异常处理 | 对应任务 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 7.1.1 打开工作区与文件导航 | R1、R2 | 选择文件后载入真实会话；磁盘操作成功后更新 | 复用 P1、树 reducer、watch；文档变更前调用会话门禁 | `WorkspaceWorkbench`、`WorkspaceTree`、`DocumentSession` | 既有 read/scan/watch/CRUD | 读取中不闪旧内容；外部移动/删除保留恢复能力 | T19、T21、T26、T29～T31 |
-| 7.1.2 排版编辑默认态 | R3、R5、R11、R30、R31 | 输入、格式化、撤销重做、保存 | Milkdown adapter + 统一 history/save controller | `DocumentEditorShell`、`VisualMarkdownEditor` | session change/save/recovery API | loading/empty/dirty/saving/saved/save_failed/readonly/conflict | T18、T19、T23、T25～T27、T29～T31 |
+| 7.1.2 排版编辑默认态 | R3、R5、R11、R30、R31 | 输入、格式化、撤销重做、保存 | Milkdown adapter + 统一 history/save controller | `DocumentEditorShell`、`VisualMarkdownEditor` | session change/save/recovery API | loading/empty/dirty/saving/saved/save_failed/readonly/conflict | T18、T19、T23、T25～T29、T31 |
 | 7.1.2 源码编辑 | R10、R11、R30、R31 | 源码高亮、行号、查找替换、模式切换 | CodeMirror adapter，共享 markdown/history | `SourceMarkdownEditor` | session change/anchor | 解析失败自动提供源码；异常语法不丢失 | T18、T19、T24～T25、T30～T31 |
 | 7.1.2 图片与资源 | R6、R11、R30 | 粘贴、拖放、选择图片、配置目录 | Rust 资源导入 + P1 配置对话框 + editor insertion | `AssetDirectoryDialog`、asset service | preference/import/confirm/cancel | 重名不覆盖；失败不插入断链；只读禁用 | T22～T23、T28、T30～T31 |
 | 7.1.2 保存与另存 | R5、R11、R30、R31 | 自动/手动同链路；另存；只读兜底 | safe-write controller + 原生 save target token | `SaveStatus`、`SaveCopyDialog` | safe-write/prepare-save-copy/confirm | 保存失败保留内容；目标覆盖需确认 | T20～T21、T26～T27、T29～T31 |
@@ -278,22 +278,22 @@ plainroot-recovery-v1/
 | 范围类别 | 需求编号 | 需求内容/来源 | 计划开发内容 | 对应任务 | 状态 | 偏差判断 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 必须实现 | R1 | 双平台、本地优先 | 既有桌面壳内增加离线编辑/恢复/另存并做双平台回归 | T18、T29～T32 | 进行中 | 部分覆盖 | T18 本机门禁已通过；产品集成、双平台回归与 Windows 原生人工项尚未完成 |
-| 必须实现 | R2 | 文件/目录管理 | 编辑会话接入读取、watch、安全写和资源文件 | T19、T21、T22、T26、T28、T30～T31 | 进行中 | 部分覆盖 | T26 已把 P1 自动/手动保存接入既有 safe-write、revision 和 watcher 自身写入链；资源到 Markdown 的页面消费者及后续大纲/搜索联动仍待对应任务 |
-| 必须实现 | R3 | 所见即所得编辑 | Milkdown、统一模型、格式化、粘贴和往返 | T18、T19、T23、T25、T30～T32 | 进行中 | 部分覆盖 | T25 已完成 P1 排版编辑器壳、格式栏、统一历史及生产 AST/性能降级；图片输入、系统 IME 和桌面验收仍待 T28/T30～T32 |
+| 必须实现 | R2 | 文件/目录管理 | 编辑会话接入读取、watch、安全写和资源文件 | T19、T21、T22、T26、T28、T30～T31 | 进行中 | 部分覆盖 | T26 已把 P1 自动/手动保存接入既有 safe-write、revision 和 watcher 自身写入链；T28 已把资源写入/受控读取、文档相对链接与移动后改写接入 P1，桌面回归及后续大纲/搜索联动仍待对应任务 |
+| 必须实现 | R3 | 所见即所得编辑 | Milkdown、统一模型、格式化、粘贴和往返 | T18、T19、T23、T25、T28、T30～T32 | 进行中 | 部分覆盖 | T25 已完成 P1 排版编辑器壳、格式栏、统一历史及生产 AST/性能降级；T28 已接入受控图片输入和排版图片节点，系统 IME 与桌面验收仍待 T30～T32 |
 | 必须实现 | R4 | 大纲 | 暂不纳入 | - | 跳过 | 未覆盖 | 阶段 6 |
 | 必须实现 | R5 | 保存/恢复/冲突 | 完整单文档链路和当前窗口门禁 | T19～T21、T25～T27、T29～T32 | 进行中 | 部分覆盖 | T27 已完成当前单文档恢复、冲突、只读/冲突另存和外部删除保护；T29～T32 仍需产品集成、E2E/双平台验收，阶段 3 扩展全部页签关闭检查 |
-| 必须实现 | R6 | 图片/资源 | 粘贴、拖放、选择、资源偏好与相对链接 | T18、T22、T23、T28、T30～T32 | 进行中 | 部分覆盖 | T22 已完成资源偏好与真实图片落盘，T23 已提供受控图片 hook；粘贴/拖放/选择、文档相对链接换算和导入确认仍待 T28 |
+| 必须实现 | R6 | 图片/资源 | 粘贴、拖放、选择、资源偏好与相对链接 | T18、T22、T23、T28、T30～T32 | 进行中 | 部分覆盖 | T28 已完成选择、粘贴、拖放、资源偏好、文档相对链接、导入确认/取消、缺失重定位和移动链接调整；真实桌面输入与双平台验收仍待 T30～T32 |
 | 必须实现 | R7 | 主题颜色 | 只消费现有 token | - | 跳过 | 未覆盖 | 阶段 4/5 |
 | 必须实现 | R8 | 布局调宽 | 只做现有响应式回归 | - | 跳过 | 未覆盖 | 阶段 4，不以 T31 回归冒充实现 |
 | 必须实现 | R9 | 专注/分页阅读 | 暂不纳入 | - | 跳过 | 未覆盖 | 阶段 6 |
 | 必须实现 | R10 | 源码模式 | CodeMirror、统一内容源、异常语法保留 | T18、T19、T24、T25、T30～T32 | 进行中 | 部分覆盖 | T25 已完成 P1 可见排版/源码切换、源码当前文档查找和兼容性重评估；系统 IME 与桌面验收仍待 T30～T32 |
-| 必须实现 | R11 | 真实反馈 | 编辑/保存/恢复/冲突/图片全状态 | T19～T32 | 进行中 | 部分覆盖 | T27 已呈现恢复、冲突、另存、令牌失败和外部删除的真实长期状态与内容安全位置；图片异步消费者与完整验收仍待 T28～T31 |
+| 必须实现 | R11 | 真实反馈 | 编辑/保存/恢复/冲突/图片全状态 | T19～T32 | 进行中 | 部分覆盖 | T27 已呈现恢复、冲突、另存、令牌失败和外部删除的长期状态；T28 已补图片忙态、部分失败、缺失路径和目录校验，菜单/状态栏与桌面验收仍待 T29～T31 |
 | 必须实现 | R12 | 全文搜索 | 暂不纳入 | - | 跳过 | 未覆盖 | 阶段 7；文档内查找不替代它 |
 | 必须实现 | R13 | 多页签 | 暂不纳入 | - | 跳过 | 未覆盖 | 阶段 3 |
 | 必须实现 | R14 | 多窗口生命周期 | 当前单文档关闭/根替换门禁 | T26、T29～T32 | 进行中 | 部分覆盖 | T26 已接入 close/replace/quit intent 与 reject 回滚；真实桌面/双平台回归仍待 T29～T31，阶段 3 扩展为全部页签 |
 | 必须实现 | R15 | 主题预设 | 暂不纳入 | - | 跳过 | 未覆盖 | 阶段 5 |
 | 必须实现 | R30 | 键盘流程 | 编辑/保存/模式/当前文档查找/弹层焦点 | T23～T25、T27～T32 | 进行中 | 部分覆盖 | T27 已完成恢复/冲突/另存弹层的键盘焦点与明确取消动作；原生保存/另存菜单及页签/阅读/工作区搜索快捷键仍待对应阶段 |
-| 必须实现 | R31 | 无障碍 | 编辑器与本阶段弹层/状态子集 | T23～T25、T27～T32 | 进行中 | 部分覆盖 | T27 已完成三类弹层的 labelled/described、焦点圈定/返回、processing 关闭门禁和非颜色状态文字；资源弹层、完整键盘链和跨平台辅助技术仍待后续任务 |
+| 必须实现 | R31 | 无障碍 | 编辑器与本阶段弹层/状态子集 | T23～T25、T27～T32 | 进行中 | 部分覆盖 | T27 已完成恢复/冲突/另存弹层焦点和非颜色状态；T28 资源弹层复用 labelled/described、焦点圈定/返回和 processing 门禁，缺失图片展示原路径与可执行重定位，完整键盘链和跨平台辅助技术仍待 T29～T32 |
 | 必须实现 | R32 | 长文排版 | 暂不纳入 | - | 跳过 | 未覆盖 | 阶段 4 |
 | 可选增强 | R16 | HTML/PDF 导出 | 暂不纳入 | - | 跳过 | 未覆盖 | 后续建议 |
 | 可选增强 | R17 | 历史版本/Git | 暂不纳入 | - | 跳过 | 未覆盖 | 恢复快照不得扩成历史功能 |
@@ -468,7 +468,7 @@ plainroot-recovery-v1/
 
 ### 6.11 任务 T28：图片粘贴、拖放、选择和资源目录交互
 
-- 状态：待开始
+- 状态：已完成
 - 依赖：T22、T23、T25。
 - 涉及文件/模块：`src/features/editor/assets/`、`AssetDirectoryDialog.tsx`、P1 工具栏/编辑器 hooks、CSS/token、测试、`t28-image-assets-ui.md`。
 - 目标：完成图片从用户输入到资源写盘再到相对 Markdown 链接的可回滚链路。
@@ -478,7 +478,11 @@ plainroot-recovery-v1/
 - 边界与异常：多图部分失败、重复文件名、超限/不支持格式、只读、资源目录失效、插入失败、拖放外部文件、缺失图片、工作区根文档与多层子目录文档；不得把失败文件写成链接，也不得混淆工作区相对资源路径和文档相对 Markdown 链接。
 - 验证方式：PNG/JPEG/GIF/WebP 粘贴/拖放/选择、配置闭环、根目录文档与至少两级子目录文档的相对链接计算、路径分隔符规范化、重名、失败清理、键盘入口、缺失占位/重新定位和磁盘断言。
 - 完成标准：资源先成功落盘再插入链接；写入正文的链接始终以当前文档目录为基准且可实际解析到导入资源，根目录和子目录文档均通过；重名不覆盖，配置可重置且真正被后端消费。
-- 实际落地情况：待实施。
+- 实际落地情况：已新增 `src/features/editor/assets/`，用统一路径代数把 Rust 返回的工作区相对 `assetPath` 转换为当前 Markdown 文档相对链接；根文档与多层子目录、空格编码、路径分隔符、越界和移动前后链接均有自动化覆盖。选择器、剪贴板与拖放都先调用 T22 导入 proposal，编辑器命令成功后才 confirm；插入失败、文档在异步期间变化或取消时调用 cancel，失败资源不会形成正文链接，多图逐项处理并反馈部分成功。
+  - P1 新增资源目录工具栏入口和 `AssetDirectoryDialog`，继续复用 `AppDialog`、`AsyncStatePanel`、焦点返回、全局按钮与语义 token；读取、保存和恢复默认值均消费真实 per-workspace 偏好。只读文档禁用资源写入。
+  - 排版与源码 adapter 共同支持在当前选择插入图片，并支持按拖放坐标恢复目标选择。Milkdown 图片节点只通过新 `read_workspace_image` 原始字节命令读取授权根内相对路径；Rust 重校验 workspace、路径、常规文件、20 MiB 上限和 PNG/JPEG/GIF/WebP 签名，前端生成可释放的 Blob URL，CSP 只增加 `blob:` 图片来源，不开放文件协议或通用文件 capability。缺失/不支持图片展示原路径与“重新定位”，只有新资源通过导入校验并成功更新节点后才确认保留。
+  - 当前打开 Markdown 或其包含目录移动时，P1 显示默认勾选的本地图片链接调整项；磁盘移动成功后才基于旧/新文档目录和同移资源路径重写图片 URL，并将结果作为当前 session 的 dirty 编辑交给现有自动保存/恢复链，不在移动前改正文。
+  - 图片导入共享单飞门禁，防止系统选择、粘贴和拖放并行消费不同 proposal；确认失败只在当前 session 仍停留于刚插入图片的 editVersion 时回滚该次插入，文档已有后续变化时不会误撤用户内容，并显示需检查链接的真实反馈。移动链接重写按 Markdown 图片目标语法定位 URL，不会因替代文本或标题与 URL 相同而改错字段。当前验证为 166/166 Vitest、172 项 Rust 通过（另 1 项手动探针忽略）、类型检查、fmt、Clippy、生产构建、Node 独立门禁和许可证 727/508/0。浏览器实际检查 1280/820/740 px 图片缺失态、资源目录输入/保存、焦点返回与横向溢出，发现并修复隐藏属性被 CSS 覆盖及对话框内部溢出；临时入口已删除。真实 Tauri 系统图片选择器、原生剪贴板/拖放、桌面 E2E、WebKit/Windows 与系统辅助技术仍由 T29～T31 承接。证据见 `t28-image-assets-ui.md`。
 
 ### 6.12 任务 T29：P1/P2、菜单、状态栏和无障碍集成
 
@@ -549,7 +553,7 @@ plainroot-recovery-v1/
 | `package.json`、`pnpm-lock.yaml` | T18 定义并锁定 Milkdown/CodeMirror；构建和 P1 消费 | 安装/构建/运行 | 前端依赖和包体 | 许可证、版本、peer dependency、生产隔离 | 回退 T18 提交并 frozen install；不影响用户文件 |
 | `appDataDir()/plainroot-recovery-v1/manifest-v1.json` | Rust recovery 定义/保存/读取；P1/P2 消费 | dirty 后、风险边界、打开/启动、保存成功清理 | 本机恢复副本 | schema、hash、7 天、32 项、128 MiB、原子写 | 退出应用后可整体备份/删除；只失去未保存恢复能力，不修改 `.md` |
 | `appDataDir()/plainroot-recovery-v1/snapshots/*.md` | Rust 写入/读取；用户通过恢复弹层决定是否载入 | dirty 快照与恢复时 | 可能含 Markdown 正文 | opaque 文件名、`0600`、manifest 绑定、大小/期限 | 同上；不得随代码回滚自动覆盖用户文件 |
-| `appDataDir()/plainroot-preferences-v1.json` | Rust 已定义并原子保存 per-workspace `assetDirectory`；asset service 已消费，P1 保存/重置入口待 T28 | 应用 setup、读取/修改/重置配置、图片导入 | 本机非正文偏好；1 MiB、最多 1000 个工作区 | 默认 `assets/`、根内相对目录、非法/保留名和 symlink 拒绝；损坏备份回默认，未知版本保留且不覆盖 | 退出应用后删除恢复默认；不删除已导入资源 |
+| `appDataDir()/plainroot-preferences-v1.json` | Rust 定义并原子保存 per-workspace `assetDirectory`；asset service、P1 资源弹层和图片导入共同消费 | 应用 setup、读取/修改/重置配置、图片导入 | 本机非正文偏好；1 MiB、最多 1000 个工作区 | 默认 `assets/`、根内相对目录、非法/保留名和 symlink 拒绝；损坏备份回默认，未知版本保留且不覆盖 | 退出应用后删除恢复默认；不删除已导入资源 |
 | `appDataDir()/plainroot-state-v1.json` | 继续由现有 state service 管理 | 应用 setup/窗口变化 | 最近工作区/根会话 | 本阶段不改 schema、不存正文或资源偏好 | 沿用第一阶段备份/删除回退 |
 | `appDataDir()/plainroot-safe-write-cleanup-v1.json` | 继续由现有 safe-write 管理 | 每次原文件保存 | 安全写残件清理 | 现有 32 项、授权根与文件名校验 | 沿用第一阶段；不与 recovery 混用 |
 | 进程内 conflict/save-copy/asset token store | Rust 定义、prepare 保存、confirm/cancel 消费 | 用户发起对应操作时 | 当前进程临时授权 | 随机、TTL、有界、一次性、绑定 hash/revision/目标 | 取消、过期或进程退出即失效；无持久授权 |
@@ -591,22 +595,22 @@ plainroot-recovery-v1/
 ### 8.1 单元测试
 
 - 计划：覆盖 DocumentSession union、save reducer、generation、patch history、跨模式 undo、锚点、autosave debounce/single-flight、editor adapter 生命周期、配置校验、token 生命周期、恢复清理和错误文案。
-- 具体完成情况：T19 已覆盖 session/history；T20 已覆盖恢复仓储；T21 已新增 16 个冲突/另存/契约测试；T22 已新增 15 个偏好、图片资源和 raw IPC 契约测试；T23/T24 已覆盖两种 adapter；T25 已覆盖生产 AST 兼容性与统一编辑壳；T26 已覆盖 autosave、恢复调度和窗口结算；T27 已覆盖恢复载入、冲突覆盖二次确认/令牌失败、另存目标确认、条目失败隔离、P1/P2 入口、外部删除内容保护和安全关闭的成功/拒绝分支。当前 Vitest 为 150 项。
+- 具体完成情况：T19 已覆盖 session/history；T20 已覆盖恢复仓储；T21 已新增冲突/另存/契约测试；T22 已新增偏好、图片资源和 raw IPC 契约测试；T23/T24 已覆盖两种 adapter；T25 已覆盖生产 AST 兼容性与统一编辑壳；T26 已覆盖 autosave、恢复调度和窗口结算；T27 已覆盖恢复载入、冲突覆盖、另存、P1/P2 入口、外部删除保护和安全关闭；T28 已覆盖图片路径/签名、资源目录、选择/剪贴板部分失败、缺失重定位、单飞/确认失败回滚和移动链接确认。当前 Vitest 为 166 项。
 
 ### 8.2 接口与集成测试
 
 - 计划：在临时 workspace/app data 中测试读取→编辑→safe-write→revision、外部修改→冲突、恢复 upsert/list/delete、另存单目标、资源导入/取消、窗口 close/replace intent；Rust↔TS 对所有新增 struct/tag/enum 做 parity。
-- 具体完成情况：T20 已覆盖 recovery CRUD/授权；T21 已覆盖外部修改→冲突覆盖、工作区内外另存、一次性令牌、源/目标 revision 与 Rust↔TS parity；T22 已覆盖偏好仓储、资源导入/确认/取消、唯一命名、失败清理和资源 DTO/tag/enum parity；T26 已把读取→编辑→safe-write→revision/recovery 接入 P1，并覆盖 close/replace/quit intent、重复请求、拒绝回滚和契约 parity。资源到 Markdown 的页面集成仍待 T28，真实桌面结算回归待 T29～T31。
+- 具体完成情况：T20 已覆盖 recovery CRUD/授权；T21 已覆盖外部修改→冲突覆盖、工作区内外另存、一次性令牌、源/目标 revision 与 Rust↔TS parity；T22 已覆盖偏好仓储、资源导入/确认/取消、唯一命名、失败清理和资源 DTO/tag/enum parity；T26 已把读取→编辑→safe-write→revision/recovery 接入 P1，并覆盖 close/replace/quit intent、重复请求、拒绝回滚和契约 parity。T28 已接入资源到 Markdown 的选择/粘贴/拖放、受控读取、文档相对路径、缺失重定位和移动后链接重写；真实桌面输入与结算回归仍待 T29～T31。
 
 ### 8.3 页面与交互测试
 
 - 计划：P1 覆盖 visual/source、格式化、空文档、只读、dirty/saving/saved/save_failed/conflict、恢复、另存、图片、状态栏、菜单和窗口门禁；P2 覆盖恢复入口与单项失败；验证 1280/1050/820/740 px 和低高度，不测试手机重排。
-- 具体完成情况：T25 已将 visual/source 接入生产 P1，T26 已增加真实保存和窗口结算；T27 已用组件测试覆盖冲突/恢复/另存、P2 根入口、外部删除保护和安全关闭门禁，并用临时浏览器验证页检查 1280px 下冲突/恢复信息层级、危险动词、焦点和无横向裁切，验证后已删除临时入口。该证据不是 Tauri IPC/原生保存对话框或 1050/820/740px 完整桌面矩阵；图片、系统关闭/退出和完整尺寸矩阵仍待 T28～T31。
+- 具体完成情况：T25 已将 visual/source 接入生产 P1，T26 已增加真实保存和窗口结算；T27 已用组件测试覆盖冲突/恢复/另存、P2 根入口、外部删除保护和安全关闭门禁。T28 已用组件测试和临时浏览器入口覆盖图片选择/粘贴部分失败、资源目录、缺失占位/重定位、移动链接确认，以及 1280/820/740 px 的工具栏、弹层焦点与横向溢出；发现并修复 hidden 属性被 CSS 覆盖和窄窗弹层内部溢出，临时入口已删除。该证据不是 Tauri IPC、原生选择/剪贴板/拖放、系统关闭/退出或完整桌面 E2E，仍待 T29～T31。
 
 ### 8.4 组件资产闭环测试
 
 - 计划：验证 AppDialog/AsyncStatePanel/focusContainment 真实复用；新增 DocumentEditorShell、SaveStatus、ConflictDialog、RecoveryDialog、AssetDirectoryDialog 的 DESIGN 登记和 P1/P2 消费；扫描生产 CSS 只使用语义 token；配置字段从默认、保存、读取、消费到重置全链路可见。
-- 具体完成情况：T25 已登记编辑壳相关组件；T27 新增并登记 `ConflictDialog`、`RecoveryDialog`、`SaveCopyDialog` 与 `ContentSafetySummary`，真实复用 `AppDialog`、`AsyncStatePanel`、`plainroot-button` 和既有 token，没有复制焦点或遮罩逻辑，也没有新增私有颜色。资源弹层仍待 T28。
+- 具体完成情况：T25 已登记编辑壳相关组件；T27 新增并登记 `ConflictDialog`、`RecoveryDialog`、`SaveCopyDialog` 与 `ContentSafetySummary`；T28 新增并登记 `AssetDirectoryDialog`、`workspaceAssetPath` 与 `workspaceImageNodeView`。这些流程真实复用 `AppDialog`、`AsyncStatePanel`、`plainroot-button` 和既有 token，没有复制焦点、遮罩或私有颜色。
 
 ### 8.5 权限与数据范围测试
 

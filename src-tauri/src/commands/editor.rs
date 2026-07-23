@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
-use tauri::ipc::{InvokeBody, Request};
+use tauri::ipc::{InvokeBody, Request, Response};
 use tauri::{Runtime, State, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
 use crate::editor::assets::{
-    AssetImportProposal, AssetImportResult, AssetImportSelectionOutcome, AssetImportService,
-    AssetUploadTicket, ASSET_UPLOAD_HEADER,
+    read_workspace_image_bytes, AssetImportProposal, AssetImportResult,
+    AssetImportSelectionOutcome, AssetImportService, AssetUploadTicket, ASSET_UPLOAD_HEADER,
 };
 use crate::editor::recovery::{
     RecoveryCleanupResult, RecoveryRepository, RecoverySnapshot, RecoverySnapshotMetadata,
@@ -273,6 +273,23 @@ pub fn reset_workspace_asset_directory(
     let workspace = access.workspace(&workspace_id)?;
     validate_asset_directory(workspace.canonical_root(), &default_asset_directory())?;
     preferences.reset_asset_directory(workspace_id)
+}
+
+#[tauri::command]
+pub async fn read_workspace_image(
+    workspace_id: WorkspaceId,
+    relative_path: String,
+    access: State<'_, WorkspaceAccessService>,
+) -> Result<Response, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    let relative_path = WorkspaceRelativePath::parse(&relative_path)?;
+    let root = workspace.canonical_root().to_path_buf();
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        read_workspace_image_bytes(&root, &relative_path)
+    })
+    .await
+    .map_err(|_| DesktopError::new(DesktopErrorCode::AssetWriteFailed, true, true))??;
+    Ok(Response::new(bytes))
 }
 
 #[tauri::command]

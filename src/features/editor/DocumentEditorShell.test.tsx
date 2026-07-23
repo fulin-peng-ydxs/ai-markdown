@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -11,6 +11,7 @@ import {
   type ReadyDocumentSession,
 } from "./documentSession";
 import { DocumentEditorShell } from "./DocumentEditorShell";
+import type { EditorAssetGateway } from "./editorGateway";
 
 const compatible = { mode: "visual", reasons: [] } as const;
 
@@ -209,23 +210,214 @@ describe("DocumentEditorShell", () => {
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(screen.getByText("磁盘版本")).toBeTruthy();
   });
+
+  it("inserts a selected image only after the workspace resource is prepared", async () => {
+    const api = assetGateway();
+    const user = userEvent.setup();
+    const rendered = render(
+      <Harness assetGateway={api} initial={readySession("# Images")} />,
+    );
+    await user.click(screen.getByRole("button", { name: "源码" }));
+    await waitFor(() =>
+      expect(rendered.container.querySelector(".cm-editor")).not.toBeNull(),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "从本机选择并插入图片" }),
+    );
+
+    await waitFor(() => expect(api.confirm).toHaveBeenCalledWith(
+      "workspace-a",
+      "import-1",
+    ));
+    expect(rendered.container.querySelector(".cm-content")?.textContent).toContain(
+      "![picture](assets/picture.png)",
+    );
+  });
+
+  it("rolls back only the just-inserted image when resource confirmation fails", async () => {
+    const api = assetGateway();
+    vi.mocked(api.confirm).mockRejectedValue(new Error("confirmation failed"));
+    const user = userEvent.setup();
+    const rendered = render(
+      <Harness
+        assetGateway={api}
+        initial={{
+          ...readySession("# Images"),
+          mode: "source",
+          selection: { kind: "source", anchor: 8, head: 8 },
+          anchor: { kind: "source", offset: 8, scrollTop: 0 },
+        }}
+      />,
+    );
+    await waitFor(() =>
+      expect(rendered.container.querySelector(".cm-editor")).not.toBeNull(),
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "从本机选择并插入图片" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "图片确认失败，链接已回退；未确认资源不会被误删。",
+      ),
+    ).toBeTruthy();
+    expect(
+      rendered.container.querySelector(".cm-content")?.textContent,
+    ).not.toContain("assets/picture.png");
+  });
+
+  it("allows only one native image selection while an import is pending", async () => {
+    const api = assetGateway();
+    let resolveSelection!: (
+      value: Awaited<ReturnType<EditorAssetGateway["select"]>>,
+    ) => void;
+    vi.mocked(api.select).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSelection = resolve;
+        }),
+    );
+    render(
+      <Harness assetGateway={api} initial={readySession("# Images")} />,
+    );
+    const button = screen.getByRole("button", {
+      name: "从本机选择并插入图片",
+    });
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(api.select).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveSelection({ status: "cancelled" });
+    });
+  });
+
+  it("reports partial clipboard image failures without inserting a failed link", async () => {
+    const api = assetGateway();
+    vi.mocked(api.beginUpload).mockResolvedValue({
+      uploadId: "upload-1",
+      maxBytes: 20 * 1024 * 1024,
+      acceptedKind: "png",
+    });
+    vi.mocked(api.upload).mockResolvedValue({
+      importId: "import-upload",
+      workspaceId: "workspace-a",
+      assetPath: "assets/clipboard.png",
+      fileName: "clipboard.png",
+      imageKind: "png",
+      mediaType: "image/png",
+      byteLength: 8,
+    });
+    const rendered = render(
+      <Harness
+        assetGateway={api}
+        initial={{
+          ...readySession("# Images"),
+          mode: "source",
+          selection: { kind: "source", anchor: 8, head: 8 },
+          anchor: { kind: "source", offset: 8, scrollTop: 0 },
+        }}
+      />,
+    );
+    await waitFor(() =>
+      expect(rendered.container.querySelector(".cm-editor")).not.toBeNull(),
+    );
+    const png = fileWithBytes(
+      "clipboard.png",
+      "image/png",
+      new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    );
+    const svg = fileWithBytes(
+      "active.svg",
+      "image/svg+xml",
+      new TextEncoder().encode("<svg><script/></svg>"),
+    );
+    fireEvent.paste(
+      rendered.container.querySelector(".document-editor-shell__surface")!,
+      { clipboardData: { files: [png, svg] } },
+    );
+
+    expect(
+      await screen.findByText(
+        "已插入 1 张图片，1 张未完成；失败项没有写入链接。",
+      ),
+    ).toBeTruthy();
+    expect(api.confirm).toHaveBeenCalledWith(
+      "workspace-a",
+      "import-upload",
+    );
+    expect(rendered.container.querySelector(".cm-content")?.textContent).not.toContain(
+      "active.svg",
+    );
+  });
 });
 
 function Harness({
+  assetGateway,
   initial,
   parser,
 }: {
+  assetGateway?: EditorAssetGateway;
   initial: ReadyDocumentSession;
   parser?: React.ComponentProps<typeof DocumentEditorShell>["parser"];
 }) {
   const [session, setSession] = useState(initial);
   return (
     <DocumentEditorShell
+      assetGateway={assetGateway}
       onSessionChange={setSession}
       parser={parser}
       session={session}
     />
   );
+}
+
+function assetGateway(): EditorAssetGateway {
+  return {
+    getPreference: vi.fn().mockResolvedValue({
+      workspaceId: "workspace-a",
+      assetDirectory: "assets",
+    }),
+    setDirectory: vi.fn(),
+    resetDirectory: vi.fn(),
+    beginUpload: vi.fn(),
+    upload: vi.fn(),
+    select: vi.fn().mockResolvedValue({
+      status: "ready",
+      proposal: {
+        importId: "import-1",
+        workspaceId: "workspace-a",
+        assetPath: "assets/picture.png",
+        fileName: "picture.png",
+        imageKind: "png",
+        mediaType: "image/png",
+        byteLength: 8,
+      },
+    }),
+    confirm: vi.fn().mockResolvedValue({
+      workspaceId: "workspace-a",
+      assetPath: "assets/picture.png",
+      fileName: "picture.png",
+      imageKind: "png",
+      mediaType: "image/png",
+      byteLength: 8,
+    }),
+    cancel: vi.fn().mockResolvedValue(false),
+    read: vi.fn(),
+  };
+}
+
+function fileWithBytes(
+  name: string,
+  type: string,
+  bytes: Uint8Array,
+): File {
+  const file = new File([Uint8Array.from(bytes).buffer], name, { type });
+  Object.defineProperty(file, "arrayBuffer", {
+    value: async () => Uint8Array.from(bytes).buffer,
+  });
+  return file;
 }
 
 function readySession(

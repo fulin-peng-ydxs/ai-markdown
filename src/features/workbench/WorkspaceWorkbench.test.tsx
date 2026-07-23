@@ -105,6 +105,20 @@ function gateway(overrides: Partial<WorkspaceWorkbenchGateway> = {}): WorkspaceW
       delete: vi.fn().mockResolvedValue(true),
       cleanup: vi.fn(),
     },
+    assetGateway: {
+      getPreference: vi.fn().mockResolvedValue({
+        workspaceId: "workspace-a",
+        assetDirectory: "assets",
+      }),
+      setDirectory: vi.fn(),
+      resetDirectory: vi.fn(),
+      beginUpload: vi.fn(),
+      upload: vi.fn(),
+      select: vi.fn().mockResolvedValue({ status: "cancelled" }),
+      confirm: vi.fn(),
+      cancel: vi.fn(),
+      read: vi.fn(),
+    },
     ...overrides,
   };
 }
@@ -162,6 +176,41 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByText("磁盘版本")).toBeTruthy();
     expect(api.read).toHaveBeenCalledWith("workspace-a", "note.md");
     await waitFor(() => expect(api.setTitle).toHaveBeenCalledWith("note.md"));
+  });
+
+  it("offers explicit local-image link adjustment before moving an open document", async () => {
+    const api = gateway({
+      read: vi.fn().mockResolvedValue({
+        relativePath: "note.md",
+        status: "ready",
+        content: "# Note\n\n![cover](assets/cover.png)",
+        revision: {
+          modifiedAt: 1,
+          size: 36,
+          contentHash: "image-doc",
+          encoding: "utf8",
+          lineEnding: "lf",
+        },
+      }),
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByText("Note");
+    await user.click(screen.getByRole("button", { name: "移动" }));
+    expect(
+      (
+        screen.getByRole("checkbox", {
+          name: "移动后同步调整 1 个本地图片链接",
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
   });
 
   it("does not let a slower old document read replace the latest selection", async () => {

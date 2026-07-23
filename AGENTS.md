@@ -15,12 +15,12 @@
 - T1 已建立并验证技术基线：Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以当前清单和锁文件为准。
 - Markdown 内容事实源始终是用户授权目录中的真实 `.md` 文件；首版不建立云端账号、在线协作、插件市场或私有内容数据库。
 - 当前仓库已完成第一阶段 T1～T17 的本地开发、macOS 实机与 macOS/Windows 双平台 CI 验收；提交 `9a1690a` 的远端矩阵已确认许可证、类型、前端/Rust 测试、4/4 桌面 E2E、未签名生产构建和 artifact 上传全部通过。当前具备真实系统选择器、最近记录、根目录决策、渐进文件树、单文档编辑工作台、文件 CRUD/删除/定位入口、窄窗目录抽屉、多窗口打开和可重复隔离的 P1/P2 桌面测试；Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍无人工实机证据。第一阶段完成不得表述为完整 R1、R2、R5 或 R14 完成。
-- 第二阶段当前分支为 `codex/plainroot-stage-2`，执行计划位于 `agent-works/markdown-editor-desktop/stage-2-markdown-editing/plan.md`；T18～T27 已完成，T28 待开始。当前已建立单一 `DocumentSession`、有界可逆 patch 历史、Milkdown CommonMark/GFM 排版 adapter、CodeMirror Markdown 源码 adapter、生产 Remark/GFM 兼容性解析、P1 统一编辑器壳、自动/手动保存控制器、恢复快照触发、非阻塞窗口结算、独立 recovery/资源偏好仓储，以及冲突覆盖、原生单目标安全另存和受控图片导入后端契约。P1/P2 已提供受控恢复入口，P1 已提供恢复载入、冲突四选项与覆盖二次确认、只读/冲突/外部删除另存和安全关闭门禁；这些流程消费真实 session、快照与一次性令牌，不把恢复当作磁盘提交。资源目录弹层和完整图片输入消费者仍待 T28；系统 IME、真实 Tauri 原生保存对话框、峰值内存和 WebKit/Windows 产品证据仍由后续任务验证。
+- 第二阶段当前分支为 `codex/plainroot-stage-2`，执行计划位于 `agent-works/markdown-editor-desktop/stage-2-markdown-editing/plan.md`；T18～T28 已完成，T29 待开始。当前已建立单一 `DocumentSession`、两种编辑 adapter、自动/手动保存与窗口结算、恢复/冲突/另存，以及受控图片选择/粘贴/拖放、per-workspace 资源目录、文档相对链接、缺失重定位和移动链接确认。图片只通过 Rust 授权根命令读写，导入成功落盘后才插入链接，插入失败或文档版本变化会取消未使用资源；真实 Tauri 原生图片选择器、剪贴板/拖放、桌面 E2E、系统 IME、峰值内存与 WebKit/Windows 产品证据仍由后续任务验证。
 
 ## 当前与目标代码边界
 
 - `agent-works/markdown-editor-desktop/`：本产品的需求、计划、原型和后续开发留痕；同一产品能力继续复用该目录或其语义明确的阶段子目录。
-- `src/`、`src-tauri/`：已建立 P1/P2、共享 `AppDialog`/类型化 `AsyncStatePanel`/`focusContainment`、`WorkspaceTree`、工作区相对路径工具 `workspacePath`、单文档 `DocumentSession`/有界 patch history、生产 `remarkMarkdownParser`、`DocumentEditorShell`/`EditorToolbar`/`SaveStatus`、`DocumentSaveController`、Milkdown `VisualMarkdownEditor`/adapter、CodeMirror `SourceMarkdownEditor`/adapter、`ConflictDialog`/`RecoveryDialog`/`SaveCopyDialog`/`ContentSafetySummary`、独立 recovery repository、冲突覆盖/安全另存服务、完整浅色运行时 token、桌面契约/调用封装、渐进文件树/变更/监听状态、永久删除对话框、窗口协调与结算、版本化状态仓储，以及工作区选择、扫描、读取、CRUD、删除、定位、监听、安全写入、恢复快照、一次性冲突覆盖和原生单目标另存命令。当前 P1 中央区已真实消费单一 session 的排版/源码编辑、自动/手动保存、恢复/冲突/另存和外部删除保护；尚无资源弹层、页签、大纲或工作区搜索。
+- `src/`、`src-tauri/`：已建立 P1/P2、共享状态/弹层/焦点组件、工作区树与路径工具、单文档 `DocumentSession`、两种编辑 adapter、保存控制器、恢复/冲突/另存组件，以及 `assets/` 图片交互控制器、资源目录弹层、工作区图片节点视图和受控原始字节读取命令。当前 P1 已真实消费排版/源码编辑、自动/手动保存、恢复/冲突/另存、外部删除保护和图片资源链；尚无页签、大纲或工作区搜索。
 - `tests/`：已建立脱敏工作区 fixture、Node 临时目录工厂和隔离的 P1/P2 Tauri E2E；`.github/workflows/ci.yml` 已实现并跑通 T16 双平台门禁。macOS 与 Windows 均已通过 Rust lint、平台适用测试、4/4 桌面 E2E、未签名生产构建和 artifact 上传；该自动化证据不替代 Windows 原生系统交互的人工验收。
 - 前端只负责视图、用户意图和可观察状态；不得直接拼接任意绝对路径执行磁盘写操作。
 - Rust 命令层集中负责授权根、路径规范化、越界检查、文件扫描与 CRUD、安全写入、回收站和窗口协调。
@@ -67,10 +67,10 @@
 
 ## 命令与验证状态
 
-- 2026-07-22 已在 macOS arm64 实际验证第一阶段锁定工具链、前端/Rust 测试、桌面 E2E 与生产构建；精确命令见第一阶段验收留痕。2026-07-23 的第二阶段 T18～T27 另实际通过编辑器/session/recovery/conflict/assets/save 专项、171 个 Rust 全量测试（另 1 项手动性能探针忽略）、Rust fmt/Clippy、150 个 Vitest、前端生产构建和许可证 727/508/0。T26 手动 safe-write 探针在本机 debug 测试路径测得 5/20/64 MiB 约 430/1650/5558 ms，分级防抖和单飞用于控制写放大，不代表 64 MiB 保存无延迟。T27 另用临时浏览器入口验证 1280 px 下冲突/恢复弹层的信息层级、二次确认、焦点和无横向裁切，入口验证后已删除；该证据不等于真实 Tauri IPC、原生保存对话框或完整尺寸矩阵。第二阶段改动尚未重跑桌面 E2E、真实系统关闭/退出或远端 Windows 门禁；系统 IME、峰值内存与 WebKit/Windows 仍未验证。
+- 2026-07-22 已在 macOS arm64 实际验证第一阶段锁定工具链、前端/Rust 测试、桌面 E2E 与生产构建；精确命令见第一阶段验收留痕。2026-07-23 的第二阶段 T18～T28 另实际通过编辑器/session/recovery/conflict/assets/save 专项、172 个 Rust 全量测试（另 1 项手动性能探针忽略）、Rust fmt/Clippy、166 个 Vitest、前端生产构建和许可证 727/508/0。T28 浏览器验证覆盖 1280/820/740 px 图片缺失态、资源目录保存、焦点返回和溢出；真实 Tauri 图片选择器、原生剪贴板/拖放、桌面 E2E、系统 IME、峰值内存与 WebKit/Windows 仍未验证。
 - `pnpm test:e2e` 每次使用独立临时状态目录，真实 macOS Tauri/WebKit 4/4 通过：P2 IPC、1100/740px 布局、入口焦点顺序，以及 fixture 工作区经真实授权/窗口绑定/启动快照/文件树扫描读取 P1 Markdown。默认生产依赖图、前端产物和 release 二进制均确认不含 WDIO/WebDriver 或测试命令。T17 另在生产 `.app` 实测 P1/P2、窄窗抽屉焦点链、原生多窗口、Finder、系统废纸篓、外部监听和同状态目录第二实例退出；这些 macOS 证据不替代 Windows 原生人工验收。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。T16 已在 GitHub `windows-latest` 上验证锁定的 Node/Rust 工具链、Windows 编译、测试、WebView2 E2E 和未签名生产构建；原生系统交互仍保留人工未验证状态。
-- 当前自动化测试在既有底座、编辑器、恢复/冲突/资源链路上覆盖 T27 恢复载入、冲突覆盖二次确认/令牌失败、另存目标确认、P1/P2 入口、条目失败隔离、外部删除保护与安全关闭成功/拒绝分支，共 171 个 Rust 单元测试通过（另 1 项手动性能探针忽略）、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、150 个 React UI/状态/编辑器测试、1 个 fixture 测试、4 个许可证策略测试和 4 个既有桌面 E2E。提交 `9a1690a` 的 Windows runner 证据只覆盖第一阶段；T18～T27 改动尚无远端 Windows 证据。许可证扫描覆盖默认与 `e2e` Cargo feature，为 727 个 Node 包、508 个 Rust 包、0 个阻断项。新增长期启动命令或测试后，必须同时验证启动、就绪、停止和失败方式，再更新本节。
+- 当前自动化测试在既有底座、编辑器、恢复/冲突/资源链路上覆盖图片签名/上限/根授权、相对链接、资源目录、部分失败、缺失重定位、单飞门禁、确认失败回滚与移动确认，共 172 个 Rust 单元测试通过（另 1 项手动性能探针忽略）、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、166 个 React UI/状态/编辑器测试、1 个 fixture 测试、4 个许可证策略测试和 4 个既有桌面 E2E。提交 `9a1690a` 的 Windows runner 证据只覆盖第一阶段；T18～T28 改动尚无远端 Windows 证据。许可证扫描为 727 个 Node 包、508 个 Rust 包、0 个阻断项。
 
 ## 文档、协作与 Git
 

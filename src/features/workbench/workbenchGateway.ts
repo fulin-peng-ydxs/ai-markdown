@@ -44,8 +44,10 @@ import {
 } from "../../services/desktop/workspace";
 import type { EditorDocumentGateway } from "../editor/editorGateway";
 import {
+  desktopAssetGateway,
   desktopRecoveryGateway,
   desktopSaveGateway,
+  type EditorAssetGateway,
   type EditorRecoveryGateway,
   type EditorSaveGateway,
 } from "../editor/editorGateway";
@@ -80,6 +82,7 @@ export interface WorkspaceWorkbenchGateway extends EditorDocumentGateway {
   ): Promise<WindowSettlementResolution>;
   saveGateway: EditorSaveGateway;
   recoveryGateway: EditorRecoveryGateway;
+  assetGateway: EditorAssetGateway;
 }
 
 export const desktopWorkspaceWorkbenchGateway: WorkspaceWorkbenchGateway = {
@@ -110,4 +113,5 @@ export const desktopWorkspaceWorkbenchGateway: WorkspaceWorkbenchGateway = {
   resolveSettlement: resolveWindowSettlement,
   saveGateway: desktopSaveGateway,
   recoveryGateway: desktopRecoveryGateway,
+  assetGateway: desktopAssetGateway,
 };

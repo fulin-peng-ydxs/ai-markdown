@@ -140,6 +140,7 @@ pub fn run() {
             commands::editor::get_workspace_asset_preference,
             commands::editor::set_workspace_asset_directory,
             commands::editor::reset_workspace_asset_directory,
+            commands::editor::read_workspace_image,
             commands::editor::begin_asset_import_upload,
             commands::editor::upload_asset_import,
             commands::editor::select_asset_image,

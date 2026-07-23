@@ -218,16 +218,19 @@ Key Characteristics：
 | `WorkspaceTree` | `src/features/workbench/WorkspaceTree.tsx` | P1 | 渐进目录节点、磁盘提交后更新、只读标识、异步刷新期间也稳定的单一 Tab 停靠点，以及上下/首尾/父子方向键导航 |
 | `PermanentDeleteDialog` | `src/features/workbench/PermanentDeleteDialog.tsx` | P1 永久删除流程 | 复用 `AppDialog` 承载删除提案、显式不可逆确认、提交门禁、阶段化错误反馈与安全取消 |
 | `workspacePath` | `src/features/workbench/workspacePath.ts` | `workspaceTreeState`、`WorkspaceWorkbench` | 工作区相对路径的父级计算、同路径/子路径边界判断和前缀重映射；根目录键仍由树状态层适配 |
-| `DocumentEditorShell` | `src/features/editor/DocumentEditorShell.tsx` | P1 | 同一 `DocumentSession` 的排版/源码投影、模式切换前内容/选择/锚点提交、兼容性重评估、延迟加载和统一命令转发；不持有磁盘保存或第二份正文 |
-| `EditorToolbar` | `src/features/editor/EditorToolbar.tsx` | `DocumentEditorShell` | 排版/源码模式、统一撤销重做、排版格式和当前文档查找入口；窄宽度允许自身横向滚动，不挤压正文画布 |
+| `DocumentEditorShell` | `src/features/editor/DocumentEditorShell.tsx` | P1 | 同一 `DocumentSession` 的排版/源码投影、模式切换前内容/选择/锚点提交、兼容性重评估、延迟加载、图片导入编排和统一命令转发；不持有磁盘保存或第二份正文 |
+| `EditorToolbar` | `src/features/editor/EditorToolbar.tsx` | `DocumentEditorShell` | 排版/源码模式、统一撤销重做、排版格式、当前文档查找、图片选择和资源目录入口；窄宽度允许自身横向滚动，不挤压正文画布 |
+| `AssetDirectoryDialog` | `src/features/editor/assets/AssetDirectoryDialog.tsx` | `DocumentEditorShell` | 复用 `AppDialog`/`AsyncStatePanel` 承载当前工作区资源目录读取、校验、保存与恢复默认；提交失败保留原偏好和输入，processing 期间禁止关闭 |
+| `workspaceAssetPath` | `src/features/editor/assets/workspaceAssetPath.ts` | `DocumentEditorShell`、P1 移动流程 | 工作区资源路径与当前文档相对 Markdown 链接之间的根内转换，并按 AST 位置重写移动后受影响的图片 URL；不解析或改写普通链接 |
 | `SaveStatus` | `src/features/editor/SaveStatus.tsx` | `EditorToolbar` | 将 `DocumentSaveState` 映射为文字、结构和语义色共同表达的紧凑状态；不自行宣称磁盘提交成功 |
 | `ContentSafetySummary` | `src/features/editor/recovery/ContentSafetySummary.tsx` | `ConflictDialog`、`SaveCopyDialog` | 统一呈现当前正文位于内存、恢复快照或磁盘的安全状态与保存状态；不自行改变 session |
 | `ConflictDialog` | `src/features/editor/recovery/ConflictDialog.tsx` | P1 外部冲突流程 | 展示路径、磁盘证据和内容安全，承载重新加载、保留、另存与二次覆盖确认；令牌过期或磁盘再变化时回到可重试状态 |
 | `RecoveryDialog` | `src/features/editor/recovery/RecoveryDialog.tsx` | P1、P2 恢复入口 | 按条目展示恢复元数据、隔离读取/删除失败并提供恢复或打开工作区动作；恢复正文不直接写入磁盘 |
 | `SaveCopyDialog` | `src/features/editor/recovery/SaveCopyDialog.tsx` | P1 只读、冲突、外部删除和主动另存 | 只消费原生选择器签发的单目标令牌，展示目标状态并对已有目标显式确认；不接收前端绝对路径 |
 | `remarkMarkdownParser` | `src/features/editor/remarkMarkdownParser.ts` | P1 文档载入、`DocumentEditorShell` 模式切换 | 使用 Remark/GFM AST 识别 source-only 语法并共同消费排版字节/非空内容行门槛；解析结果受 generation/editVersion 约束 |
-| `VisualMarkdownEditor` | `src/features/editor/adapters/milkdown/VisualMarkdownEditor.tsx` | `DocumentEditorShell` | 连续纸面上的 Milkdown 排版编辑、有效选区上下文工具栏、语义焦点/只读状态、受控链接与图片请求、三态复制反馈；不持有文件保存或跨模式历史 |
-| `MilkdownVisualAdapter` | `src/features/editor/adapters/milkdown/MilkdownVisualAdapter.ts` | `VisualMarkdownEditor` | CommonMark/GFM 与统一 `EditorAdapter` 事务桥接、选择/锚点、结构命令、session history 回调、异步生命周期和字节/非空内容行复杂度降级；不建立第二份 Markdown 或权威历史 |
+| `VisualMarkdownEditor` | `src/features/editor/adapters/milkdown/VisualMarkdownEditor.tsx` | `DocumentEditorShell` | 连续纸面上的 Milkdown 排版编辑、有效选区上下文工具栏、语义焦点/只读状态、受控链接与图片请求、缺失图片占位/重新定位和三态复制反馈；不持有文件保存或跨模式历史 |
+| `MilkdownVisualAdapter` | `src/features/editor/adapters/milkdown/MilkdownVisualAdapter.ts` | `VisualMarkdownEditor` | CommonMark/GFM 与统一 `EditorAdapter` 事务桥接、选择/锚点、结构命令、受控图片 node view、session history 回调、异步生命周期和字节/非空内容行复杂度降级；不建立第二份 Markdown 或权威历史 |
+| `workspaceImageNodeView` | `src/features/editor/adapters/milkdown/workspaceImageNodeView.ts` | `MilkdownVisualAdapter` | 将 Markdown 图片节点投影为受控 Blob 图片或带原路径的缺失占位；重新定位成功后只更新该节点 URL，节点更新/销毁时撤销 Blob URL |
 | `SourceMarkdownEditor` | `src/features/editor/adapters/codemirror/SourceMarkdownEditor.tsx` | `DocumentEditorShell` | 连续源码画布、行号、中文当前文档查找/替换、键盘焦点、只读与共享 editor surface 命令；不注册工作区搜索或独立保存通道 |
 | `CodeMirrorSourceAdapter` | `src/features/editor/adapters/codemirror/CodeMirrorSourceAdapter.ts` | `SourceMarkdownEditor` | Markdown 高亮、括号匹配、选择/滚动、统一 session history 回调、generation/editVersion 事务和原始换行投影；CodeMirror 内部 LF 视图不得反向归一 CRLF/CR/mixed raw Markdown |
 
@@ -308,7 +311,7 @@ Iteration Guide：
 
 ## 10. Known Gaps
 
-- P2、P1 工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；T17 已完成页面私有颜色/渐变收口，并让 `AppDialog` 与 P1 窄窗抽屉共同消费 `focusContainment`。P1 文件树 reducer 与工作台页面共同消费 `workspacePath`，避免重命名/移动后的树状态与页面选择状态使用两套路径规则。P1 已真实消费 `DocumentEditorShell`、Milkdown/CodeMirror adapter、生产 Remark/GFM 兼容性解析器、统一格式栏和紧凑保存状态；两种 editor chunk 按模式延迟加载，加载回退复用 `AsyncStatePanel`。自动/手动保存和窗口结算已接入真实 session/磁盘结果；P1/P2 已接入受控恢复入口，P1 已提供冲突二次确认、另存副本和外部删除保护，全部消费真实 session、快照与一次性令牌。资源目录与图片输入弹层仍未接入。`PathStatus`、`DesktopWindowStatus` 未形成两个同职责消费者，因此未登记为空组件。P1 的页签、大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
+- P2、P1 工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；T17 已完成页面私有颜色/渐变收口，并让 `AppDialog` 与 P1 窄窗抽屉共同消费 `focusContainment`。P1 文件树 reducer 与工作台页面共同消费 `workspacePath`，避免重命名/移动后的树状态与页面选择状态使用两套路径规则。P1 已真实消费 `DocumentEditorShell`、Milkdown/CodeMirror adapter、生产 Remark/GFM 兼容性解析器、统一格式栏和紧凑保存状态；两种 editor chunk 按模式延迟加载，加载回退复用 `AsyncStatePanel`。自动/手动保存和窗口结算已接入真实 session/磁盘结果；P1/P2 已接入受控恢复入口，P1 已提供冲突二次确认、另存副本和外部删除保护，全部消费真实 session、快照与一次性令牌。T28 已接入资源目录、系统选择器/粘贴/拖放图片输入、文档相对链接、缺失占位/重新定位与移动链接调整，并让资源弹层继续复用共享焦点和状态组件。`PathStatus`、`DesktopWindowStatus` 未形成两个同职责消费者，因此未登记为空组件。P1 的页签、大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
 - 暗色主题尚无完整原型和 token；不得简单反转当前亮色值。R7/R15 阶段需补全明暗语义、派生状态和跨窗口预览测试。
 - `17px / 1.76`、约 `760–820px` 正文宽度及 `252/220px` 侧栏是 alpha 校准基线，仍需在不同 DPI、中英文长文和 Windows 字体渲染下验证。
 - 自定义主题“明暗两套调色板必须同时通过才允许保存”仍是待主题阶段确认的非阻塞决策；确认前不要写成用户已最终决定。

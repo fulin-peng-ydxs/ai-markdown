@@ -172,6 +172,12 @@ export class CodeMirrorSourceAdapter implements EditorAdapter {
     });
   }
 
+  setSelectionAtCoordinates(x: number, y: number): void {
+    const position = this.view?.posAtCoords({ x, y });
+    if (position === null || position === undefined || !this.view) return;
+    this.view.dispatch({ selection: { anchor: position }, scrollIntoView: true });
+  }
+
   getAnchor(): DocumentAnchor {
     const selection = this.getSelection();
     return {
@@ -197,6 +203,19 @@ export class CodeMirrorSourceAdapter implements EditorAdapter {
     if (command.kind === "history") {
       if (this.options.readOnly) return false;
       return this.options.onHistoryCommand?.(command.direction) ?? false;
+    }
+    if (command.kind === "insert_image") {
+      if (this.options.readOnly) return false;
+      const selection = view.state.selection.main;
+      const markdown = `![${escapeImageText(command.alt ?? "")}](${command.src}${
+        command.title ? ` "${escapeImageText(command.title)}"` : ""
+      })`;
+      view.dispatch({
+        changes: { from: selection.from, to: selection.to, insert: markdown },
+        selection: { anchor: selection.from + markdown.length },
+        scrollIntoView: true,
+      });
+      return true;
     }
     return false;
   }
@@ -355,6 +374,10 @@ export class CodeMirrorSourceAdapter implements EditorAdapter {
       byteLength: utf8ByteLength(markdown),
     });
   }
+}
+
+function escapeImageText(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll("]", "\\]").replaceAll('"', '\\"');
 }
 
 function sourceSelection(selection: EditorSelection, rawMarkdown: string) {

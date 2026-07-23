@@ -56,6 +56,7 @@ export interface EditorAdapter {
   focus(): void;
   getSelection(): EditorSelection;
   setSelection(selection: EditorSelection): void;
+  setSelectionAtCoordinates(x: number, y: number): void;
   getAnchor(): DocumentAnchor;
   onChange(listener: (change: EditorAdapterChange) => void): () => void;
   execute(command: EditorCommand): boolean;
@@ -69,4 +70,5 @@ export interface EditorSurfaceHandle {
   getSelection(): EditorSelection;
   getAnchor(): DocumentAnchor;
   setSelection(selection: EditorSelection): void;
+  setSelectionAtCoordinates(x: number, y: number): void;
 }

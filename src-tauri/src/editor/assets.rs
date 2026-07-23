@@ -41,7 +41,7 @@ impl AssetImageKind {
         }
     }
 
-    fn media_type(self) -> &'static str {
+    pub(crate) fn media_type(self) -> &'static str {
         match self {
             Self::Png => "image/png",
             Self::Jpeg => "image/jpeg",
@@ -58,6 +58,38 @@ impl AssetImageKind {
             Self::Webp => "webp",
         }
     }
+}
+
+pub(crate) fn read_workspace_image_bytes(
+    canonical_root: &Path,
+    relative_path: &WorkspaceRelativePath,
+) -> Result<Vec<u8>, DesktopError> {
+    let path = crate::fs::resolve_existing_workspace_path(canonical_root, relative_path)?;
+    let metadata =
+        fs::symlink_metadata(&path).map_err(|error| DesktopError::from_io(&error, &path, true))?;
+    if metadata.file_type().is_symlink() {
+        return Err(
+            DesktopError::new(DesktopErrorCode::SymlinkNotAllowed, true, false)
+                .with_path_hint(&path),
+        );
+    }
+    if !metadata.is_file() {
+        return Err(DesktopError::new(DesktopErrorCode::NotFile, true, false).with_path_hint(&path));
+    }
+    if metadata.len() > MAX_ASSET_BYTES as u64 {
+        return Err(asset_error(DesktopErrorCode::AssetTooLarge, false));
+    }
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    File::open(&path)
+        .map_err(|error| DesktopError::from_io(&error, &path, true))?
+        .take(MAX_ASSET_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| DesktopError::from_io(&error, &path, true))?;
+    if bytes.len() > MAX_ASSET_BYTES {
+        return Err(asset_error(DesktopErrorCode::AssetTooLarge, false));
+    }
+    detect_image_kind(&bytes)?;
+    Ok(bytes)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -888,6 +920,45 @@ mod tests {
             .upload(&second.upload_id, PNG.to_vec())
             .unwrap();
         assert_eq!(second.file_name, "My-screenshot-2.png");
+    }
+
+    #[test]
+    fn workspace_image_read_is_bounded_signature_checked_and_root_scoped() {
+        let fixture = Fixture::new();
+        let assets = fixture.workspace_root.join("assets");
+        fs::create_dir_all(&assets).unwrap();
+        fs::write(assets.join("valid.png"), PNG).unwrap();
+        assert_eq!(
+            read_workspace_image_bytes(
+                &fixture.workspace_root,
+                &WorkspaceRelativePath::parse("assets/valid.png").unwrap(),
+            )
+            .unwrap(),
+            PNG
+        );
+
+        fs::write(assets.join("active.svg"), b"<svg><script/></svg>").unwrap();
+        assert_eq!(
+            read_workspace_image_bytes(
+                &fixture.workspace_root,
+                &WorkspaceRelativePath::parse("assets/active.svg").unwrap(),
+            )
+            .unwrap_err()
+            .code,
+            DesktopErrorCode::AssetUnsupportedType
+        );
+
+        let oversized = File::create(assets.join("large.png")).unwrap();
+        oversized.set_len(MAX_ASSET_BYTES as u64 + 1).unwrap();
+        assert_eq!(
+            read_workspace_image_bytes(
+                &fixture.workspace_root,
+                &WorkspaceRelativePath::parse("assets/large.png").unwrap(),
+            )
+            .unwrap_err()
+            .code,
+            DesktopErrorCode::AssetTooLarge
+        );
     }
 
     #[test]

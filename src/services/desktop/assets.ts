@@ -34,6 +34,13 @@ export function resetWorkspaceAssetDirectory(
   return invoke("reset_workspace_asset_directory", { workspaceId });
 }
 
+export function readWorkspaceImage(
+  workspaceId: WorkspaceId,
+  relativePath: WorkspaceRelativePath,
+): Promise<Uint8Array> {
+  return invoke("read_workspace_image", { workspaceId, relativePath });
+}
+
 export function beginAssetImportUpload(
   workspaceId: WorkspaceId,
   declaredMime: string,

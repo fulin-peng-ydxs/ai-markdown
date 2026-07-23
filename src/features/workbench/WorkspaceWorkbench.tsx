@@ -25,6 +25,7 @@ import type {
 import { desktopErrorMessage, normalizeDesktopError } from "../../services/desktop/errors";
 import {
   beginDocumentLoad,
+  applyDocumentEdit,
   completeDocumentConflictOverwrite,
   createEmptyDocumentSession,
   markDocumentExternalMissing,
@@ -49,6 +50,10 @@ import {
 } from "../editor/DocumentEditorShell";
 import { remarkMarkdownCompatibilityParser } from "../editor/remarkMarkdownParser";
 import { assessVisualEditingCompatibility } from "../editor/markdownCompatibility";
+import {
+  countLocalMarkdownImages,
+  rewriteMarkdownImageLinksForMove,
+} from "../editor/assets/workspaceAssetPath";
 import { PermanentDeleteDialog } from "./PermanentDeleteDialog";
 import { WorkspaceTree } from "./WorkspaceTree";
 import { isSameOrInside, parentPath, replacePrefix } from "./workspacePath";
@@ -79,6 +84,8 @@ interface PendingOperation {
   title: string;
   label: string;
   value: string;
+  adjustImageLinks?: boolean;
+  localImageCount?: number;
 }
 
 interface PendingConfirmation {
@@ -460,6 +467,7 @@ export function WorkspaceWorkbench({
     path: WorkspaceRelativePath,
     targetWorkspace = workspace,
     generation = generationRef.current,
+    overrideMarkdown?: string,
   ) {
     const current = documentStateRef.current;
     if (
@@ -491,10 +499,26 @@ export function WorkspaceWorkbench({
       remarkMarkdownCompatibilityParser,
     );
     if (!mountedRef.current || generation !== generationRef.current) return;
-    const resolved = applyDocumentLoadOutcome(
+    let resolved = applyDocumentLoadOutcome(
       documentStateRef.current,
       outcome,
     );
+    if (
+      overrideMarkdown !== undefined &&
+      resolved.status === "ready" &&
+      overrideMarkdown !== resolved.markdown
+    ) {
+      const adjusted = applyDocumentEdit(resolved, {
+        generation: resolved.generation,
+        expectedEditVersion: resolved.editVersion,
+        markdown: overrideMarkdown,
+        mode: resolved.mode,
+        selection: resolved.selection,
+        anchor: resolved.anchor,
+        transactionGroup: "workspace-move-image-links",
+      });
+      if (adjusted.status === "applied") resolved = adjusted.session;
+    }
     commitDocument(resolved);
     if (
       resolved.status !== "empty" &&
@@ -754,11 +778,27 @@ export function WorkspaceWorkbench({
 
   function openOperation(kind: OperationKind) {
     if ((kind === "rename" || kind === "move") && !selectedEntry) return;
+    const current = documentStateRef.current;
+    const movingOpenDocument =
+      kind === "move" &&
+      selectedEntry &&
+      current.status === "ready" &&
+      isSameOrInside(current.relativePath, selectedEntry.relativePath);
+    const localImageCount = movingOpenDocument
+      ? countLocalMarkdownImages(current.markdown, current.relativePath)
+      : 0;
     const details: Record<OperationKind, PendingOperation> = {
       create_file: { kind, title: "新建 Markdown 文档", label: "文件名", value: "未命名文档.md" },
       create_directory: { kind, title: "新建文件夹", label: "文件夹名称", value: "新文件夹" },
       rename: { kind, title: `重命名“${selectedEntry?.name ?? ""}”`, label: "新名称", value: selectedEntry?.name ?? "" },
-      move: { kind, title: `移动“${selectedEntry?.name ?? ""}”`, label: "目标文件夹（留空表示根目录）", value: parentPath(selectedEntry?.relativePath ?? "") ?? "" },
+      move: {
+        kind,
+        title: `移动“${selectedEntry?.name ?? ""}”`,
+        label: "目标文件夹（留空表示根目录）",
+        value: parentPath(selectedEntry?.relativePath ?? "") ?? "",
+        adjustImageLinks: localImageCount > 0,
+        localImageCount,
+      },
     };
     setOperationError(null);
     setOperation(details[kind]);
@@ -769,6 +809,16 @@ export function WorkspaceWorkbench({
     const value = operation.value;
     if (!value.trim() && operation.kind !== "move") return;
     const currentDocument = documentStateRef.current;
+    const movedDocumentSnapshot =
+      operation.kind === "move" &&
+      selectedEntry &&
+      currentDocument.status === "ready" &&
+      isSameOrInside(currentDocument.relativePath, selectedEntry.relativePath)
+        ? {
+            markdown: currentDocument.markdown,
+            path: currentDocument.relativePath,
+          }
+        : null;
     if (
       currentDocument.status === "ready" &&
       selectedEntry &&
@@ -800,7 +850,10 @@ export function WorkspaceWorkbench({
         return;
       }
       commitTree((current) => applyWorkspaceTreeMutationSuccess(current, mutationId, result));
-      remapSelectionAfterMutation(result);
+      await remapSelectionAfterMutation(
+        result,
+        operation.adjustImageLinks ? movedDocumentSnapshot : null,
+      );
       setOperation(null);
       if (result.entry.kind === "markdown_file" && operation.kind === "create_file") {
         void openMarkdown(result.entry.relativePath);
@@ -815,7 +868,10 @@ export function WorkspaceWorkbench({
     }
   }
 
-  function remapSelectionAfterMutation(result: WorkspaceMutationResult) {
+  async function remapSelectionAfterMutation(
+    result: WorkspaceMutationResult,
+    movedDocument: { markdown: string; path: WorkspaceRelativePath } | null,
+  ) {
     if (!result.previousPath) return;
     const previousPath = result.previousPath;
     const nextPath = result.entry.relativePath;
@@ -824,7 +880,22 @@ export function WorkspaceWorkbench({
     setSelectedPath((current) => current ? replacePrefix(current, previousPath, nextPath) : null);
     setExpanded((current) => new Set([...current].map((path) => replacePrefix(path, previousPath, nextPath))));
     if (documentPath && isSameOrInside(documentPath, previousPath)) {
-      void openMarkdown(replacePrefix(documentPath, previousPath, nextPath));
+      const nextDocumentPath = replacePrefix(documentPath, previousPath, nextPath);
+      const adjustedMarkdown = movedDocument
+        ? rewriteMarkdownImageLinksForMove(
+            movedDocument.markdown,
+            movedDocument.path,
+            nextDocumentPath,
+            previousPath,
+            nextPath,
+          )
+        : undefined;
+      await openMarkdown(
+        nextDocumentPath,
+        workspace,
+        generationRef.current,
+        adjustedMarkdown,
+      );
     }
   }
 
@@ -1133,6 +1204,7 @@ export function WorkspaceWorkbench({
             </div>
           ) : null}
           <DocumentView
+            assetGateway={gateway.assetGateway}
             onMetricsChange={setDocumentMetrics}
             onResolveConflict={() => setConflictOpen(true)}
             onRetry={(path) => void openMarkdown(path)}
@@ -1162,6 +1234,26 @@ export function WorkspaceWorkbench({
           <h2 id="workbench-operation-title">{operation?.title}</h2>
           <p id="workbench-operation-description">只有磁盘操作成功后，文件树才会更新。</p>
           <label>{operation?.label}<input autoFocus onChange={(event) => setOperation((current) => current ? { ...current, value: event.target.value } : null)} value={operation?.value ?? ""} /></label>
+          {operation?.kind === "move" &&
+          (operation.localImageCount ?? 0) > 0 ? (
+            <label>
+              <input
+                checked={operation.adjustImageLinks}
+                onChange={(event) =>
+                  setOperation((current) =>
+                    current
+                      ? {
+                          ...current,
+                          adjustImageLinks: event.currentTarget.checked,
+                        }
+                      : null,
+                  )
+                }
+                type="checkbox"
+              />
+              移动后同步调整 {operation.localImageCount} 个本地图片链接
+            </label>
+          ) : null}
           {operationError ? <p aria-live="assertive" className="workbench-dialog-copy__error">{desktopErrorMessage(operationError)}</p> : null}
         </div>
       </AppDialog>
@@ -1267,6 +1359,7 @@ export function WorkspaceWorkbench({
 }
 
 function DocumentView({
+  assetGateway,
   onMetricsChange,
   onResolveConflict,
   state,
@@ -1275,6 +1368,7 @@ function DocumentView({
   onSaveCopy,
   onSessionChange,
 }: {
+  assetGateway: WorkspaceWorkbenchGateway["assetGateway"];
   onMetricsChange(metrics: DocumentEditorMetrics): void;
   onResolveConflict(): void;
   state: DocumentSessionState;
@@ -1299,6 +1393,7 @@ function DocumentView({
   }
   return (
     <DocumentEditorShell
+      assetGateway={assetGateway}
       onMetricsChange={onMetricsChange}
       onResolveConflict={onResolveConflict}
       onSave={onSave}

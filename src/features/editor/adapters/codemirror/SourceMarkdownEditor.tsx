@@ -79,6 +79,8 @@ export const SourceMarkdownEditor = forwardRef<
           scrollTop: 0,
         },
       setSelection: (selection) => adapterRef.current?.setSelection(selection),
+      setSelectionAtCoordinates: (x, y) =>
+        adapterRef.current?.setSelectionAtCoordinates(x, y),
     }),
     [],
   );

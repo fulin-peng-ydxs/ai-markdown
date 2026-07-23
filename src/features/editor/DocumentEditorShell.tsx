@@ -32,6 +32,19 @@ import { assessVisualEditingCompatibility } from "./markdownCompatibility";
 import { remarkMarkdownCompatibilityParser } from "./remarkMarkdownParser";
 import { EditorToolbar } from "./EditorToolbar";
 import { countDocumentWords } from "./documentMetrics";
+import type { EditorAssetGateway } from "./editorGateway";
+import {
+  prepareFileAssetImport,
+  prepareSelectedAssetImport,
+  type PreparedAssetImport,
+} from "./assets/assetImport";
+import { AssetDirectoryDialog } from "./assets/AssetDirectoryDialog";
+import { detectAssetImageKind, mediaTypeForKind } from "./assets/assetImport";
+import { markdownImageSourceToWorkspacePath } from "./assets/workspaceAssetPath";
+import type {
+  PreparedImageRelocation,
+  ResolvedWorkspaceImage,
+} from "./adapters/milkdown/workspaceImageNodeView";
 import "./DocumentEditorShell.css";
 
 const LazySourceMarkdownEditor = lazy(async () => {
@@ -54,6 +67,7 @@ export interface DocumentEditorMetrics {
 }
 
 export interface DocumentEditorShellProps {
+  assetGateway?: EditorAssetGateway;
   session: ReadyDocumentSession;
   parser?: MarkdownCompatibilityParser;
   onMetricsChange?(metrics: DocumentEditorMetrics): void;
@@ -64,6 +78,7 @@ export interface DocumentEditorShellProps {
 }
 
 export function DocumentEditorShell({
+  assetGateway,
   session,
   parser = remarkMarkdownCompatibilityParser,
   onMetricsChange,
@@ -77,9 +92,11 @@ export function DocumentEditorShell({
   const pendingFindRef = useRef(false);
   const switchSequenceRef = useRef(0);
   const switchInFlightRef = useRef(false);
+  const assetImportInFlightRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [adapterError, setAdapterError] = useState("");
+  const [assetDirectoryOpen, setAssetDirectoryOpen] = useState(false);
   sessionRef.current = session;
 
   useEffect(
@@ -280,6 +297,230 @@ export function DocumentEditorShell({
     [applyHistory, switchMode],
   );
 
+  const insertPreparedAsset = useCallback(
+    async (
+      prepared: PreparedAssetImport,
+      target: {
+        generation: number;
+        editVersion: number;
+        selection: EditorSelection;
+      },
+    ): Promise<boolean> => {
+      const current = sessionRef.current;
+      const editor = editorRef.current;
+      if (
+        !assetGateway ||
+        !editor ||
+        current.saveState.kind === "readonly" ||
+        current.generation !== target.generation ||
+        current.editVersion !== target.editVersion
+      ) {
+        await assetGateway
+          ?.cancel(current.workspaceId, prepared.proposal.importId)
+          .catch(() => false);
+        if (
+          current.generation !== target.generation ||
+          current.editVersion !== target.editVersion
+        ) {
+          setFeedback(
+            "导入期间文档已变化，图片链接未插入，未使用资源已清理。",
+          );
+        }
+        return false;
+      }
+      editor.setSelection(target.selection);
+      const inserted = editor.execute({
+        kind: "insert_image",
+        src: prepared.markdownSource,
+        alt: prepared.proposal.fileName.replace(/\.[^.]+$/, ""),
+      });
+      if (!inserted) {
+        await assetGateway
+          .cancel(current.workspaceId, prepared.proposal.importId)
+          .catch(() => false);
+        setFeedback("当前选择无法插入图片，已清理未使用的资源文件。");
+        return false;
+      }
+      const insertedSession = sessionRef.current;
+      try {
+        await assetGateway.confirm(
+          current.workspaceId,
+          prepared.proposal.importId,
+        );
+        return true;
+      } catch {
+        const latest = sessionRef.current;
+        const canUndoOnlyInsertedImage =
+          insertedSession.generation === current.generation &&
+          insertedSession.editVersion === current.editVersion + 1 &&
+          latest.generation === insertedSession.generation &&
+          latest.editVersion === insertedSession.editVersion;
+        if (canUndoOnlyInsertedImage) applyHistory("undo");
+        await assetGateway
+          .cancel(current.workspaceId, prepared.proposal.importId)
+          .catch(() => false);
+        setFeedback(
+          canUndoOnlyInsertedImage
+            ? "图片确认失败，链接已回退；未确认资源不会被误删。"
+            : "图片确认失败；文档随后已变化，未自动撤销后续内容，请检查该图片链接。",
+        );
+        return false;
+      }
+    },
+    [applyHistory, assetGateway],
+  );
+
+  const insertFiles = useCallback(
+    async (files: readonly File[], initialSelection?: EditorSelection) => {
+      const current = sessionRef.current;
+      if (
+        !assetGateway ||
+        current.saveState.kind === "readonly" ||
+        files.length === 0 ||
+        switchInFlightRef.current ||
+        assetImportInFlightRef.current
+      ) {
+        if (current.saveState.kind === "readonly") {
+          setFeedback("当前文档只读，图片没有写入工作区。");
+        }
+        return;
+      }
+      assetImportInFlightRef.current = true;
+      setBusy(true);
+      try {
+        let inserted = 0;
+        let failed = 0;
+        let targetSelection =
+          initialSelection ??
+          editorRef.current?.getSelection() ??
+          current.selection;
+        for (const file of files) {
+          const targetSession = sessionRef.current;
+          try {
+            const prepared = await prepareFileAssetImport(
+              assetGateway,
+              targetSession.workspaceId,
+              targetSession.relativePath,
+              file,
+            );
+            if (
+              await insertPreparedAsset(prepared, {
+                generation: targetSession.generation,
+                editVersion: targetSession.editVersion,
+                selection: targetSelection,
+              })
+            ) {
+              inserted += 1;
+              targetSelection =
+                editorRef.current?.getSelection() ??
+                sessionRef.current.selection;
+            } else failed += 1;
+          } catch {
+            failed += 1;
+          }
+        }
+        setFeedback(
+          failed === 0
+            ? `已插入 ${inserted} 张图片。`
+            : `已插入 ${inserted} 张图片，${failed} 张未完成；失败项没有写入链接。`,
+        );
+      } finally {
+        assetImportInFlightRef.current = false;
+        setBusy(false);
+      }
+    },
+    [assetGateway, insertPreparedAsset],
+  );
+
+  const selectAndInsertImage = useCallback(async () => {
+    const current = sessionRef.current;
+    if (
+      !assetGateway ||
+      current.saveState.kind === "readonly" ||
+      busy ||
+      switchInFlightRef.current ||
+      assetImportInFlightRef.current
+    ) {
+      return;
+    }
+    assetImportInFlightRef.current = true;
+    setBusy(true);
+    setFeedback("");
+    const target = {
+      generation: current.generation,
+      editVersion: current.editVersion,
+      selection: editorRef.current?.getSelection() ?? current.selection,
+    };
+    try {
+      const prepared = await prepareSelectedAssetImport(
+        assetGateway,
+        current.workspaceId,
+        current.relativePath,
+      );
+      if (prepared) {
+        const inserted = await insertPreparedAsset(prepared, target);
+        if (inserted) setFeedback("图片已写入资源目录并插入当前文档。");
+      }
+    } catch {
+      setFeedback("图片导入没有完成；正文未插入失败资源的链接。");
+    } finally {
+      assetImportInFlightRef.current = false;
+      setBusy(false);
+    }
+  }, [assetGateway, busy, insertPreparedAsset]);
+
+  const resolveWorkspaceImage = useCallback(
+    async (source: string): Promise<ResolvedWorkspaceImage | null> => {
+      const current = sessionRef.current;
+      if (!assetGateway) return null;
+      const path = markdownImageSourceToWorkspacePath(
+        current.relativePath,
+        source,
+      );
+      if (!path) return null;
+      const response = await assetGateway.read(current.workspaceId, path);
+      const bytes =
+        response instanceof Uint8Array ? response : new Uint8Array(response);
+      const kind = detectAssetImageKind(bytes);
+      const url = URL.createObjectURL(
+        new Blob([Uint8Array.from(bytes).buffer], {
+          type: mediaTypeForKind(kind),
+        }),
+      );
+      return { url, release: () => URL.revokeObjectURL(url) };
+    },
+    [assetGateway],
+  );
+
+  const relocateWorkspaceImage = useCallback(
+    async (): Promise<PreparedImageRelocation | null> => {
+      const current = sessionRef.current;
+      if (!assetGateway || current.saveState.kind === "readonly") return null;
+      const prepared = await prepareSelectedAssetImport(
+        assetGateway,
+        current.workspaceId,
+        current.relativePath,
+      );
+      if (!prepared) return null;
+      return {
+        source: prepared.markdownSource,
+        confirm: async () => {
+          await assetGateway.confirm(
+            current.workspaceId,
+            prepared.proposal.importId,
+          );
+        },
+        cancel: async () => {
+          await assetGateway.cancel(
+            current.workspaceId,
+            prepared.proposal.importId,
+          );
+        },
+      };
+    },
+    [assetGateway],
+  );
+
   function handleUnavailable(reason: { message: string }) {
     setAdapterError(reason.message);
     if (sessionRef.current.mode === "visual") {
@@ -308,6 +549,12 @@ export function DocumentEditorShell({
         onResolveConflict={onResolveConflict}
         onSave={onSave}
         onSaveCopy={onSaveCopy}
+        onAssetSettings={
+          assetGateway ? () => setAssetDirectoryOpen(true) : undefined
+        }
+        onInsertImage={
+          assetGateway ? () => void selectAndInsertImage() : undefined
+        }
         saveState={session.saveState}
         sourceOnlyReason={sourceOnlyReason}
       />
@@ -324,6 +571,45 @@ export function DocumentEditorShell({
         className="document-editor-shell__surface"
         data-editor-scroll-owner
         data-mode={session.mode}
+        onDragOver={(event) => {
+          if (
+            !readOnly &&
+            !busy &&
+            !assetImportInFlightRef.current &&
+            Array.from(event.dataTransfer.items).some(
+              (item) =>
+                item.kind === "file" &&
+                (item.type.startsWith("image/") || item.type === ""),
+            )
+          ) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+          }
+        }}
+        onDrop={(event) => {
+          const files = Array.from(event.dataTransfer.files).filter(
+            (file) => file.type.startsWith("image/") || !file.type,
+          );
+          if (busy || assetImportInFlightRef.current || files.length === 0) {
+            return;
+          }
+          event.preventDefault();
+          editorRef.current?.setSelectionAtCoordinates(
+            event.clientX,
+            event.clientY,
+          );
+          void insertFiles(files, editorRef.current?.getSelection());
+        }}
+        onPasteCapture={(event) => {
+          const files = Array.from(event.clipboardData.files).filter(
+            (file) => file.type.startsWith("image/") || !file.type,
+          );
+          if (busy || assetImportInFlightRef.current || files.length === 0) {
+            return;
+          }
+          event.preventDefault();
+          void insertFiles(files, editorRef.current?.getSelection());
+        }}
       >
         {session.markdown.length === 0 ? (
           <p className="document-editor-shell__placeholder">
@@ -347,6 +633,8 @@ export function DocumentEditorShell({
               onHistoryCommand={applyHistory}
               onSelectionChange={handleSelectionChange}
               onUnavailable={handleUnavailable}
+              onRelocateImage={relocateWorkspaceImage}
+              onResolveImage={resolveWorkspaceImage}
               readOnly={readOnly}
               ref={(handle: VisualMarkdownEditorHandle | null) => {
                 editorRef.current = handle;
@@ -367,6 +655,14 @@ export function DocumentEditorShell({
           )}
         </Suspense>
       </div>
+      {assetGateway ? (
+        <AssetDirectoryDialog
+          gateway={assetGateway}
+          onRequestClose={() => setAssetDirectoryOpen(false)}
+          open={assetDirectoryOpen}
+          workspaceId={session.workspaceId}
+        />
+      ) : null}
     </div>
   );
 }

@@ -62,6 +62,54 @@ describe("MilkdownVisualAdapter", () => {
     adapter.destroy();
   });
 
+  it("renders a truthful missing-image placeholder with the original path", async () => {
+    const root = mountRoot();
+    const adapter = new MilkdownVisualAdapter(root, {
+      onResolveImage: vi.fn().mockResolvedValue(null),
+      onRelocateImage: vi.fn().mockResolvedValue(null),
+    });
+    await adapter.load(editorDocument("![缺失](assets/missing.png)"));
+    await waitFor(() =>
+      expect(root.querySelector(".workspace-image__fallback")?.textContent).toContain(
+        "assets/missing.png",
+      ),
+    );
+    expect(
+      root.querySelector<HTMLButtonElement>(".workspace-image__fallback button")
+        ?.hidden,
+    ).toBe(false);
+    adapter.destroy();
+  });
+
+  it("updates a missing image link only after relocation can be confirmed", async () => {
+    const root = mountRoot();
+    const confirm = vi.fn().mockResolvedValue(undefined);
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const changes = vi.fn();
+    const adapter = new MilkdownVisualAdapter(root, {
+      onResolveImage: vi.fn().mockResolvedValue(null),
+      onRelocateImage: vi.fn().mockResolvedValue({
+        source: "assets/relinked.png",
+        confirm,
+        cancel,
+      }),
+    });
+    adapter.onChange(changes);
+    await adapter.load(editorDocument("![缺失](assets/missing.png)"));
+    const button = root.querySelector<HTMLButtonElement>(
+      ".workspace-image__fallback button",
+    );
+    button?.click();
+    await waitFor(() => expect(confirm).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(changes.mock.lastCall?.[0].markdown).toContain(
+        "assets/relinked.png",
+      ),
+    );
+    expect(cancel).not.toHaveBeenCalled();
+    adapter.destroy();
+  });
+
   it("does not emit a user change when a newer DocumentSession projection is applied", async () => {
     const root = mountRoot();
     const adapter = new MilkdownVisualAdapter(root);
