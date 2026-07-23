@@ -80,8 +80,8 @@ impl RecoverySnapshotMetadata {
     fn validate(&self) -> bool {
         valid_snapshot_id(&self.snapshot_id)
             && is_markdown_relative_path(&self.relative_path)
-            && valid_sha256(&self.content_hash)
-            && valid_sha256(&self.base_revision.content_hash)
+            && valid_sha256_digest(&self.content_hash)
+            && valid_revision_content_hash(&self.base_revision.content_hash)
             && self.base_revision.encoding != TextEncoding::Unsupported
             && self.base_revision.size <= MAX_INLINE_MARKDOWN_BYTES
             && self.size_bytes <= MAX_INLINE_MARKDOWN_BYTES
@@ -1039,7 +1039,7 @@ fn validate_snapshot_input(
     size_bytes: u64,
 ) -> Result<(), DesktopError> {
     if !is_markdown_relative_path(relative_path)
-        || !valid_sha256(&base_revision.content_hash)
+        || !valid_revision_content_hash(&base_revision.content_hash)
         || base_revision.encoding == TextEncoding::Unsupported
         || base_revision.size > MAX_INLINE_MARKDOWN_BYTES
     {
@@ -1061,8 +1061,14 @@ fn is_markdown_relative_path(path: &WorkspaceRelativePath) -> bool {
         .is_some_and(|extension| extension.eq_ignore_ascii_case("md"))
 }
 
-fn valid_sha256(value: &str) -> bool {
+fn valid_sha256_digest(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn valid_revision_content_hash(value: &str) -> bool {
+    value
+        .strip_prefix("sha256:")
+        .is_some_and(valid_sha256_digest)
 }
 
 fn valid_snapshot_id(value: &str) -> bool {
@@ -1263,7 +1269,7 @@ mod tests {
         FileRevision {
             modified_at: 1_700_000_000_000,
             size: content.len() as u64,
-            content_hash: sha256_hex(content.as_bytes()),
+            content_hash: format!("sha256:{}", sha256_hex(content.as_bytes())),
             encoding: TextEncoding::Utf8,
             line_ending: LineEnding::Lf,
         }

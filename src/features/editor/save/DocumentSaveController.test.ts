@@ -160,6 +160,34 @@ describe("DocumentSaveController", () => {
     );
   });
 
+  it("reuses a completed active-session registration when the recovery timer fires", async () => {
+    vi.useFakeTimers();
+    let current = editedSession("# already registered");
+    const registerActive = vi
+      .fn()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    const upsert = vi.fn().mockResolvedValue(persistedRecovery("snapshot-1"));
+    const write = vi.fn().mockReturnValue(new Promise(() => undefined));
+    const controller = controllerFor(
+      () => current,
+      (next) => {
+        current = next;
+        controller.observe(next);
+      },
+      { write },
+      { registerActive, upsert },
+    );
+
+    controller.observe(current);
+    await vi.waitFor(() => expect(registerActive).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.waitFor(() => expect(upsert).toHaveBeenCalledTimes(1));
+
+    expect(registerActive).toHaveBeenCalledTimes(1);
+    expect(current.recoveryState.kind).toBe("available");
+  });
+
   it("turns a revision conflict into evidence without overwriting the disk", async () => {
     let current = editedSession("# mine");
     const conflict = desktopError("file_revision_conflict");

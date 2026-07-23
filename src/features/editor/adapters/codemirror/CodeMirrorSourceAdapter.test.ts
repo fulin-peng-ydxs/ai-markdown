@@ -61,6 +61,36 @@ describe("CodeMirrorSourceAdapter", () => {
     adapter.destroy();
   });
 
+  it("advances rapid local transactions and ignores an older same-generation projection", () => {
+    const root = mountRoot();
+    const adapter = new CodeMirrorSourceAdapter(root);
+    const changes = vi.fn();
+    adapter.onChange(changes);
+    const initial = sourceDocument("# Rapid", 7);
+    adapter.load(initial);
+
+    const view = sourceView(adapter);
+    view.dispatch({ changes: { from: view.state.doc.length, insert: " a" } });
+    view.dispatch({ changes: { from: view.state.doc.length, insert: " b" } });
+
+    expect(
+      changes.mock.calls.map(
+        (call) =>
+          (call[0] as { expectedEditVersion: number }).expectedEditVersion,
+      ),
+    ).toEqual([4, 5]);
+    expect(adapter.getMarkdown()).toBe("# Rapid a b");
+
+    adapter.apply({
+      ...initial,
+      markdown: "# Stale projection",
+      editVersion: 5,
+    });
+    expect(adapter.getMarkdown()).toBe("# Rapid a b");
+    expect(view.state.doc.toString()).toBe("# Rapid a b");
+    adapter.destroy();
+  });
+
   it("applies a newer session projection without emitting a user edit", () => {
     const root = mountRoot();
     const adapter = new CodeMirrorSourceAdapter(root);

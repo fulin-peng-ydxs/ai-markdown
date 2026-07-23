@@ -407,6 +407,9 @@ export class DocumentSaveController {
   ): Promise<boolean> {
     const identity = documentIdentity(session);
     if (this.activeIdentity !== identity) this.activeIdentity = identity;
+    if (this.activeRegistered && this.activeIdentity === identity) {
+      return true;
+    }
     if (this.activeRegistration && this.registrationIdentity === identity) {
       return this.activeRegistration;
     }

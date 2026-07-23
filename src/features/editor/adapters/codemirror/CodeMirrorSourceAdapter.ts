@@ -117,6 +117,13 @@ export class CodeMirrorSourceAdapter implements EditorAdapter {
       this.load(document);
       return;
     }
+    if (
+      this.document &&
+      document.generation === this.document.generation &&
+      document.editVersion < this.document.editVersion
+    ) {
+      return;
+    }
 
     const startedAt = performance.now();
     const current = this.view.state.doc.toString();
@@ -325,20 +332,33 @@ export class CodeMirrorSourceAdapter implements EditorAdapter {
       this.recordPerformance("input_to_change", this.inputStartedAt, markdown);
       this.inputStartedAt = null;
     }
+    const currentDocument = this.document;
+    const selection = this.sourceSelectionFromRange(update.state.selection.main);
+    const anchor: DocumentAnchor = {
+      kind: "source",
+      offset: editorOffsetToRawOffset(
+        this.rawMarkdown,
+        update.state.selection.main.head,
+      ),
+      scrollTop: update.view.scrollDOM.scrollTop,
+    };
     const change: EditorAdapterChange = {
-      generation: this.document.generation,
-      expectedEditVersion: this.document.editVersion,
+      generation: currentDocument.generation,
+      expectedEditVersion: currentDocument.editVersion,
       markdown,
-      selection: this.sourceSelectionFromRange(update.state.selection.main),
-      anchor: {
-        kind: "source",
-        offset: editorOffsetToRawOffset(
-          this.rawMarkdown,
-          update.state.selection.main.head,
-        ),
-        scrollTop: update.view.scrollDOM.scrollTop,
-      },
+      selection,
+      anchor,
       transactionGroup: this.compositionGroup,
+    };
+    // React may batch several input transactions before projecting the latest session back.
+    // Advance the local contract so every queued transaction targets the version produced by
+    // the preceding accepted edit instead of being rejected as stale.
+    this.document = {
+      ...currentDocument,
+      editVersion: currentDocument.editVersion + 1,
+      markdown,
+      selection,
+      anchor,
     };
     if (!update.view.composing) this.compositionGroup = null;
     for (const listener of this.listeners) listener(change);

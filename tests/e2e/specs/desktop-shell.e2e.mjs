@@ -1,6 +1,30 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { readFile, readdir, realpath, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { createWorkspaceFixture } from "../../support/workspace-fixture.mjs";
+
+const VISUAL_MARKER = "T31-visual-edit";
+const SOURCE_MARKER = "T31-source-edit";
+const VISUAL_EVIDENCE = "T31-visual-";
+const SOURCE_EVIDENCE = "T31-source-";
+const EXTERNAL_MARKER = "T31-external-conflict";
+const LOCAL_CONFLICT_MARKER = "T31-local-conflict";
+const PNG_BYTES = [
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+  0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+  0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41,
+  0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0xf0,
+  0x1f, 0x00, 0x05, 0x00, 0x01, 0xff, 0x89, 0x99,
+  0x3d, 0x1d, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+  0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+];
+
+let fixture;
+let fixtureCanonicalRoot;
+let workspaceId;
 
 function platformPathIdentity(path) {
   if (process.platform !== "win32") return path;
@@ -58,7 +82,107 @@ async function layoutSnapshot() {
   });
 }
 
+async function invoke(command, args = {}) {
+  const result = await browser.executeAsync((nextCommand, nextArgs, done) => {
+    const tauriInvoke = window.__TAURI_INTERNALS__?.invoke;
+    if (typeof tauriInvoke !== "function") {
+      done({ error: "missing-invoke" });
+      return;
+    }
+    tauriInvoke(nextCommand, nextArgs).then(
+      (value) => done({ value }),
+      (error) =>
+        done({
+          error:
+            error && typeof error === "object"
+              ? JSON.stringify(error)
+              : String(error),
+        }),
+    );
+  }, command, args);
+  assert.equal(result.error, undefined, `${command}: ${JSON.stringify(result)}`);
+  return result.value;
+}
+
+async function openFixtureWorkspace() {
+  const selection = await invoke("prepare_e2e_workspace", { root: fixture.root });
+  assert.equal(selection.status, "ready");
+  const workspace = await invoke("authorize_workspace_selection", {
+    selectionId: selection.proposal.selectionId,
+    confirmed: true,
+  });
+  const opened = await invoke("coordinate_workspace_open", {
+    workspaceId: workspace.id,
+    disposition: null,
+  });
+  assert.equal(opened.status, "opened_current");
+  assert.equal(
+    platformPathIdentity(workspace.canonicalRoot),
+    platformPathIdentity(fixtureCanonicalRoot),
+  );
+  workspaceId = workspace.id;
+}
+
+async function focusAtEnd(selector) {
+  const focused = await browser.execute((targetSelector) => {
+    const target = document.querySelector(targetSelector);
+    if (!(target instanceof HTMLElement)) return false;
+    target.focus();
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    range.collapse(false);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    return document.activeElement === target;
+  }, selector);
+  assert.equal(focused, true, `could not focus ${selector}`);
+}
+
+async function appendEditorText(selector, text) {
+  await focusAtEnd(selector);
+  await $(selector).addValue(text);
+}
+
+async function editorText(selector) {
+  return browser.execute((targetSelector) => {
+    const target = document.querySelector(targetSelector);
+    if (!target) return "";
+    const codeMirrorLines = [...target.querySelectorAll(".cm-line")];
+    if (codeMirrorLines.length > 0) {
+      return codeMirrorLines.map((line) => line.textContent ?? "").join("\n");
+    }
+    return target.textContent ?? "";
+  }, selector);
+}
+
+async function switchToSource() {
+  const sourceButton = await $('button=源码');
+  await sourceButton.click();
+  const source = await $('[aria-label="Markdown 源码编辑区"]');
+  await source.waitForDisplayed();
+  return source;
+}
+
+async function openFixtureDocument() {
+  const fixtureEntry = await $('[role="treeitem"][data-tree-path="note.md"]');
+  await fixtureEntry.waitForDisplayed();
+  await fixtureEntry.click();
+  const editor = await $('[aria-label="Markdown 排版编辑区"]');
+  await editor.waitForDisplayed();
+  return editor;
+}
+
 describe("Plainroot desktop shell", () => {
+  before(async () => {
+    fixture = await createWorkspaceFixture();
+    fixtureCanonicalRoot = await realpath(fixture.root);
+  });
+
+  after(async () => {
+    await fixture?.cleanup();
+  });
+
   it("boots through the real Tauri IPC capability into the launcher", async () => {
     const launcher = await $('main[aria-label="Plainroot 启动页"]');
     await launcher.waitForDisplayed();
@@ -111,47 +235,259 @@ describe("Plainroot desktop shell", () => {
   });
 
   it("opens a fixture workspace through real IPC and reads its initial Markdown", async () => {
-    const fixtureRoot = resolve("tests/fixtures/workspaces/basic");
-    const outcome = await browser.executeAsync((root, done) => {
-      const invoke = window.__TAURI_INTERNALS__?.invoke;
-      if (typeof invoke !== "function") {
-        done({ error: "missing-invoke" });
-        return;
-      }
-      void (async () => {
-        const selection = await invoke("prepare_e2e_workspace", { root });
-        if (selection.status !== "ready") throw new Error(`unexpected selection: ${selection.status}`);
-        const workspace = await invoke("authorize_workspace_selection", {
-          selectionId: selection.proposal.selectionId,
-          confirmed: true,
-        });
-        const opened = await invoke("coordinate_workspace_open", {
-          workspaceId: workspace.id,
-          disposition: null,
-        });
-        done({ opened, workspace });
-      })().catch((error) => done({ error: String(error) }));
-    }, fixtureRoot);
-
-    assert.equal(outcome.error, undefined, JSON.stringify(outcome));
-    assert.equal(outcome.opened.status, "opened_current");
-    assert.equal(platformPathIdentity(outcome.workspace.canonicalRoot), platformPathIdentity(fixtureRoot));
+    await openFixtureWorkspace();
 
     // The IPC call commits the native window binding behind the current React tree. Reloading
     // exercises the real bootstrap snapshot instead of injecting frontend state from the test.
     await browser.refresh();
     const workbench = await $('main[aria-label="Plainroot Markdown 工作台"]');
     await workbench.waitForDisplayed();
-    const fixtureEntry = await $('[role="treeitem"][data-tree-path="note.md"]');
-    await fixtureEntry.waitForDisplayed();
-    await fixtureEntry.click();
-    await browser.waitUntil(
-      async () => (await $(".workbench__document pre").getText()).includes("# Plainroot fixture"),
-      { timeout: 10_000, timeoutMsg: "fixture Markdown was not read through the workbench IPC" },
+    const editor = await openFixtureDocument();
+    assert.equal(
+      (
+        await editorText('[aria-label="Markdown 排版编辑区"]')
+      ).includes("Plainroot fixture"),
+      true,
+      "fixture Markdown was not read through the production visual editor",
     );
     assert.equal(
-      await $(".workbench__document pre").getText(),
-      await readFile(resolve(fixtureRoot, "note.md"), "utf8"),
+      await readFile(join(fixture.root, "note.md"), "utf8"),
+      "# Plainroot fixture\n\nThis Markdown file belongs only to the automated test fixture.\n",
+    );
+  });
+
+  it("edits in both modes, imports an image, saves, and reopens the real file", async () => {
+    await appendEditorText(
+      '[aria-label="Markdown 排版编辑区"]',
+      ` ${VISUAL_MARKER}`,
+    );
+    await browser.waitUntil(
+      async () => (await $('[aria-label^="保存状态："]').getText()) === "未保存",
+      { timeoutMsg: "visual edit did not enter the dirty document state" },
+    );
+
+    await switchToSource();
+    assert.equal(
+      (await editorText('[aria-label="Markdown 源码编辑区"]')).includes(
+        VISUAL_EVIDENCE,
+      ),
+      true,
+      "visual edit was not projected into source mode",
+    );
+    await appendEditorText(
+      '[aria-label="Markdown 源码编辑区"]',
+      `\n\n${SOURCE_MARKER}`,
+    );
+    await browser.waitUntil(
+      async () =>
+        (await editorText('[aria-label="Markdown 源码编辑区"]')).includes(
+          SOURCE_EVIDENCE,
+        ),
+      { timeoutMsg: "source edit did not reach the visible editor value" },
+    );
+    // WebKit may resolve addValue before its last input event has crossed the React adapter.
+    // Capture the committed source only after the event queue has settled, then require the
+    // asset insertion to preserve it byte-for-byte.
+    await browser.pause(100);
+    const sourceBeforeImage = await editorText(
+      '[aria-label="Markdown 源码编辑区"]',
+    );
+    assert.equal(sourceBeforeImage.includes(VISUAL_EVIDENCE), true);
+    assert.equal(sourceBeforeImage.includes(SOURCE_EVIDENCE), true);
+
+    const dropResult = await browser.executeAsync((bytes, done) => {
+      const surface = document.querySelector(".document-editor-shell__surface");
+      if (!(surface instanceof HTMLElement) || typeof DataTransfer !== "function") {
+        done("missing-drop-api");
+        return;
+      }
+      const transfer = new DataTransfer();
+      transfer.items.add(
+        new File([new Uint8Array(bytes)], "t31-image.png", {
+          type: "image/png",
+        }),
+      );
+      surface.dispatchEvent(
+        new DragEvent("drop", {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer,
+        }),
+      );
+      done("dispatched");
+    }, PNG_BYTES);
+    assert.equal(dropResult, "dispatched");
+    await browser.waitUntil(
+      async () =>
+        (await $(".document-editor-shell__notice").getText()).includes(
+          "已插入 1 张图片",
+        ),
+      { timeout: 10_000, timeoutMsg: "image drop did not complete through IPC" },
+    );
+
+    const sourceWithImage = await editorText(
+      '[aria-label="Markdown 源码编辑区"]',
+    );
+    assert.equal(sourceWithImage.includes(sourceBeforeImage), true);
+    assert.match(sourceWithImage, /!\[t31-image]\(assets\/t31-image\.png\)/);
+    assert.deepEqual(await readdir(join(fixture.root, "assets")), [
+      "t31-image.png",
+    ]);
+
+    await $('[aria-label="保存当前文档"]').click();
+    await browser.waitUntil(
+      async () => {
+        const content = await readFile(join(fixture.root, "note.md"), "utf8");
+        return (
+          content.includes(sourceBeforeImage) &&
+          /!\[t31-image]\(assets\/t31-image\.png\)/.test(content)
+        );
+      },
+      {
+        timeout: 10_000,
+        timeoutMsg: "manual save did not commit the complete editor state",
+      },
+    );
+    await browser.waitUntil(
+      async () => (await $('[aria-label^="保存状态："]').getText()) === "已保存",
+      { timeout: 10_000, timeoutMsg: "manual save did not reach the saved state" },
+    );
+    const persisted = await readFile(join(fixture.root, "note.md"), "utf8");
+    assert.equal(persisted.includes(sourceBeforeImage), true);
+    assert.match(persisted, /!\[t31-image]\(assets\/t31-image\.png\)/);
+
+    await browser.refresh();
+    await openFixtureDocument();
+    await switchToSource();
+    const reopened = await editorText('[aria-label="Markdown 源码编辑区"]');
+    assert.equal(reopened.includes(sourceBeforeImage), true);
+    assert.match(reopened, /!\[t31-image]\(assets\/t31-image\.png\)/);
+  });
+
+  it("persists and removes a recovery snapshot through the real Rust repository", async () => {
+    const recoveryPath = "guides/inside.md";
+    const disk = await invoke("read_markdown_file", {
+      workspaceId,
+      relativePath: recoveryPath,
+    });
+    assert.equal(disk.status, "ready");
+    await invoke("register_active_recovery_session", {
+      workspaceId,
+      relativePath: recoveryPath,
+    });
+    const result = await invoke("upsert_recovery_snapshot", {
+      workspaceId,
+      relativePath: recoveryPath,
+      content: `${disk.content}\n\nT31-recovery-probe`,
+      baseRevision: disk.revision,
+    });
+    assert.equal(result.status, "persisted");
+    assert.equal(result.snapshot.workspaceId, workspaceId);
+    assert.equal(result.snapshot.relativePath, recoveryPath);
+    await invoke("release_active_recovery_session", {
+      workspaceId,
+      relativePath: recoveryPath,
+    });
+    assert.equal(
+      await invoke("delete_recovery_snapshot", {
+        snapshotId: result.snapshot.snapshotId,
+        workspaceId,
+      }),
+      true,
+    );
+  });
+
+  it("keeps local edits safe when the disk changes and persists recovery evidence", async () => {
+    await appendEditorText(
+      '[aria-label="Markdown 源码编辑区"]',
+      `\n\n${LOCAL_CONFLICT_MARKER}`,
+    );
+    const diskBeforeConflict = await readFile(join(fixture.root, "note.md"), "utf8");
+    await writeFile(
+      join(fixture.root, "note.md"),
+      `${diskBeforeConflict}\n\n${EXTERNAL_MARKER}\n`,
+      "utf8",
+    );
+    await $('[aria-label="保存当前文档"]').click();
+    const conflictButton = await $('[aria-label="处理磁盘冲突"]');
+    await conflictButton.waitForDisplayed({ timeout: 10_000 });
+    assert.equal(await $('[aria-label^="保存状态："]').getText(), "存在磁盘冲突");
+    assert.equal(
+      (await editorText('[aria-label="Markdown 源码编辑区"]')).includes(
+        LOCAL_CONFLICT_MARKER,
+      ),
+      true,
+    );
+
+    await conflictButton.click();
+    const dialog = await $("#conflict-title");
+    await dialog.waitForDisplayed();
+    assert.equal(await dialog.getText(), "磁盘内容已在 Plainroot 之外变化");
+    await $('button=保持当前内容').click();
+    await browser.waitUntil(
+      async () =>
+        (await editorText('[aria-label="Markdown 源码编辑区"]')).includes(
+          LOCAL_CONFLICT_MARKER,
+        ),
+      { timeoutMsg: "closing the conflict dialog discarded the local content" },
+    );
+    assert.equal(
+      (await readFile(join(fixture.root, "note.md"), "utf8")).includes(
+        EXTERNAL_MARKER,
+      ),
+      true,
+    );
+    assert.equal(
+      (await readFile(join(fixture.root, "note.md"), "utf8")).includes(
+        LOCAL_CONFLICT_MARKER,
+      ),
+      false,
+    );
+    await browser.waitUntil(
+      async () => {
+        const snapshots = await invoke("list_recovery_snapshots");
+        return snapshots.some(
+          (snapshot) =>
+            snapshot.workspaceId === workspaceId &&
+            snapshot.relativePath === "note.md",
+        );
+      },
+      {
+        timeout: 10_000,
+        timeoutMsg: "conflicted local content did not produce a recovery snapshot",
+      },
+    );
+  });
+
+  it("loads a persisted recovery snapshot without overwriting the source file first", async () => {
+    await browser.refresh();
+    const recoveryButton = await $('button*=恢复内容');
+    await recoveryButton.waitForDisplayed();
+    await recoveryButton.click();
+    const recoveryTitle = await $("#recovery-title");
+    await recoveryTitle.waitForDisplayed();
+    assert.equal(await recoveryTitle.getText(), "检查尚未写入原文件的内容");
+    await $('button=恢复到编辑区').click();
+    await browser.waitUntil(
+      async () =>
+        (await $(".workbench__status-activity").getText()).includes(
+          "恢复副本已载入为未保存内容",
+        ),
+      { timeout: 10_000, timeoutMsg: "recovery snapshot was not loaded into the editor" },
+    );
+    await switchToSource();
+    assert.equal(
+      (await editorText('[aria-label="Markdown 源码编辑区"]')).includes(
+        LOCAL_CONFLICT_MARKER,
+      ),
+      true,
+    );
+    assert.equal(
+      (await readFile(join(fixture.root, "note.md"), "utf8")).includes(
+        LOCAL_CONFLICT_MARKER,
+      ),
+      false,
+      "restoring must not synchronously overwrite the source Markdown",
     );
   });
 });

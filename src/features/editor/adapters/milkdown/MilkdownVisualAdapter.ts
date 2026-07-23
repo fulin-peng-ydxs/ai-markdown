@@ -223,6 +223,13 @@ export class MilkdownVisualAdapter implements EditorAdapter {
     if (this.destroyed) return;
     this.ensureVisualDocument(document);
     if (!this.editor) return this.load(document);
+    if (
+      this.document &&
+      document.generation === this.document.generation &&
+      document.editVersion < this.document.editVersion
+    ) {
+      return;
+    }
 
     this.document = document;
     const markdown = this.editor.action(getMarkdown());
@@ -416,19 +423,28 @@ export class MilkdownVisualAdapter implements EditorAdapter {
 
   private emitMarkdownChange(markdown: string): void {
     if (this.destroyed || !this.document || markdown === this.lastAppliedMarkdown) return;
+    const currentDocument = this.document;
     this.currentMarkdown = markdown;
     if (this.lastInputStartedAt !== null) {
       this.recordPerformance("input_to_markdown", this.lastInputStartedAt, markdown);
       this.lastInputStartedAt = null;
     }
     const selection = this.getSelection();
+    const anchor = this.getAnchor();
     const change: EditorAdapterChange = {
-      generation: this.document.generation,
-      expectedEditVersion: this.document.editVersion,
+      generation: currentDocument.generation,
+      expectedEditVersion: currentDocument.editVersion,
       markdown,
       selection,
-      anchor: this.getAnchor(),
+      anchor,
       transactionGroup: this.compositionGroup,
+    };
+    this.document = {
+      ...currentDocument,
+      editVersion: currentDocument.editVersion + 1,
+      markdown,
+      selection,
+      anchor,
     };
     this.compositionGroup = null;
     for (const listenerFn of this.listeners) listenerFn(change);

@@ -42,7 +42,9 @@ export const config = {
   mochaOpts: {
     ui: "bdd",
     timeout: 60_000,
-    retries: 1,
+    // Keep test assertions deterministic. Driver connection startup retains its one retry,
+    // but a product-flow failure must not mutate the fixture and then pass on a second attempt.
+    retries: 0,
   },
   afterTest: async (test, _context, { error }) => {
     if (!error) return;

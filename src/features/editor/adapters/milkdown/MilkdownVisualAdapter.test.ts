@@ -42,6 +42,18 @@ describe("MilkdownVisualAdapter", () => {
     });
     expect(changes.mock.lastCall?.[0].markdown).toContain("**Hello**");
 
+    expect(adapter.execute({ kind: "insert_divider" })).toBe(true);
+    await waitFor(() => expect(changes.mock.calls.length).toBeGreaterThan(1), {
+      timeout: 1_000,
+    });
+    expect(changes.mock.lastCall?.[0].expectedEditVersion).toBe(5);
+    const rapidMarkdown = adapter.getMarkdown();
+    await adapter.apply({
+      ...editorDocument("# Stale projection"),
+      editVersion: 4,
+    });
+    expect(adapter.getMarkdown()).toBe(rapidMarkdown);
+
     adapter.destroy();
     await waitFor(() => expect(root.querySelector(".ProseMirror")).toBeNull());
   });

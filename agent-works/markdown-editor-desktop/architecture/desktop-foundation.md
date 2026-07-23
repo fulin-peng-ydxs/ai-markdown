@@ -61,6 +61,7 @@ flowchart LR
 | 源码编辑 adapter | `src/features/editor/adapters/codemirror/` | 将 CodeMirror Markdown、高亮、行号、括号匹配、当前文档查找替换、选择/滚动和只读映射为统一 `EditorAdapter`；原始文本投影把规范化编辑变更映射回 raw Markdown | 不持有文件保存、工作区搜索或第二套 history；CRLF/CR/mixed 未触及部分不得被内部 LF 视图静默归一；由编辑器壳按需加载 |
 | 桌面契约与网关 | `src/services/desktop/` | Rust↔TypeScript 类型、错误码和 IPC 调用封装 | 不把原始系统堆栈或任意绝对路径暴露为前端操作能力 |
 | 契约与非桌面回归门禁 | `src-tauri/src/contract_test.rs`、`src/features/editor/roundtripCorpus.test.ts`、`package.json` | 对每个 TypeScript 导出 interface、字符串枚举/标签登记 Rust parity 断言；用生产 Milkdown/CodeMirror adapter 验证 CommonMark/GFM、HTML 和 source-only 语料；统一执行 Node、Vitest 与 Rust 服务测试 | 不替代 Tauri IPC、系统输入法、原生选择器或双平台桌面 E2E；测试文件系统只使用隔离临时目录 |
+| 隔离桌面回归 | `tests/e2e/specs/desktop-shell.e2e.mjs`、`tests/e2e/wdio.conf.mjs`、`tests/support/workspace-fixture.mjs` | 以独立状态目录和每套件临时复制工作区驱动真实 Tauri IPC；覆盖 P2/P1、两模式编辑、资源上传、保存重开、外部修改与恢复；确定性业务流程禁用 Mocha 重试 | E2E feature 与临时命令编译期隔离，生产前端和 release 二进制不得包含；WebView 文件事件不等于系统剪贴板/Finder 原生拖入，macOS 结果不外推 Windows |
 | Rust 命令入口 | `src-tauri/src/commands/` | 对外暴露选择、授权、扫描、读取、CRUD、删除、监听和安全写命令 | 命令只接收受控标识与相对路径，磁盘成功后才返回可提交结果 |
 | 文件系统服务 | `src-tauri/src/fs/` | 路径与身份、扫描、读取、变更、删除、监听、原子替换和安全写 | 默认不跟随根内符号链接；平台差异由适配层收口 |
 | 窗口与菜单 | `src-tauri/src/window.rs`、`src-tauri/src/menu.rs` | 一目录一窗口、当前/新窗口决策、根会话协调、单实例转交、原生菜单、按窗口保存编辑菜单状态，以及系统关闭/菜单关闭/当前窗口根替换/应用退出的非阻塞结算意图 | 当前只结算每窗口一个文档，不承担页签集合门禁；coordinator mutex 不跨越前端等待；只有聚焦窗口真实 session 可消费的菜单项启用 |
@@ -87,12 +88,12 @@ flowchart LR
 - 另存目标只能来自 Rust 原生保存对话框。本次目标被规范化为父目录身份、文件名和可选目标 revision 后写入一次性令牌；确认时再次核验，目标已存在必须提交显式覆盖意图，新目标使用 no-replace。
 - 工作区源副本保留可验证的 UTF-8 BOM 与单一换行风格；mixed 或不支持编码必须明确选择 UTF-8 输出格式，全新无基线内容默认 UTF-8 + LF。
 - 图片资源目录只能是授权根内的规范化相对目录，不能经过符号链接。资源先以私有随机临时文件写入并同步，再通过平台 no-replace 提交唯一名称；编辑器只能消费返回的相对路径，不能把任意绝对目标交给导入命令。
-- 排版 adapter 只消费统一会话投影并发出带 generation/editVersion 的变更；Cmd/Ctrl+Z 与重做桥接会话 history，不启用 Milkdown 第二套权威历史。富文本粘贴只保留可表达结构，主动内容、危险 URL 和外部图片不能绕过受控资源导入。
-- 源码 adapter 与排版 adapter 使用同一 generation/editVersion 事务和 session history。CodeMirror 内部文本模型以 LF 工作，raw 投影负责 raw/editor 选择偏移和变更反投影；这层边界是 CRLF、CR 与 mixed 文件可安全源码编辑的前提，不能用 `state.doc.toString()` 直接覆盖 session Markdown。
+- 排版 adapter 只消费统一会话投影并发出带 generation/editVersion 的变更；Cmd/Ctrl+Z 与重做桥接会话 history，不启用 Milkdown 第二套权威历史。React 投影返回前的连续本地事务必须单调推进 adapter 内部 editVersion，同 generation 的较低版本投影不能覆盖更新的本地内容。富文本粘贴只保留可表达结构，主动内容、危险 URL 和外部图片不能绕过受控资源导入。
+- 源码 adapter 与排版 adapter 使用同一 generation/editVersion 事务和 session history，并遵守相同的本地版本单调与陈旧投影拒绝规则。CodeMirror 内部文本模型以 LF 工作，raw 投影负责 raw/editor 选择偏移和变更反投影；这层边界是 CRLF、CR 与 mixed 文件可安全源码编辑的前提，不能用 `state.doc.toString()` 直接覆盖 session Markdown。
 - 模式切换必须先同步读取当前 adapter 的 Markdown、选择和锚点并提交 `DocumentSession`，再卸载旧投影；源码回排版必须以当前 generation/editVersion 重新解析，晚到或陈旧结果只能被拒绝。只读限制正文写入，不限制选择、查找和不改变内容的模式投影。
 - 排版可交互性同时受 UTF-8 字节数和非空内容行数约束；当前证据门槛为 `≤2 MiB 且 ≤2000 个非空内容行`，超出时在创建 Milkdown 前转源码模式。行数采用不拆分全文的流式计数，能覆盖没有空行分隔的紧凑列表和表格；该门槛是可复测的保守技术安全值，不是 Markdown 文件总上限。
 - 自动保存按 UTF-8 字节数使用 800 ms/2 秒/5 秒防抖，恢复快照使用 2 秒或大正文 10 秒节流；保存与快照分别单飞并合并陈旧请求。保存期间的新编辑必须追赶到最新 `editVersion`，窗口结算必须等待追赶写结束；只有 Rust 原子提交返回的新 revision 才能清洁 session。
-- 保存失败或恢复仓储降级时必须准确保留 `contentSafety`：内存正文、已持久恢复快照和磁盘 revision 不能混称。成功保存后先释放活动快照保护再删除匹配快照；晚到的旧快照必须删除，不能把已保存 session 重新标成可恢复。
+- 保存失败或恢复仓储降级时必须准确保留 `contentSafety`：内存正文、已持久恢复快照和磁盘 revision 不能混称。磁盘 `FileRevision.contentHash` 的稳定格式是 `sha256:<64 位十六进制>`，恢复快照内部正文摘要才是裸 64 位十六进制；两者必须分别校验，不能共用一个格式判定。成功保存后先释放活动快照保护再删除匹配快照；晚到的旧快照必须删除，不能把已保存 session 重新标成可恢复；已成功注册的同一活动会话在快照定时器触发时应复用注册状态，不能重复向仓储注册。
 - 当前文档被外部删除时，watch 只把 session 转为 `save_failed/path_not_found`，不清空 Markdown。安全关闭要求恢复快照或同一 generation/editVersion 的另存结果覆盖当前内容；否则保持文档打开。
 - 冲突覆盖重新获取最新证据并执行第二次确认；令牌过期、内容变化或磁盘再次变化都回到可重试状态。恢复快照载入只修改内存 session，另存目标只能由原生选择器的一次性令牌决定。
 - 资源服务返回的 `assetPath` 是工作区相对路径；编辑器插入 Markdown 前必须根据当前文档所在目录转换为文档相对链接。根目录与多层子目录文档不能共用未经转换的链接文本。
@@ -136,8 +137,8 @@ flowchart LR
 
 - 前端测试覆盖许可证策略、路径代数、文件树 reducer、fixture、React 页面/组件状态、统一编辑器壳、Milkdown/CodeMirror adapter、生产 Markdown 往返语料、恢复/冲突/另存交互、资源目录、文档相对图片路径、选择/剪贴板部分失败、缺失占位/重新定位和移动链接确认，以及保存控制器的尺寸分级、单飞/立即追赶、快照限频、失败与结算；Rust 测试继续覆盖授权、路径、状态/恢复/偏好仓储、文件操作、安全写、监听、窗口事务、结算 intent、资源导入和受控图片读取。契约总守卫要求每个 TypeScript 导出 interface 和字符串常量都能追溯到 Rust 字段或枚举 parity 断言。
 - 所有文件系统测试必须使用带进程 ID、时间与原子序号的统一临时目录工厂；仅依赖时间戳的夹具会在并行测试中碰撞清理日志或临时文件，禁止新增。
-- `pnpm test:e2e` 使用独立 identifier 与临时状态目录，覆盖 P2/P1 的真实 Tauri IPC、关键窗口宽度和 fixture 工作区扫描读取。
-- GitHub Actions 在 macOS/Windows 运行许可证、类型、前端/Rust、桌面 E2E 和未签名生产构建。远端已确认的基线提交为 `9a1690a`；其后的本地审查修正不能外推为新的远端 Windows 证据。
+- `pnpm test:e2e` 使用独立 identifier、临时状态目录和每套件临时复制工作区，当前 8 条用例覆盖 P2/P1 真实 Tauri IPC、1100/740 px、焦点、两模式编辑、WebView 文件输入到 Rust 图片上传、保存重开、外部修改内容安全与恢复。确定性业务流程重试为 0；只有驱动连接层可保留有界启动重试。
+- GitHub Actions 在 macOS/Windows 运行许可证、类型、前端/Rust、桌面 E2E 和未签名生产构建。远端已确认的基线提交仍为 `9a1690a`；扩展后的 8 条套件当前只有 macOS 本机证据，其后的本地改动不能外推为新的远端 Windows 证据。
 - macOS 已有系统选择器、Finder、废纸篓、多窗口、监听和单实例人工证据。Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍需人工实机验收；网络卷、休眠、文件系统卸载和超大目录长时行为也没有产品级证据。
 
 ## 8. 演进约束
