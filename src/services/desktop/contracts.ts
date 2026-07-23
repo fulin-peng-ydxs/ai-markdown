@@ -472,6 +472,7 @@ export const WORKSPACE_OPEN_STATUSES = [
   "opened_current",
   "opened_new",
   "focused_existing",
+  "settlement_required",
   "cancelled",
 ] as const;
 
@@ -499,7 +500,48 @@ export type WorkspaceOpenOutcome =
       workspaceId: WorkspaceId;
       windowLabel: string;
     }
-  | { status: (typeof WORKSPACE_OPEN_STATUSES)[4] };
+  | {
+      status: (typeof WORKSPACE_OPEN_STATUSES)[4];
+      intentId: string;
+      workspace: WorkspaceDescriptor;
+      windowLabel: string;
+    }
+  | { status: (typeof WORKSPACE_OPEN_STATUSES)[5] };
+
+export const WINDOW_SETTLEMENT_INTENT_KINDS = [
+  "close_window",
+  "replace_workspace",
+  "quit_app",
+] as const;
+
+export type WindowSettlementIntentKind =
+  (typeof WINDOW_SETTLEMENT_INTENT_KINDS)[number];
+
+export interface WindowSettlementIntent {
+  intentId: string;
+  kind: WindowSettlementIntentKind;
+  windowLabel: string;
+}
+
+export const WINDOW_SETTLEMENT_RESOLUTION_STATUSES = [
+  "closed",
+  "cancelled",
+  "pending",
+  "opened_current",
+] as const;
+
+export type WindowSettlementResolution =
+  | {
+      status: (typeof WINDOW_SETTLEMENT_RESOLUTION_STATUSES)[0];
+      windowLabel: string;
+    }
+  | { status: (typeof WINDOW_SETTLEMENT_RESOLUTION_STATUSES)[1] }
+  | { status: (typeof WINDOW_SETTLEMENT_RESOLUTION_STATUSES)[2] }
+  | {
+      status: (typeof WINDOW_SETTLEMENT_RESOLUTION_STATUSES)[3];
+      workspace: WorkspaceDescriptor;
+      windowLabel: string;
+    };
 
 export interface WindowActionResult {
   windowLabel: string;

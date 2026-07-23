@@ -192,6 +192,23 @@ describe("DocumentEditorShell", () => {
     await user.click(screen.getByRole("button", { name: "切换源码并查找" }));
     await waitFor(() => expect(screen.getByLabelText("查找")).toBeTruthy());
   });
+
+  it("routes manual save through the shell without claiming success itself", async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DocumentEditorShell
+        onSave={onSave}
+        onSessionChange={() => undefined}
+        session={readySession("# Save")}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "保存当前文档" }));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("磁盘版本")).toBeTruthy();
+  });
 });
 
 function Harness({

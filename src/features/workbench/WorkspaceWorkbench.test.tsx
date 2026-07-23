@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type {
   FsEntry,
   MarkdownReadResult,
+  WindowSettlementIntent,
   WorkspaceDescriptor,
   WorkspaceScanBatch,
 } from "../../services/desktop/contracts";
@@ -84,11 +85,71 @@ function gateway(overrides: Partial<WorkspaceWorkbenchGateway> = {}): WorkspaceW
     open: vi.fn().mockResolvedValue({ status: "cancelled" }),
     setTitle: vi.fn().mockResolvedValue(undefined),
     listenMenu: vi.fn().mockResolvedValue(() => undefined),
+    listenSettlement: vi.fn().mockResolvedValue(() => undefined),
+    resolveSettlement: vi.fn().mockResolvedValue({ status: "cancelled" }),
+    saveGateway: {
+      write: vi.fn(),
+      prepareOverwrite: vi.fn(),
+      confirmOverwrite: vi.fn(),
+      cancelOverwrite: vi.fn(),
+      prepareSaveCopy: vi.fn(),
+      confirmSaveCopy: vi.fn(),
+      cancelSaveCopy: vi.fn(),
+    },
+    recoveryGateway: {
+      list: vi.fn().mockResolvedValue([]),
+      get: vi.fn(),
+      registerActive: vi.fn().mockResolvedValue(true),
+      releaseActive: vi.fn().mockResolvedValue(true),
+      upsert: vi.fn(),
+      delete: vi.fn().mockResolvedValue(true),
+      cleanup: vi.fn(),
+    },
     ...overrides,
   };
 }
 
 describe("WorkspaceWorkbench", () => {
+  it("resolves a native close intent only after the current document is safe", async () => {
+    let settlementListener:
+      | ((intent: WindowSettlementIntent) => void)
+      | undefined;
+    const resolveSettlement = vi
+      .fn()
+      .mockResolvedValue({ status: "closed", windowLabel: "plainroot-window-1" });
+    const api = gateway({
+      listenSettlement: vi.fn().mockImplementation(async (
+        listener: (intent: WindowSettlementIntent) => void,
+      ) => {
+        settlementListener = listener;
+        return () => undefined;
+      }),
+      resolveSettlement,
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByText(/真实文档/);
+
+    await act(async () => {
+      settlementListener?.({
+        intentId: "settlement-1",
+        kind: "close_window",
+        windowLabel: "plainroot-window-1",
+      });
+    });
+
+    await waitFor(() =>
+      expect(resolveSettlement).toHaveBeenCalledWith("settlement-1", true),
+    );
+  });
+
   it("reads a real tree entry and shows only the returned Markdown content", async () => {
     const api = gateway();
     const user = userEvent.setup();

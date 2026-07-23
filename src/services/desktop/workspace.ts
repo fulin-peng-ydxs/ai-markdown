@@ -11,6 +11,8 @@ import type {
   WorkspaceOpenDisposition,
   WorkspaceOpenOutcome,
   WorkspaceSelectionOutcome,
+  WindowSettlementIntent,
+  WindowSettlementResolution,
 } from "./contracts";
 
 export function selectWorkspaceFolder(): Promise<WorkspaceSelectionOutcome> {
@@ -59,8 +61,18 @@ export function createPlainrootWindow(): Promise<WindowActionResult> {
   return invoke<WindowActionResult>("create_plainroot_window");
 }
 
-export function closePlainrootWindow(): Promise<WindowActionResult> {
-  return invoke<WindowActionResult>("close_plainroot_window");
+export function closePlainrootWindow(): Promise<WindowSettlementResolution> {
+  return invoke<WindowSettlementResolution>("close_plainroot_window");
+}
+
+export function resolveWindowSettlement(
+  intentId: string,
+  allow: boolean,
+): Promise<WindowSettlementResolution> {
+  return invoke<WindowSettlementResolution>("resolve_window_settlement", {
+    intentId,
+    allow,
+  });
 }
 
 export function takeSecondInstanceOpenRequests(): Promise<
@@ -95,7 +107,9 @@ export function removeWorkspaceSession(workspaceId: WorkspaceId): Promise<boolea
   return invoke<boolean>("remove_workspace_session", { workspaceId });
 }
 
-export type LauncherMenuAction = "file.open_folder" | "file.open_markdown";
+export type LauncherMenuAction =
+  | "file.open_folder"
+  | "file.open_markdown";
 
 export function listenForLauncherMenu(
   listener: (action: LauncherMenuAction) => void,
@@ -108,4 +122,13 @@ export function listenForLauncherMenu(
       listener(event.payload);
     }
   });
+}
+
+export function listenForWindowSettlement(
+  listener: (intent: WindowSettlementIntent) => void,
+): Promise<UnlistenFn> {
+  return listen<WindowSettlementIntent>(
+    "plainroot://window-settlement",
+    (event) => listener(event.payload),
+  );
 }

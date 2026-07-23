@@ -57,15 +57,37 @@ pub fn run() {
         .plugin(tauri_plugin_wdio::init())
         .plugin(tauri_plugin_wdio_webdriver::init());
 
-    builder
+    let app = builder
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::workspace::WorkspaceAccessService::default())
         .manage(fs::scan::WorkspaceScanService::default())
         .manage(fs::watch::WorkspaceWatchService::default())
         .manage(mutations)
         .manage(deletions)
+        .manage(window::WindowSettlementCoordinator::default())
         .menu(menu::build_app_menu)
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
+        .on_window_event(|window, event| {
+            let tauri::WindowEvent::CloseRequested { api, .. } = event else {
+                return;
+            };
+            let app = window.app_handle();
+            let settlement = app.state::<window::WindowSettlementCoordinator>();
+            if settlement.take_close_bypass(window.label()) {
+                return;
+            }
+            let coordinator = app.state::<window::WorkspaceWindowCoordinator>();
+            let Ok(Some(_)) = coordinator.workspace_for_window(window.label()) else {
+                return;
+            };
+            api.prevent_close();
+            if let Err(error) = settlement.request_close(app, window.label()) {
+                eprintln!(
+                    "Plainroot close settlement request failed: {}",
+                    error.message_key
+                );
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::workspace::select_workspace_folder,
             commands::workspace::select_markdown_file,
@@ -81,6 +103,7 @@ pub fn run() {
             window::coordinate_workspace_open,
             window::create_plainroot_window,
             window::close_plainroot_window,
+            window::resolve_window_settlement,
             window::take_second_instance_open_requests,
             window::set_workbench_window_title,
             commands::files::start_workspace_scan,
@@ -190,6 +213,25 @@ pub fn run() {
             app.manage(preferences);
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("failed to run Plainroot desktop shell");
+        .build(tauri::generate_context!())
+        .expect("failed to build Plainroot desktop shell");
+
+    app.run(|app, event| {
+        let tauri::RunEvent::ExitRequested { api, .. } = event else {
+            return;
+        };
+        let settlement = app.state::<window::WindowSettlementCoordinator>();
+        if settlement.take_exit_bypass() {
+            return;
+        }
+        api.prevent_exit();
+        if let Err(error) =
+            settlement.request_quit(app, &app.state::<window::WorkspaceWindowCoordinator>())
+        {
+            eprintln!(
+                "Plainroot quit settlement request failed: {}",
+                error.message_key
+            );
+        }
+    });
 }

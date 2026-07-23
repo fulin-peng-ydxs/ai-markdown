@@ -48,6 +48,7 @@ import {
   setWorkspaceAssetDirectory,
   uploadAssetImport,
 } from "../../services/desktop/assets";
+import { safeWriteMarkdownFile } from "../../services/desktop/files";
 import {
   rejectDocumentRead,
   resolveDocumentRead,
@@ -102,6 +103,12 @@ export const desktopRecoveryGateway: EditorRecoveryGateway = {
 };
 
 export interface EditorSaveGateway {
+  write(
+    workspaceId: WorkspaceId,
+    relativePath: WorkspaceRelativePath,
+    content: string,
+    expectedRevision: FileRevision,
+  ): Promise<SafeWriteResult>;
   prepareOverwrite(
     workspaceId: WorkspaceId,
     relativePath: WorkspaceRelativePath,
@@ -126,6 +133,7 @@ export interface EditorSaveGateway {
 }
 
 export const desktopSaveGateway: EditorSaveGateway = {
+  write: safeWriteMarkdownFile,
   prepareOverwrite: prepareConflictOverwrite,
   confirmOverwrite: confirmConflictOverwrite,
   cancelOverwrite: cancelConflictOverwrite,

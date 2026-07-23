@@ -17,6 +17,7 @@ import type {
   WorkspaceRelativePath,
   WorkspaceSelectionOutcome,
   WorkspaceSelectionProposal,
+  WindowSettlementIntent,
 } from "../../services/desktop/contracts";
 import { desktopErrorMessage, normalizeDesktopError } from "../../services/desktop/errors";
 import {
@@ -25,6 +26,10 @@ import {
   type DocumentSessionState,
   type ReadyDocumentSession,
 } from "../editor/documentSession";
+import {
+  DocumentSaveController,
+  type DocumentSaveOutcome,
+} from "../editor/save/DocumentSaveController";
 import {
   applyDocumentLoadOutcome,
   requestDocumentLoad,
@@ -96,6 +101,7 @@ export function WorkspaceWorkbench({
   const [documentMetrics, setDocumentMetrics] =
     useState<DocumentEditorMetrics | null>(null);
   const documentStateRef = useRef(documentState);
+  const saveControllerRef = useRef<DocumentSaveController | null>(null);
   const [pageError, setPageError] = useState<DesktopError | null>(null);
   const [operation, setOperation] = useState<PendingOperation | null>(null);
   const [operationError, setOperationError] = useState<DesktopError | null>(null);
@@ -104,6 +110,7 @@ export function WorkspaceWorkbench({
   const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
   const [decision, setDecision] = useState<PendingDecision | null>(null);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
+  const [lifecycleNotice, setLifecycleNotice] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const drawerTriggerRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
@@ -118,6 +125,9 @@ export function WorkspaceWorkbench({
   const selectOtherWorkspaceRef = useRef<(kind: "folder" | "markdown") => Promise<void>>(
     async () => undefined,
   );
+  const settlementHandlerRef = useRef<
+    (intent: WindowSettlementIntent) => Promise<void>
+  >(async () => undefined);
 
   const selectedEntry = selectedPath ? tree.entries[selectedPath] ?? null : null;
   const rootScan = tree.scans[""];
@@ -129,6 +139,7 @@ export function WorkspaceWorkbench({
   const commitDocument = useCallback((next: DocumentSessionState) => {
     documentStateRef.current = next;
     setDocumentState(next);
+    saveControllerRef.current?.observe(next.status === "ready" ? next : null);
   }, []);
 
   const commitTree = useCallback((update: (current: WorkspaceTreeState) => WorkspaceTreeState) => {
@@ -287,6 +298,30 @@ export function WorkspaceWorkbench({
   }, [gateway, initialWorkspace, loadWorkspace]);
 
   useEffect(() => {
+    const controller = new DocumentSaveController({
+      getSession: () =>
+        documentStateRef.current.status === "ready"
+          ? documentStateRef.current
+          : null,
+      onSessionChange: commitDocument,
+      saveGateway: gateway.saveGateway,
+      recoveryGateway: gateway.recoveryGateway,
+    });
+    saveControllerRef.current = controller;
+    controller.observe(
+      documentStateRef.current.status === "ready"
+        ? documentStateRef.current
+        : null,
+    );
+    return () => {
+      controller.dispose();
+      if (saveControllerRef.current === controller) {
+        saveControllerRef.current = null;
+      }
+    };
+  }, [commitDocument, gateway]);
+
+  useEffect(() => {
     let unlisten: (() => void) | undefined;
     void gateway.listenMenu((action) => {
       if (action === "file.open_folder") void selectOtherWorkspaceRef.current("folder");
@@ -296,6 +331,30 @@ export function WorkspaceWorkbench({
     }).catch(() => undefined);
     return () => unlisten?.();
   }, [gateway]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void gateway
+      .listenSettlement((intent) => {
+        void settlementHandlerRef.current(intent);
+      })
+      .then((stop) => {
+        unlisten = stop;
+      })
+      .catch(() => undefined);
+    return () => unlisten?.();
+  }, [gateway]);
+
+  useEffect(() => {
+    const ready = documentState.status === "ready" ? documentState : null;
+    if (
+      lifecycleNotice &&
+      ready &&
+      (ready.saveState.kind === "clean" || ready.saveState.kind === "saved")
+    ) {
+      setLifecycleNotice(null);
+    }
+  }, [documentState, lifecycleNotice]);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -319,6 +378,16 @@ export function WorkspaceWorkbench({
     targetWorkspace = workspace,
     generation = generationRef.current,
   ) {
+    const current = documentStateRef.current;
+    if (
+      current.status === "ready" &&
+      (current.workspaceId !== targetWorkspace.id ||
+        current.relativePath !== path)
+    ) {
+      const settlement = await settleCurrentDocument();
+      if (settlement.status === "blocked") return;
+    }
+    setLifecycleNotice(null);
     setSelectedPath(path);
     const loading = beginDocumentLoad(documentStateRef.current, {
       workspaceId: targetWorkspace.id,
@@ -361,9 +430,47 @@ export function WorkspaceWorkbench({
     }
   }
 
+  async function settleCurrentDocument(): Promise<DocumentSaveOutcome> {
+    const result =
+      (await saveControllerRef.current?.settle()) ?? {
+        status: "already_safe" as const,
+      };
+    if (result.status === "blocked") {
+      setLifecycleNotice(settlementMessage(result));
+    }
+    return result;
+  }
+
+  async function resolveSettlementIntent(intent: WindowSettlementIntent) {
+    const settlement = await settleCurrentDocument();
+    try {
+      const outcome = await gateway.resolveSettlement(
+        intent.intentId,
+        settlement.status !== "blocked",
+      );
+      if (outcome.status === "opened_current") {
+        onWorkspaceChanged(outcome.workspace);
+      }
+    } catch (reason) {
+      setPageError(
+        normalizeDesktopError(
+          reason,
+          intent.kind === "replace_workspace"
+            ? "window_create_failed"
+            : "window_close_failed",
+        ),
+      );
+    }
+  }
+
+  settlementHandlerRef.current = resolveSettlementIntent;
+
   function selectEntry(entry: FsEntry) {
-    setSelectedPath(entry.relativePath);
-    if (entry.kind === "markdown_file") void openMarkdown(entry.relativePath);
+    if (entry.kind === "markdown_file") {
+      void openMarkdown(entry.relativePath);
+    } else {
+      setSelectedPath(entry.relativePath);
+    }
   }
 
   function toggleDirectory(entry: FsEntry) {
@@ -403,6 +510,16 @@ export function WorkspaceWorkbench({
     if (!operation || mutationInFlightRef.current) return;
     const value = operation.value;
     if (!value.trim() && operation.kind !== "move") return;
+    const currentDocument = documentStateRef.current;
+    if (
+      currentDocument.status === "ready" &&
+      selectedEntry &&
+      (operation.kind === "rename" || operation.kind === "move") &&
+      isSameOrInside(currentDocument.relativePath, selectedEntry.relativePath)
+    ) {
+      const settlement = await settleCurrentDocument();
+      if (settlement.status === "blocked") return;
+    }
     const mutationId = crypto.randomUUID();
     mutationInFlightRef.current = true;
     const sourcePath = operation.kind === "rename" || operation.kind === "move"
@@ -456,6 +573,14 @@ export function WorkspaceWorkbench({
   async function moveToTrash() {
     if (!deleteTarget || mutationInFlightRef.current) return;
     const target = deleteTarget;
+    const currentDocument = documentStateRef.current;
+    if (
+      currentDocument.status === "ready" &&
+      isSameOrInside(currentDocument.relativePath, target.relativePath)
+    ) {
+      const settlement = await settleCurrentDocument();
+      if (settlement.status === "blocked") return;
+    }
     mutationInFlightRef.current = true;
     const mutationId = crypto.randomUUID();
     commitTree((current) => beginWorkspaceTreeMutation(current, mutationId, "trash", target.relativePath));
@@ -625,12 +750,13 @@ export function WorkspaceWorkbench({
 
   const statusText = useMemo(() => {
     if (busyLabel) return busyLabel;
+    if (lifecycleNotice) return lifecycleNotice;
     if (tree.watch.status === "root_missing") return "工作区目录已失效";
     if (tree.watch.status === "permission_denied") return "工作区权限已撤销";
     if (tree.watch.status === "failed") return "文件监听已停止，可手动刷新";
     if (rootLoading) return `正在读取文件树${rootScan?.processed ? ` · ${rootScan.processed} 项` : ""}`;
     return "文件树已同步";
-  }, [busyLabel, rootLoading, rootScan?.processed, tree.watch.status]);
+  }, [busyLabel, lifecycleNotice, rootLoading, rootScan?.processed, tree.watch.status]);
 
   return (
     <main className="workbench" aria-label="Plainroot Markdown 工作台">
@@ -712,6 +838,7 @@ export function WorkspaceWorkbench({
           <DocumentView
             onMetricsChange={setDocumentMetrics}
             onRetry={(path) => void openMarkdown(path)}
+            onSave={() => void saveControllerRef.current?.manualSave()}
             onSessionChange={commitDocument}
             state={documentState}
           />
@@ -794,11 +921,13 @@ function DocumentView({
   onMetricsChange,
   state,
   onRetry,
+  onSave,
   onSessionChange,
 }: {
   onMetricsChange(metrics: DocumentEditorMetrics): void;
   state: DocumentSessionState;
   onRetry(path: WorkspaceRelativePath): void;
+  onSave(): void;
   onSessionChange(session: ReadyDocumentSession): void;
 }) {
   if (state.status === "empty") {
@@ -818,10 +947,24 @@ function DocumentView({
   return (
     <DocumentEditorShell
       onMetricsChange={onMetricsChange}
+      onSave={onSave}
       onSessionChange={onSessionChange}
       session={state}
     />
   );
+}
+
+function settlementMessage(result: Extract<DocumentSaveOutcome, { status: "blocked" }>) {
+  switch (result.reason) {
+    case "conflict":
+      return "磁盘版本已变化，当前内容已保留；解决冲突前不会关闭或替换窗口。";
+    case "failed":
+      return "保存没有完成，当前内容已保留；重试保存前不会关闭或替换窗口。";
+    case "readonly":
+      return "当前文档无法写入，窗口保持打开。";
+    case "stale":
+      return "文档仍在变化，窗口保持打开，请再次保存。";
+  }
 }
 
 function documentMetric(

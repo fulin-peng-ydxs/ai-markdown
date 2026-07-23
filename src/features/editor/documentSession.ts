@@ -449,6 +449,80 @@ export function failDocumentSave(
   };
 }
 
+export function markDocumentConflict(
+  session: ReadyDocumentSession,
+  requestId: string,
+  evidence: DocumentConflictEvidence,
+): SessionMutationResult {
+  if (
+    session.saveState.kind !== "saving" ||
+    session.saveState.requestId !== requestId
+  ) {
+    return { status: "stale", session };
+  }
+  return {
+    status: "applied",
+    session: {
+      ...session,
+      saveState: { kind: "conflict", evidenceId: evidence.evidenceId },
+      conflictEvidence: evidence,
+      contentSafety:
+        session.recoveryState.kind === "available"
+          ? {
+              kind: "recovery",
+              snapshotId: session.recoveryState.snapshotId,
+            }
+          : { kind: "memory" },
+    },
+  };
+}
+
+export function beginDocumentRecoverySnapshot(
+  session: ReadyDocumentSession,
+): SessionMutationResult {
+  if (session.saveState.kind === "readonly") {
+    return { status: "readonly", session };
+  }
+  return {
+    status: "applied",
+    session: {
+      ...session,
+      recoveryState: { kind: "persisting" },
+    },
+  };
+}
+
+export function completeDocumentRecoverySnapshot(
+  session: ReadyDocumentSession,
+  snapshotId: string,
+  coversCurrentContent = true,
+): SessionMutationResult {
+  return {
+    status: "applied",
+    session: {
+      ...session,
+      recoveryState: { kind: "available", snapshotId },
+      contentSafety: coversCurrentContent
+        ? { kind: "recovery", snapshotId }
+        : { kind: "memory" },
+    },
+  };
+}
+
+export function failDocumentRecoverySnapshot(
+  session: ReadyDocumentSession,
+  error: DesktopError,
+): SessionMutationResult {
+  return {
+    status: "applied",
+    session: {
+      ...session,
+      recoveryState: { kind: "failed", error },
+      contentSafety: { kind: "at_risk", reason: error.messageKey },
+    },
+  };
+}
+
 export function sourceFormatFromRevision(
   revision: FileRevision,
 ): DocumentSourceFormat {

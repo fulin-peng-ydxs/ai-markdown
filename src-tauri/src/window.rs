@@ -3,7 +3,9 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, Runtime, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, Emitter, Manager, Runtime, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+};
 
 use crate::commands::workspace::WorkspaceAccessService;
 use crate::error::{DesktopError, DesktopErrorCode};
@@ -24,6 +26,7 @@ pub const INITIAL_WINDOW_LABEL: &str = "plainroot-window-1";
 const MAX_SECOND_INSTANCE_REQUESTS: usize = 16;
 const MAX_SECOND_INSTANCE_ARGUMENTS: usize = 16;
 const MAX_SECOND_INSTANCE_VALUE_BYTES: usize = 4096;
+pub const WINDOW_SETTLEMENT_EVENT: &str = "plainroot://window-settlement";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -57,7 +60,46 @@ pub enum WorkspaceOpenOutcome {
         workspace_id: WorkspaceId,
         window_label: String,
     },
+    SettlementRequired {
+        intent_id: String,
+        workspace: WorkspaceDescriptor,
+        window_label: String,
+    },
     Cancelled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WindowSettlementIntentKind {
+    CloseWindow,
+    ReplaceWorkspace,
+    QuitApp,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowSettlementIntent {
+    pub intent_id: String,
+    pub kind: WindowSettlementIntentKind,
+    pub window_label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(
+    tag = "status",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum WindowSettlementResolution {
+    Closed {
+        window_label: String,
+    },
+    Cancelled,
+    Pending,
+    OpenedCurrent {
+        workspace: WorkspaceDescriptor,
+        window_label: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -87,6 +129,34 @@ struct CoordinatorState {
 #[derive(Debug, Default)]
 pub struct WorkspaceWindowCoordinator {
     state: Mutex<CoordinatorState>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PendingSettlementAction {
+    CloseWindow,
+    ReplaceWorkspace { workspace_id: WorkspaceId },
+    QuitApp { quit_intent_id: String },
+}
+
+#[derive(Debug, Clone)]
+struct PendingWindowSettlement {
+    intent: WindowSettlementIntent,
+    action: PendingSettlementAction,
+}
+
+#[derive(Debug, Default)]
+struct WindowSettlementState {
+    next_intent_id: u64,
+    pending_by_window: HashMap<String, PendingWindowSettlement>,
+    close_bypass: HashSet<String>,
+    quit_intent_id: Option<String>,
+    quit_pending_windows: HashSet<String>,
+    exit_bypass: bool,
+}
+
+#[derive(Debug, Default)]
+pub struct WindowSettlementCoordinator {
+    state: Mutex<WindowSettlementState>,
 }
 
 struct WorkspaceOpenContext<'a, R: Runtime> {
@@ -142,10 +212,27 @@ impl WorkspaceWindowCoordinator {
             .map_err(|_| coordinator_unavailable())
     }
 
+    pub fn window_for_workspace(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Option<String>, DesktopError> {
+        self.state
+            .lock()
+            .map(|state| state.workspace_windows.get(workspace_id).cloned())
+            .map_err(|_| coordinator_unavailable())
+    }
+
     pub fn active_workspace_ids(&self) -> Result<Vec<WorkspaceId>, DesktopError> {
         self.state
             .lock()
             .map(|state| state.workspace_windows.keys().cloned().collect())
+            .map_err(|_| coordinator_unavailable())
+    }
+
+    pub fn active_window_labels(&self) -> Result<Vec<String>, DesktopError> {
+        self.state
+            .lock()
+            .map(|state| state.window_workspaces.keys().cloned().collect())
             .map_err(|_| coordinator_unavailable())
     }
 
@@ -463,6 +550,299 @@ impl WorkspaceWindowCoordinator {
     }
 }
 
+impl WindowSettlementCoordinator {
+    pub fn request_close<R: Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        window_label: &str,
+    ) -> Result<WindowSettlementIntent, DesktopError> {
+        self.request(
+            app,
+            window_label,
+            WindowSettlementIntentKind::CloseWindow,
+            PendingSettlementAction::CloseWindow,
+        )
+    }
+
+    pub fn request_replace<R: Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        window_label: &str,
+        workspace_id: WorkspaceId,
+    ) -> Result<WindowSettlementIntent, DesktopError> {
+        self.request(
+            app,
+            window_label,
+            WindowSettlementIntentKind::ReplaceWorkspace,
+            PendingSettlementAction::ReplaceWorkspace { workspace_id },
+        )
+    }
+
+    pub fn request_quit<R: Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        coordinator: &WorkspaceWindowCoordinator,
+    ) -> Result<(), DesktopError> {
+        let window_labels = coordinator.active_window_labels()?;
+        if window_labels.is_empty() {
+            self.allow_next_exit()?;
+            app.exit(0);
+            return Ok(());
+        }
+        let intents = {
+            let mut state = self.state.lock().map_err(|_| coordinator_unavailable())?;
+            if state.quit_intent_id.is_some() {
+                return Ok(());
+            }
+            if window_labels
+                .iter()
+                .any(|label| state.pending_by_window.contains_key(label))
+            {
+                return Err(coordinator_unavailable());
+            }
+            state.next_intent_id = state.next_intent_id.saturating_add(1);
+            let intent_id = format!("settlement-{}", state.next_intent_id);
+            state.quit_intent_id = Some(intent_id.clone());
+            state.quit_pending_windows = window_labels.iter().cloned().collect();
+            window_labels
+                .iter()
+                .map(|window_label| {
+                    let intent = WindowSettlementIntent {
+                        intent_id: intent_id.clone(),
+                        kind: WindowSettlementIntentKind::QuitApp,
+                        window_label: window_label.clone(),
+                    };
+                    state.pending_by_window.insert(
+                        window_label.clone(),
+                        PendingWindowSettlement {
+                            intent: intent.clone(),
+                            action: PendingSettlementAction::QuitApp {
+                                quit_intent_id: intent_id.clone(),
+                            },
+                        },
+                    );
+                    intent
+                })
+                .collect::<Vec<_>>()
+        };
+        for intent in intents {
+            let Some(window) = app.get_webview_window(&intent.window_label) else {
+                self.cancel_quit(&intent.intent_id);
+                return Err(window_error(DesktopErrorCode::WindowNotFound));
+            };
+            if window.emit(WINDOW_SETTLEMENT_EVENT, &intent).is_err() {
+                self.cancel_quit(&intent.intent_id);
+                return Err(window_error(DesktopErrorCode::WindowFocusFailed));
+            }
+        }
+        Ok(())
+    }
+
+    fn request<R: Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        window_label: &str,
+        kind: WindowSettlementIntentKind,
+        action: PendingSettlementAction,
+    ) -> Result<WindowSettlementIntent, DesktopError> {
+        let intent = {
+            let mut state = self.state.lock().map_err(|_| coordinator_unavailable())?;
+            if let Some(existing) = state.pending_by_window.get(window_label) {
+                if existing.action == action {
+                    return Ok(existing.intent.clone());
+                }
+                return Err(coordinator_unavailable());
+            }
+            state.next_intent_id = state.next_intent_id.saturating_add(1);
+            let intent = WindowSettlementIntent {
+                intent_id: format!("settlement-{}", state.next_intent_id),
+                kind,
+                window_label: window_label.to_owned(),
+            };
+            state.pending_by_window.insert(
+                window_label.to_owned(),
+                PendingWindowSettlement {
+                    intent: intent.clone(),
+                    action,
+                },
+            );
+            intent
+        };
+        let Some(window) = app.get_webview_window(window_label) else {
+            if let Ok(mut state) = self.state.lock() {
+                state.pending_by_window.remove(window_label);
+            }
+            return Err(window_error(DesktopErrorCode::WindowNotFound));
+        };
+        if window.emit(WINDOW_SETTLEMENT_EVENT, &intent).is_err() {
+            if let Ok(mut state) = self.state.lock() {
+                state.pending_by_window.remove(window_label);
+            }
+            return Err(window_error(DesktopErrorCode::WindowFocusFailed));
+        }
+        Ok(intent)
+    }
+
+    fn resolve<R: Runtime>(
+        &self,
+        context: WorkspaceOpenContext<'_, R>,
+        intent_id: &str,
+        allow: bool,
+        coordinator: &WorkspaceWindowCoordinator,
+    ) -> Result<WindowSettlementResolution, DesktopError> {
+        let pending = {
+            let mut state = self.state.lock().map_err(|_| coordinator_unavailable())?;
+            let Some(pending) = state
+                .pending_by_window
+                .get(context.source_window_label)
+                .cloned()
+            else {
+                return Ok(WindowSettlementResolution::Cancelled);
+            };
+            if pending.intent.intent_id != intent_id {
+                return Ok(WindowSettlementResolution::Pending);
+            }
+            state.pending_by_window.remove(context.source_window_label);
+            pending
+        };
+
+        if !allow {
+            match pending.action {
+                PendingSettlementAction::ReplaceWorkspace { workspace_id } => {
+                    let _ = context.access.release_workspace(&workspace_id);
+                }
+                PendingSettlementAction::QuitApp { quit_intent_id } => {
+                    self.cancel_quit(&quit_intent_id);
+                }
+                PendingSettlementAction::CloseWindow => {}
+            }
+            return Ok(WindowSettlementResolution::Cancelled);
+        }
+
+        match pending.action {
+            PendingSettlementAction::CloseWindow => {
+                self.allow_next_close(context.source_window_label)?;
+                if let Err(error) = coordinator.close_window(
+                    context.app,
+                    context.source_window_label,
+                    context.access,
+                    context.persistent_state,
+                ) {
+                    self.revoke_close_bypass(context.source_window_label);
+                    return Err(error);
+                }
+                Ok(WindowSettlementResolution::Closed {
+                    window_label: context.source_window_label.to_owned(),
+                })
+            }
+            PendingSettlementAction::ReplaceWorkspace { workspace_id } => {
+                let outcome = coordinator.coordinate_open(
+                    context,
+                    &workspace_id,
+                    Some(WorkspaceOpenDisposition::CurrentWindow),
+                )?;
+                let WorkspaceOpenOutcome::OpenedCurrent {
+                    workspace,
+                    window_label,
+                } = outcome
+                else {
+                    return Err(coordinator_unavailable());
+                };
+                Ok(WindowSettlementResolution::OpenedCurrent {
+                    workspace,
+                    window_label,
+                })
+            }
+            PendingSettlementAction::QuitApp { quit_intent_id } => {
+                let should_exit = {
+                    let mut state = self.state.lock().map_err(|_| coordinator_unavailable())?;
+                    if state.quit_intent_id.as_deref() != Some(quit_intent_id.as_str()) {
+                        return Ok(WindowSettlementResolution::Cancelled);
+                    }
+                    state
+                        .quit_pending_windows
+                        .remove(context.source_window_label);
+                    if state.quit_pending_windows.is_empty() {
+                        state.quit_intent_id = None;
+                        state.exit_bypass = true;
+                        true
+                    } else {
+                        false
+                    }
+                };
+                if should_exit {
+                    context.app.exit(0);
+                }
+                Ok(WindowSettlementResolution::Pending)
+            }
+        }
+    }
+
+    pub fn take_close_bypass(&self, window_label: &str) -> bool {
+        self.state
+            .lock()
+            .map(|mut state| state.close_bypass.remove(window_label))
+            .unwrap_or(false)
+    }
+
+    pub fn take_exit_bypass(&self) -> bool {
+        self.state
+            .lock()
+            .map(|mut state| std::mem::take(&mut state.exit_bypass))
+            .unwrap_or(false)
+    }
+
+    fn allow_next_close(&self, window_label: &str) -> Result<(), DesktopError> {
+        self.state
+            .lock()
+            .map(|mut state| {
+                state.close_bypass.insert(window_label.to_owned());
+            })
+            .map_err(|_| coordinator_unavailable())
+    }
+
+    fn revoke_close_bypass(&self, window_label: &str) {
+        if let Ok(mut state) = self.state.lock() {
+            state.close_bypass.remove(window_label);
+        }
+    }
+
+    fn allow_next_exit(&self) -> Result<(), DesktopError> {
+        self.state
+            .lock()
+            .map(|mut state| state.exit_bypass = true)
+            .map_err(|_| coordinator_unavailable())
+    }
+
+    fn cancel_quit(&self, quit_intent_id: &str) {
+        if let Ok(mut state) = self.state.lock() {
+            if state.quit_intent_id.as_deref() != Some(quit_intent_id) {
+                return;
+            }
+            state.pending_by_window.retain(|_, pending| {
+                !matches!(
+                    &pending.action,
+                    PendingSettlementAction::QuitApp {
+                        quit_intent_id: candidate
+                    } if candidate == quit_intent_id
+                )
+            });
+            state.quit_intent_id = None;
+            state.quit_pending_windows.clear();
+        }
+    }
+
+    #[cfg(test)]
+    fn pending_for(&self, window_label: &str) -> Option<WindowSettlementIntent> {
+        self.state.lock().ok().and_then(|state| {
+            state
+                .pending_by_window
+                .get(window_label)
+                .map(|pending| pending.intent.clone())
+        })
+    }
+}
+
 pub fn launcher_title() -> String {
     APP_NAME.to_owned()
 }
@@ -601,9 +981,28 @@ pub fn coordinate_workspace_open<R: Runtime>(
     workspace_id: WorkspaceId,
     disposition: Option<WorkspaceOpenDisposition>,
     coordinator: State<'_, WorkspaceWindowCoordinator>,
+    settlement: State<'_, WindowSettlementCoordinator>,
     access: State<'_, WorkspaceAccessService>,
     persistent_state: State<'_, PersistentAppState>,
 ) -> Result<WorkspaceOpenOutcome, DesktopError> {
+    if disposition == Some(WorkspaceOpenDisposition::CurrentWindow) {
+        let current_workspace_id = coordinator.workspace_for_window(window.label())?;
+        let target_already_open = coordinator.window_for_workspace(&workspace_id)?.is_some();
+        if current_workspace_id
+            .as_ref()
+            .is_some_and(|current| current != &workspace_id)
+            && !target_already_open
+        {
+            let workspace = access.workspace(&workspace_id)?;
+            let intent =
+                settlement.request_replace(window.app_handle(), window.label(), workspace_id)?;
+            return Ok(WorkspaceOpenOutcome::SettlementRequired {
+                intent_id: intent.intent_id,
+                workspace,
+                window_label: window.label().to_owned(),
+            });
+        }
+    }
     coordinator.coordinate_open(
         WorkspaceOpenContext {
             app: window.app_handle(),
@@ -629,14 +1028,47 @@ pub fn create_plainroot_window<R: Runtime>(
 pub fn close_plainroot_window<R: Runtime>(
     window: WebviewWindow<R>,
     coordinator: State<'_, WorkspaceWindowCoordinator>,
+    settlement: State<'_, WindowSettlementCoordinator>,
     access: State<'_, WorkspaceAccessService>,
     persistent_state: State<'_, PersistentAppState>,
-) -> Result<WindowActionResult, DesktopError> {
-    coordinator.close_window(
-        window.app_handle(),
-        window.label(),
-        &access,
-        &persistent_state,
+) -> Result<WindowSettlementResolution, DesktopError> {
+    if coordinator.workspace_for_window(window.label())?.is_some() {
+        settlement.request_close(window.app_handle(), window.label())?;
+        return Ok(WindowSettlementResolution::Pending);
+    }
+    coordinator
+        .close_window(
+            window.app_handle(),
+            window.label(),
+            &access,
+            &persistent_state,
+        )
+        .map(|result| WindowSettlementResolution::Closed {
+            window_label: result.window_label,
+        })
+}
+
+#[tauri::command]
+pub fn resolve_window_settlement<R: Runtime>(
+    window: WebviewWindow<R>,
+    intent_id: String,
+    allow: bool,
+    coordinator: State<'_, WorkspaceWindowCoordinator>,
+    settlement: State<'_, WindowSettlementCoordinator>,
+    access: State<'_, WorkspaceAccessService>,
+    persistent_state: State<'_, PersistentAppState>,
+) -> Result<WindowSettlementResolution, DesktopError> {
+    settlement.resolve(
+        WorkspaceOpenContext {
+            app: window.app_handle(),
+            source_window_label: window.label(),
+            access: &access,
+            persistent_state: &persistent_state,
+            opened_at: unix_timestamp_millis(),
+        },
+        &intent_id,
+        allow,
+        &coordinator,
     )
 }
 
@@ -753,7 +1185,8 @@ mod tests {
 
     use super::{
         close_window, document_title, focus_window, launcher_title, migrate_legacy_window_labels,
-        SecondInstanceOpenRequest, WorkspaceOpenContext, WorkspaceOpenDisposition,
+        SecondInstanceOpenRequest, WindowSettlementCoordinator, WindowSettlementIntentKind,
+        WindowSettlementResolution, WorkspaceOpenContext, WorkspaceOpenDisposition,
         WorkspaceOpenOutcome, WorkspaceWindowCoordinator, INITIAL_WINDOW_LABEL,
     };
     use crate::commands::workspace::WorkspaceAccessService;
@@ -989,6 +1422,190 @@ mod tests {
         assert_eq!(snapshot.workspace_sessions.len(), 1);
         assert_eq!(snapshot.workspace_sessions[0].workspace_id, *second.id());
         assert_eq!(snapshot.recent_workspaces.len(), 2);
+    }
+
+    #[test]
+    fn replacement_settlement_is_non_destructive_until_frontend_allows_it() {
+        let first_root = TestDirectory::create("settlement-first");
+        let second_root = TestDirectory::create("settlement-second");
+        let app_data = TestDirectory::create("settlement-state");
+        let app = mock_app();
+        create_initial_window(app.handle());
+        let access = WorkspaceAccessService::default();
+        let first = authorize_root(&access, first_root.path());
+        let second = authorize_root(&access, second_root.path());
+        let persistent = PersistentAppState::initialize_at(app_data.path().join("state.json"));
+        let coordinator = WorkspaceWindowCoordinator::default();
+        let settlement = WindowSettlementCoordinator::default();
+        coordinator
+            .coordinate_open(
+                open_context(app.handle(), INITIAL_WINDOW_LABEL, &access, &persistent, 10),
+                first.id(),
+                None,
+            )
+            .unwrap();
+
+        let intent = settlement
+            .request_replace(app.handle(), INITIAL_WINDOW_LABEL, second.id().clone())
+            .unwrap();
+        assert_eq!(intent.kind, WindowSettlementIntentKind::ReplaceWorkspace);
+        assert_eq!(
+            coordinator.active_window_for(first.id()).as_deref(),
+            Some(INITIAL_WINDOW_LABEL)
+        );
+        assert!(settlement.pending_for(INITIAL_WINDOW_LABEL).is_some());
+
+        let cancelled = settlement
+            .resolve(
+                open_context(app.handle(), INITIAL_WINDOW_LABEL, &access, &persistent, 20),
+                &intent.intent_id,
+                false,
+                &coordinator,
+            )
+            .unwrap();
+        assert_eq!(cancelled, WindowSettlementResolution::Cancelled);
+        assert_eq!(
+            coordinator.active_window_for(first.id()).as_deref(),
+            Some(INITIAL_WINDOW_LABEL)
+        );
+        assert_eq!(
+            access.workspace(second.id()).unwrap_err().code,
+            DesktopErrorCode::WorkspaceNotRegistered
+        );
+    }
+
+    #[test]
+    fn repeated_close_reuses_one_intent_and_only_an_allowed_resolution_closes() {
+        let root = TestDirectory::create("settlement-close");
+        let app_data = TestDirectory::create("settlement-close-state");
+        let app = mock_app();
+        create_initial_window(app.handle());
+        let access = WorkspaceAccessService::default();
+        let workspace = authorize_root(&access, root.path());
+        let persistent = PersistentAppState::initialize_at(app_data.path().join("state.json"));
+        let coordinator = WorkspaceWindowCoordinator::default();
+        let settlement = WindowSettlementCoordinator::default();
+        coordinator
+            .coordinate_open(
+                open_context(app.handle(), INITIAL_WINDOW_LABEL, &access, &persistent, 10),
+                workspace.id(),
+                None,
+            )
+            .unwrap();
+
+        let first = settlement
+            .request_close(app.handle(), INITIAL_WINDOW_LABEL)
+            .unwrap();
+        let repeated = settlement
+            .request_close(app.handle(), INITIAL_WINDOW_LABEL)
+            .unwrap();
+        assert_eq!(first, repeated);
+        let cancelled = settlement
+            .resolve(
+                open_context(app.handle(), INITIAL_WINDOW_LABEL, &access, &persistent, 20),
+                &first.intent_id,
+                false,
+                &coordinator,
+            )
+            .unwrap();
+        assert_eq!(cancelled, WindowSettlementResolution::Cancelled);
+        assert!(app.get_webview_window(INITIAL_WINDOW_LABEL).is_some());
+
+        let allowed = settlement
+            .request_close(app.handle(), INITIAL_WINDOW_LABEL)
+            .unwrap();
+        let closed = settlement
+            .resolve(
+                open_context(app.handle(), INITIAL_WINDOW_LABEL, &access, &persistent, 30),
+                &allowed.intent_id,
+                true,
+                &coordinator,
+            )
+            .unwrap();
+        assert!(matches!(closed, WindowSettlementResolution::Closed { .. }));
+        assert_eq!(coordinator.active_window_for(workspace.id()), None);
+        assert!(persistent.snapshot().unwrap().workspace_sessions.is_empty());
+        assert_eq!(
+            access.workspace(workspace.id()).unwrap_err().code,
+            DesktopErrorCode::WorkspaceNotRegistered
+        );
+        assert!(settlement.take_close_bypass(INITIAL_WINDOW_LABEL));
+    }
+
+    #[test]
+    fn missing_window_does_not_leave_a_stale_settlement_intent() {
+        let app = mock_app();
+        let settlement = WindowSettlementCoordinator::default();
+
+        let error = settlement
+            .request_close(app.handle(), "missing-window")
+            .unwrap_err();
+
+        assert_eq!(error.code, DesktopErrorCode::WindowNotFound);
+        assert_eq!(settlement.pending_for("missing-window"), None);
+    }
+
+    #[test]
+    fn multi_window_quit_waits_for_every_window_and_one_rejection_cancels_the_group() {
+        let first_root = TestDirectory::create("quit-first");
+        let second_root = TestDirectory::create("quit-second");
+        let app_data = TestDirectory::create("quit-state");
+        let app = mock_app();
+        create_initial_window(app.handle());
+        WebviewWindowBuilder::new(
+            app.handle(),
+            "plainroot-window-2",
+            WebviewUrl::App("index.html".into()),
+        )
+        .build()
+        .unwrap();
+        let access = WorkspaceAccessService::default();
+        let first = authorize_root(&access, first_root.path());
+        let second = authorize_root(&access, second_root.path());
+        let persistent = PersistentAppState::initialize_at(app_data.path().join("state.json"));
+        let coordinator = WorkspaceWindowCoordinator::default();
+        let settlement = WindowSettlementCoordinator::default();
+        coordinator
+            .coordinate_open(
+                open_context(app.handle(), INITIAL_WINDOW_LABEL, &access, &persistent, 10),
+                first.id(),
+                None,
+            )
+            .unwrap();
+        coordinator
+            .coordinate_open(
+                open_context(app.handle(), "plainroot-window-2", &access, &persistent, 20),
+                second.id(),
+                None,
+            )
+            .unwrap();
+
+        settlement.request_quit(app.handle(), &coordinator).unwrap();
+        let first_intent = settlement.pending_for(INITIAL_WINDOW_LABEL).unwrap();
+        let second_intent = settlement.pending_for("plainroot-window-2").unwrap();
+        assert_eq!(first_intent.intent_id, second_intent.intent_id);
+        let first_resolution = settlement
+            .resolve(
+                open_context(app.handle(), INITIAL_WINDOW_LABEL, &access, &persistent, 30),
+                &first_intent.intent_id,
+                true,
+                &coordinator,
+            )
+            .unwrap();
+        assert_eq!(first_resolution, WindowSettlementResolution::Pending);
+        assert!(!settlement.take_exit_bypass());
+
+        let cancelled = settlement
+            .resolve(
+                open_context(app.handle(), "plainroot-window-2", &access, &persistent, 40),
+                &second_intent.intent_id,
+                false,
+                &coordinator,
+            )
+            .unwrap();
+        assert_eq!(cancelled, WindowSettlementResolution::Cancelled);
+        assert!(!settlement.take_exit_bypass());
+        assert_eq!(persistent.snapshot().unwrap().workspace_sessions.len(), 2);
     }
 
     #[test]
@@ -1234,12 +1851,18 @@ mod tests {
             })
             .unwrap(),
             serde_json::to_value(WorkspaceOpenOutcome::OpenedNew {
-                workspace,
+                workspace: workspace.clone(),
                 window_label: "plainroot-window-2".to_owned(),
             })
             .unwrap(),
             serde_json::to_value(WorkspaceOpenOutcome::FocusedExisting {
                 workspace_id,
+                window_label: INITIAL_WINDOW_LABEL.to_owned(),
+            })
+            .unwrap(),
+            serde_json::to_value(WorkspaceOpenOutcome::SettlementRequired {
+                intent_id: "settlement-1".to_owned(),
+                workspace: workspace.clone(),
                 window_label: INITIAL_WINDOW_LABEL.to_owned(),
             })
             .unwrap(),
@@ -1256,7 +1879,8 @@ mod tests {
         assert_eq!(outcomes[0]["currentWorkspaceName"], "Current");
         assert_eq!(outcomes[1]["windowLabel"], INITIAL_WINDOW_LABEL);
         assert_eq!(outcomes[3]["workspaceId"], "workspace-contract");
-        assert_eq!(outcomes[4], serde_json::json!({ "status": "cancelled" }));
+        assert_eq!(outcomes[4]["intentId"], "settlement-1");
+        assert_eq!(outcomes[5], serde_json::json!({ "status": "cancelled" }));
         let dispositions = [
             WorkspaceOpenDisposition::CurrentWindow,
             WorkspaceOpenDisposition::NewWindow,
@@ -1285,5 +1909,49 @@ mod tests {
             working_directory: ".".to_owned(),
         };
         assert_interface_matches("SecondInstanceOpenRequest", &request);
+        let intent = super::WindowSettlementIntent {
+            intent_id: "settlement-1".to_owned(),
+            kind: WindowSettlementIntentKind::CloseWindow,
+            window_label: INITIAL_WINDOW_LABEL.to_owned(),
+        };
+        assert_interface_matches("WindowSettlementIntent", &intent);
+        let intent_kinds = [
+            WindowSettlementIntentKind::CloseWindow,
+            WindowSettlementIntentKind::ReplaceWorkspace,
+            WindowSettlementIntentKind::QuitApp,
+        ]
+        .into_iter()
+        .map(|value| {
+            serde_json::to_value(value)
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+        assert_eq!(
+            intent_kinds,
+            typescript_string_constant_values("WINDOW_SETTLEMENT_INTENT_KINDS")
+        );
+        let resolutions = [
+            serde_json::to_value(WindowSettlementResolution::Closed {
+                window_label: INITIAL_WINDOW_LABEL.to_owned(),
+            })
+            .unwrap(),
+            serde_json::to_value(WindowSettlementResolution::Cancelled).unwrap(),
+            serde_json::to_value(WindowSettlementResolution::Pending).unwrap(),
+            serde_json::to_value(WindowSettlementResolution::OpenedCurrent {
+                workspace,
+                window_label: INITIAL_WINDOW_LABEL.to_owned(),
+            })
+            .unwrap(),
+        ];
+        assert_eq!(
+            resolutions
+                .iter()
+                .map(|value| value["status"].as_str().unwrap().to_owned())
+                .collect::<Vec<_>>(),
+            typescript_string_constant_values("WINDOW_SETTLEMENT_RESOLUTION_STATUSES")
+        );
     }
 }

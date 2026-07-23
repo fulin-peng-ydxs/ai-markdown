@@ -4,8 +4,8 @@ use tauri::{
     AppHandle, Emitter, Manager, Runtime,
 };
 
-use crate::window::WorkspaceWindowCoordinator;
 use crate::window::APP_NAME;
+use crate::window::{WindowSettlementCoordinator, WorkspaceWindowCoordinator};
 use crate::{commands::workspace::WorkspaceAccessService, state::PersistentAppState};
 
 pub const NEW_WINDOW_ID: &str = "file.new_window";
@@ -156,14 +156,21 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
                     )
                 });
             label.and_then(|label| {
-                app.state::<WorkspaceWindowCoordinator>()
-                    .close_window(
-                        app,
-                        &label,
-                        &app.state::<WorkspaceAccessService>(),
-                        &app.state::<PersistentAppState>(),
-                    )
-                    .map(|_| ())
+                let coordinator = app.state::<WorkspaceWindowCoordinator>();
+                if coordinator.workspace_for_window(&label)?.is_some() {
+                    app.state::<WindowSettlementCoordinator>()
+                        .request_close(app, &label)
+                        .map(|_| ())
+                } else {
+                    coordinator
+                        .close_window(
+                            app,
+                            &label,
+                            &app.state::<WorkspaceAccessService>(),
+                            &app.state::<PersistentAppState>(),
+                        )
+                        .map(|_| ())
+                }
             })
         }
         OPEN_FOLDER_ID | OPEN_MARKDOWN_ID => app

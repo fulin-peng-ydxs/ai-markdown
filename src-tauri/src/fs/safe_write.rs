@@ -735,6 +735,30 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "manual T26 size-band performance probe"]
+    fn t26_safe_write_size_band_performance_probe() {
+        for size_mib in [5_usize, 20, 64] {
+            let fixture = Fixture::new(b"baseline\n");
+            let content = "x".repeat(size_mib * 1024 * 1024);
+            let started = std::time::Instant::now();
+            let result = write_with_fault(
+                &fixture.service(),
+                &fixture.root,
+                &content,
+                WriteFault::None,
+            )
+            .unwrap();
+            eprintln!(
+                "T26 safe-write {size_mib} MiB: {} ms",
+                started.elapsed().as_millis()
+            );
+            assert_eq!(result.bytes_written, content.len() as u64);
+            assert!(result.revision.content_hash.starts_with("sha256:"));
+            assert_eq!(result.revision.content_hash.len(), 71);
+        }
+    }
+
+    #[test]
     fn every_injected_failure_preserves_original_and_cleans_temp_file() {
         for fault in [
             WriteFault::AfterTempCreate,

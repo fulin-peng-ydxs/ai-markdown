@@ -9,6 +9,7 @@ export interface EditorToolbarProps {
   mode: EditorMode;
   saveState: DocumentSaveState;
   sourceOnlyReason: string | null;
+  onSave?(): void;
   onCommand(command: EditorCommand): void;
   onModeChange(mode: EditorMode): void;
 }
@@ -20,6 +21,7 @@ export function EditorToolbar({
   mode,
   saveState,
   sourceOnlyReason,
+  onSave,
   onCommand,
   onModeChange,
 }: EditorToolbarProps) {
@@ -119,6 +121,16 @@ export function EditorToolbar({
       </div>
 
       <span aria-hidden="true" className="document-editor-toolbar__divider" />
+
+      {onSave ? (
+        <ToolbarButton
+          disabled={readonly || busy || saveState.kind === "saving"}
+          label="保存当前文档"
+          onClick={onSave}
+        >
+          保存
+        </ToolbarButton>
+      ) : null}
 
       <ToolbarButton
         disabled={busy}

@@ -9,6 +9,8 @@ import type {
   WorkspaceScanBatch,
   WorkspaceScanStart,
   WorkspaceSelectionOutcome,
+  WindowSettlementIntent,
+  WindowSettlementResolution,
   WorkspaceWatchBatch,
   WorkspaceWatchStart,
 } from "../../services/desktop/contracts";
@@ -32,13 +34,21 @@ import {
   authorizeWorkspaceSelection,
   cancelWorkspaceSelection,
   coordinateWorkspaceOpen,
+  listenForWindowSettlement,
   listenForLauncherMenu,
+  resolveWindowSettlement,
   selectMarkdownFile,
   selectWorkspaceFolder,
   setWorkbenchWindowTitle,
   type LauncherMenuAction,
 } from "../../services/desktop/workspace";
 import type { EditorDocumentGateway } from "../editor/editorGateway";
+import {
+  desktopRecoveryGateway,
+  desktopSaveGateway,
+  type EditorRecoveryGateway,
+  type EditorSaveGateway,
+} from "../editor/editorGateway";
 
 export interface WorkspaceWorkbenchGateway extends EditorDocumentGateway {
   scan(workspaceId: WorkspaceId, directory: WorkspaceRelativePath | null): Promise<WorkspaceScanStart>;
@@ -61,6 +71,15 @@ export interface WorkspaceWorkbenchGateway extends EditorDocumentGateway {
   open(workspaceId: WorkspaceId, disposition?: WorkspaceOpenDisposition): Promise<WorkspaceOpenOutcome>;
   setTitle(path: WorkspaceRelativePath | null): Promise<void>;
   listenMenu(listener: (action: LauncherMenuAction) => void): Promise<() => void>;
+  listenSettlement(
+    listener: (intent: WindowSettlementIntent) => void,
+  ): Promise<() => void>;
+  resolveSettlement(
+    intentId: string,
+    allow: boolean,
+  ): Promise<WindowSettlementResolution>;
+  saveGateway: EditorSaveGateway;
+  recoveryGateway: EditorRecoveryGateway;
 }
 
 export const desktopWorkspaceWorkbenchGateway: WorkspaceWorkbenchGateway = {
@@ -87,4 +106,8 @@ export const desktopWorkspaceWorkbenchGateway: WorkspaceWorkbenchGateway = {
     await setWorkbenchWindowTitle(path);
   },
   listenMenu: listenForLauncherMenu,
+  listenSettlement: listenForWindowSettlement,
+  resolveSettlement: resolveWindowSettlement,
+  saveGateway: desktopSaveGateway,
+  recoveryGateway: desktopRecoveryGateway,
 };
