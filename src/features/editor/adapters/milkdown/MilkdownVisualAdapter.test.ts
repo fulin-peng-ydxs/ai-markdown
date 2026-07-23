@@ -10,8 +10,8 @@ import {
 } from "./clipboard";
 import {
   MAX_INTERACTIVE_VISUAL_BYTES,
-  MAX_INTERACTIVE_VISUAL_BLOCKS,
-  estimateMarkdownBlockCount,
+  MAX_INTERACTIVE_VISUAL_CONTENT_LINES,
+  countMarkdownContentLines,
   utf8ByteLength,
   visualEditorEligibility,
 } from "./visualEditorPolicy";
@@ -200,14 +200,44 @@ describe("visual editing safety utilities", () => {
   });
 
   it("degrades a small but excessively fragmented document before Milkdown mounts", () => {
-    const fragmented = "short\n\n".repeat(MAX_INTERACTIVE_VISUAL_BLOCKS + 1);
-    expect(estimateMarkdownBlockCount(fragmented)).toBeGreaterThan(
-      MAX_INTERACTIVE_VISUAL_BLOCKS,
+    const fragmented = "short\n\n".repeat(MAX_INTERACTIVE_VISUAL_CONTENT_LINES + 1);
+    expect(countMarkdownContentLines(fragmented)).toBeGreaterThan(
+      MAX_INTERACTIVE_VISUAL_CONTENT_LINES,
     );
     expect(visualEditorEligibility(fragmented)).toMatchObject({
       eligible: false,
       reason: "document_too_complex",
     });
+  });
+
+  it("rejects compact high-density lists and tables that have no blank separators", () => {
+    const compactList = Array.from(
+      { length: MAX_INTERACTIVE_VISUAL_CONTENT_LINES + 1 },
+      (_, index) => `- item ${index}`,
+    ).join("\n");
+    const compactTable = [
+      "| key | value |",
+      "| --- | --- |",
+      ...Array.from(
+        { length: MAX_INTERACTIVE_VISUAL_CONTENT_LINES },
+        (_, index) => `| ${index} | value |`,
+      ),
+    ].join("\n");
+
+    for (const markdown of [compactList, compactTable]) {
+      expect(utf8ByteLength(markdown)).toBeLessThan(MAX_INTERACTIVE_VISUAL_BYTES);
+      expect(visualEditorEligibility(markdown)).toMatchObject({
+        eligible: false,
+        contentLineCount: expect.any(Number),
+        reason: "document_too_complex",
+      });
+    }
+  });
+
+  it("counts LF, CRLF and CR content lines without treating blank rows as nodes", () => {
+    expect(countMarkdownContentLines("one\n\n two")).toBe(2);
+    expect(countMarkdownContentLines("one\r\n\r\n two")).toBe(2);
+    expect(countMarkdownContentLines("one\r\r two")).toBe(2);
   });
 
   it("unwraps unsupported rich HTML and removes active or unsafe attributes", () => {

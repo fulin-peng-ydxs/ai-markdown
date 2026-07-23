@@ -46,7 +46,10 @@ import {
   sanitizeRichClipboardHtml,
   type VisualClipboardPayload,
 } from "./clipboard";
-import { visualEditorEligibility } from "./visualEditorPolicy";
+import {
+  utf8ByteLength,
+  visualEditorEligibility,
+} from "./visualEditorPolicy";
 
 export interface MilkdownVisualAdapterOptions {
   readOnly?: boolean;
@@ -410,7 +413,7 @@ export class MilkdownVisualAdapter implements EditorAdapter {
     this.options.onPerformance?.({
       phase,
       durationMs: performance.now() - startedAt,
-      byteLength: visualEditorEligibility(markdown).byteLength,
+      byteLength: utf8ByteLength(markdown),
     });
   }
 }

@@ -1,12 +1,12 @@
 export const MAX_INTERACTIVE_VISUAL_BYTES = 2 * 1024 * 1024;
-export const MAX_INTERACTIVE_VISUAL_BLOCKS = 2_000;
+export const MAX_INTERACTIVE_VISUAL_CONTENT_LINES = 2_000;
 
 export type VisualEditorEligibility =
   | { eligible: true; byteLength: number }
   | {
       eligible: false;
       byteLength: number;
-      blockCount?: number;
+      contentLineCount?: number;
       reason: "document_too_large" | "document_too_complex";
       message: string;
     };
@@ -22,30 +22,39 @@ export function visualEditorEligibility(markdown: string): VisualEditorEligibili
     };
   }
 
-  const blockCount = estimateMarkdownBlockCount(markdown);
-  if (blockCount > MAX_INTERACTIVE_VISUAL_BLOCKS) {
+  const contentLineCount = countMarkdownContentLines(markdown);
+  if (contentLineCount > MAX_INTERACTIVE_VISUAL_CONTENT_LINES) {
     return {
       eligible: false,
       byteLength,
-      blockCount,
+      contentLineCount,
       reason: "document_too_complex",
-      message: "文档包含过多独立内容块。为避免输入卡顿，请使用源码模式编辑。",
+      message: "文档包含过多内容行。为避免输入卡顿，请使用源码模式编辑。",
     };
   }
 
   return { eligible: true, byteLength };
 }
 
-export function estimateMarkdownBlockCount(markdown: string): number {
-  if (!markdown.trim()) return 0;
-  let blocks = 1;
-  for (let index = 0; index < markdown.length - 1; index += 1) {
-    if (markdown[index] === "\n" && markdown[index + 1] === "\n") {
-      blocks += 1;
-      index += 1;
+/**
+ * Counts non-empty physical lines without splitting the document into an array.
+ * This deliberately conservative proxy catches dense lists, tables and headings,
+ * whose ProseMirror node count is invisible to blank-line block estimates.
+ */
+export function countMarkdownContentLines(markdown: string): number {
+  let contentLines = 0;
+  let lineHasContent = false;
+  for (let index = 0; index < markdown.length; index += 1) {
+    const code = markdown.charCodeAt(index);
+    if (code === 0x0a || code === 0x0d) {
+      if (lineHasContent) contentLines += 1;
+      lineHasContent = false;
+      if (code === 0x0d && markdown.charCodeAt(index + 1) === 0x0a) index += 1;
+      continue;
     }
+    if (code !== 0x20 && code !== 0x09) lineHasContent = true;
   }
-  return blocks;
+  return contentLines + (lineHasContent ? 1 : 0);
 }
 
 /**

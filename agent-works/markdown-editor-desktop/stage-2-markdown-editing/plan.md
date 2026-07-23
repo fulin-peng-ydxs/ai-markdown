@@ -39,7 +39,7 @@
 - Milkdown 官方能力采用插件化接入：CommonMark/GFM、history、clipboard、listener、upload；生产实现不得直接复制原型中的 `contenteditable`/`textarea` 演示逻辑。
 - CodeMirror 6 负责源码高亮、行号、查找替换、括号匹配和源码选择；不建立第二份 Markdown 文件或独立保存通道。
 - 选型依据：[Milkdown 官方文档](https://milkdown.dev/docs)、[Milkdown 插件说明](https://milkdown.dev/docs/plugin/using-plugins)、[ProseMirror Guide](https://prosemirror.net/docs/guide/) 和 [CodeMirror Markdown 官方仓库](https://github.com/codemirror/lang-markdown)。
-- 第一阶段测试基线为 115 个 Rust 单测、3 个路径工具测试、18 个树状态测试、4 个永久删除反馈测试、35 个 React 测试、1 个 fixture 测试、4 个许可证测试和 4 个桌面 E2E。T18 新增 7 个编辑器 PoC 测试，T19 新增 28 个 session/history/AST 契约测试与 1 个 P1 陈旧读取回归，T20 及其整改新增 21 个恢复仓储/契约测试，T21 新增 16 个冲突/另存/契约测试，T22 新增 15 个资源偏好、导入和 raw IPC 契约测试，T23 新增 20 个 Milkdown adapter/组件/性能与安全策略测试；当前 Rust 全量为 167 项，`pnpm test` 的 Vitest 汇总为 91 项。第二阶段不得删除或弱化这些基线来换取绿灯。
+- 第一阶段测试基线为 115 个 Rust 单测、3 个路径工具测试、18 个树状态测试、4 个永久删除反馈测试、35 个 React 测试、1 个 fixture 测试、4 个许可证测试和 4 个桌面 E2E。T18 新增 7 个编辑器 PoC 测试，T19 新增 28 个 session/history/AST 契约测试与 1 个 P1 陈旧读取回归，T20 及其整改新增 21 个恢复仓储/契约测试，T21 新增 16 个冲突/另存/契约测试，T22 新增 15 个资源偏好、导入和 raw IPC 契约测试，T23 新增 22 个 Milkdown adapter/组件/性能与安全策略测试；当前 Rust 全量为 167 项，`pnpm test` 的 Vitest 汇总为 93 项。第二阶段不得删除或弱化这些基线来换取绿灯。
 
 ### 2.2 已有代码与可复用能力
 
@@ -399,8 +399,8 @@ plainroot-recovery-v1/
 - 验证方式：语法输入规则、格式命令、三种复制输出、粘贴纯文本/Markdown/富文本及不可转换结构、真实浏览器/WebView 中文 IME、撤销命令接线、只读、销毁重建、100 KiB/5 MiB/20 MiB/64 MiB 挂载解析/连续输入的每击延迟/峰值内存与降级阈值、token 扫描。
 - 完成标准：真实 session 驱动排版编辑，常用语法可编辑并输出统一 Markdown，不存在独立保存副本。
 - 实际落地情况：已在 `src/features/editor/adapters/milkdown/` 建立生产 `MilkdownVisualAdapter` 与 `VisualMarkdownEditor`。adapter 使用 CommonMark/GFM、listener 与 clipboard，只接受/输出 `EditorAdapterDocument`/`EditorAdapterChange`，不持有独立文件保存副本；撤销/重做及 Cmd/Ctrl+Z/重做通过回调交给统一 `DocumentSession` history，不启用 Milkdown 第二套权威 history。已实现 H1～H6、粗体、斜体、删除线、行内代码、链接、引用、有序/无序/任务列表、表格、分隔线和受控图片命令；有效选区才显示上下文工具栏，支持纯文本、Markdown、富文本三种复制载荷。富文本粘贴仅保留 CommonMark/GFM 可表达标签，移除事件属性、危险 URL、图片与主动/未知容器，外部图片必须走 `requestImage` 受控 hook；T28 再负责资源导入与按当前文档目录换算链接。只读、焦点、选择/语义锚点、异步创建/销毁、StrictMode 晚到实例清理和 adapter 性能采样均已落地。
-  - 性能策略经真实 Chromium 校准为双门槛：UTF-8 内容超过 2 MiB，或独立块估算超过 2000，均在 Milkdown 分配前返回明确源码模式降级。普通约 100 KiB/100 段语料实测挂载 148.6 ms、输入到 Markdown 更新 225.6 ms（包含 listener 200 ms 合并窗口）；约 100 KiB/5680 段极端语料在策略校准前曾测得挂载 813 ms、单次更新约 7.8 秒，现由块复杂度门槛前置拒绝。5/20/64 MiB 均由字节门槛前置拒绝，不冻结页面。
-  - 新增 20 个 adapter/组件/策略测试，覆盖统一事务、结构命令、三态剪贴板载荷、剪贴板权限失败、富文本清洗、只读、session history 桥接、composition 分组、受控图片 hook 及其异常收敛、100 KiB 挂载、5/20/64 MiB 与高块数降级、已挂载投影跨越门槛时移除陈旧正文、StrictMode 创建中销毁和组件卸载。`pnpm typecheck`、91/91 Vitest、生产构建、许可证 727/508/0 和生产 CSS 私有颜色扫描已通过。真实 Chromium 已验证单实例、格式变更、Markdown 复制、中文 contenteditable 输入、740 px 无横向溢出和干净会话零告警。
+  - 性能策略经真实 Chromium 校准为双门槛：UTF-8 内容超过 2 MiB，或非空内容行超过 2000，均在 Milkdown 分配前返回明确源码模式降级。普通约 100 KiB/100 段语料实测挂载 148.6 ms、输入到 Markdown 更新 225.6 ms（包含 listener 200 ms 合并窗口）；约 100 KiB/5680 段极端语料在策略校准前曾测得挂载 813 ms、单次更新约 7.8 秒。初版空行块数代理会漏掉紧凑列表/表格，复核整改后改为流式非空内容行计数；低于 2 MiB 的 2001 项紧凑列表和 2002 行紧凑表格均已前置拒绝。5/20/64 MiB 均由字节门槛前置拒绝，不冻结页面。
+  - 新增 22 个 adapter/组件/策略测试，覆盖统一事务、结构命令、三态剪贴板载荷、剪贴板权限失败、富文本清洗、只读、session history 桥接、composition 分组、受控图片 hook 及其异常收敛、100 KiB 挂载、5/20/64 MiB 与高内容行数降级、紧凑列表/表格、LF/CRLF/CR 行计数、已挂载投影跨越门槛时移除陈旧正文、StrictMode 创建中销毁和组件卸载。`pnpm typecheck`、93/93 Vitest、生产构建、许可证 727/508/0 和生产 CSS 私有颜色扫描已通过。真实 Chromium 已验证单实例、格式变更、Markdown 复制、中文 contenteditable 输入、740 px 无横向溢出和干净会话零告警。
   - 尚未完成的范围保持诚实：T23 组件尚未替换 P1 只读视图，P1/session 保存接线属于 T25；系统输入法候选窗、WebKit/Windows 原生剪贴板和独立峰值内存采样仍由 T30/T31 验收，不能由 Chromium 证据外推。
 
 ### 6.7 任务 T24：CodeMirror 6 源码编辑 adapter
@@ -427,7 +427,7 @@ plainroot-recovery-v1/
 - 产出：P1 可消费的编辑器壳、命令总线、状态组件和交互测试。
 - 影响范围：P1 中央区与文档工具层；不创建页签容器。
 - 边界与异常：切换或 adapter 初始化失败保留旧模式；busy 时拒绝重入；跨模式 undo/redo 不丢 source-only 语法；只读仅允许选择/复制/查找/另存。
-- 验证方式：visual→source→visual 语料往返、跨模式连续撤销重做、锚点、快速切换、空文档、解析错误、焦点和只读测试。
+- 验证方式：visual→source→visual 语料往返、跨模式连续撤销重做、锚点、快速切换、空文档、解析错误、焦点和只读测试；接入时回归超过 2000 个非空内容行的紧凑列表/表格会切换源码降级且不残留陈旧排版正文。
 - 完成标准：用户可在两个模式编辑同一内容，模式、状态和历史都来自同一 session。
 - 实际落地情况：待实施。
 
@@ -614,7 +614,7 @@ plainroot-recovery-v1/
 ### 8.7 异常与边界测试
 
 - 计划：覆盖 0 字节、100 KB、5 MB 和 64 MiB 临界文档；非法 UTF-8、UTF-8 BOM、LF/CRLF/CR/mixed；未知 Markdown/raw HTML/frontmatter；IME composition；保存中继续输入；外部删除/修改；二次外部变化；进程退出；快照损坏/过期/超限；磁盘满；图片多选部分失败；Windows 目标占用和路径前缀。
-- 具体完成情况：T21 已覆盖 UTF-8 BOM、LF/CRLF/CR/mixed、非法 UTF-8、只读、二次外部变化、写入故障、取消和同名目标覆盖；T22 已覆盖图片格式伪造、20 MiB 超限、同名不覆盖、部分写入、取消换靶和 symlink。T23 已覆盖浏览器 composition 分组、创建中销毁、只读、100 KiB 正常挂载、5/20/64 MiB 字节降级及 2000 块复杂度降级；系统 IME 候选窗、峰值内存、强制进程终止孤立资源、磁盘满及 Windows 原生运行仍待后续任务。
+- 具体完成情况：T21 已覆盖 UTF-8 BOM、LF/CRLF/CR/mixed、非法 UTF-8、只读、二次外部变化、写入故障、取消和同名目标覆盖；T22 已覆盖图片格式伪造、20 MiB 超限、同名不覆盖、部分写入、取消换靶和 symlink。T23 已覆盖浏览器 composition 分组、创建中销毁、只读、100 KiB 正常挂载、5/20/64 MiB 字节降级、2000 个非空内容行门槛及紧凑列表/表格盲区；系统 IME 候选窗、峰值内存、强制进程终止孤立资源、磁盘满及 Windows 原生运行仍待后续任务。
 
 ### 8.8 桌面 E2E 与跨平台
 
@@ -675,7 +675,7 @@ T18/T30/T31 若新增稳定脚本，必须同步 `package.json`、README、AGENT
 - Milkdown/CodeMirror 增加包体和首开耗时。缓解：T18 记录增量，按文档首次打开懒加载 editor chunk；加载态不显示旧内容。
 - 安全写与恢复快照都需要写入完整 Markdown；若对 5～64 MiB 文档固定使用 800 ms 自动保存和 2 秒快照，会产生明显磁盘写放大、hash/序列化开销和输入抖动。缓解：按 5/20 MiB 候选阈值延长防抖，大文件快照连续输入期最多每 10 秒一次，保存/快照分别单飞并合并陈旧请求；T18/T26 记录实际写入次数、耗时和输入延迟后校准，不能为性能绕过关闭结算或 revision 校验。
 - 中文/日文 IME、macOS/Windows 剪贴板和拖放事件存在 WebView 差异。T23 已验证浏览器 composition 分组与 Chromium 中文 contenteditable 输入，但没有系统输入法候选窗证据；缓解仍为组件自动化 + macOS 实机 + Windows CI，Windows 原生人工项诚实保留。
-- Milkdown 性能不仅取决于字节数，也取决于块节点密度。T23 已按真实浏览器证据增加 `2 MiB + 2000 块` 双门槛并在挂载前降级；T25/T26 继续记录 session patch/hash 和保存开销，T31 复核 WebKit/Windows 与峰值内存，未取得证据前不得提高门槛。
+- Milkdown 性能不仅取决于字节数，也取决于节点密度。T23 初版空行块数代理经复核发现会漏掉紧凑列表/表格，现已收敛为 `2 MiB + 2000 个非空内容行` 双门槛并在挂载前降级；T25/T26 继续记录 session patch/hash 和保存开销，T31 复核 WebKit/Windows 与峰值内存，未取得证据前不得提高门槛。
 
 ### 10.2 已确认决策
 
@@ -688,7 +688,7 @@ T18/T30/T31 若新增稳定脚本，必须同步 `package.json`、README、AGENT
 
 ### 10.3 非阻塞假设
 
-- 自动保存 800 ms/2 秒/5 秒尺寸分级和大文件快照 10 秒限频是待实测候选常量；T23 已将排版模式临时门槛校准为 `≤2 MiB 且 ≤2000 块`，超过后进入源码模式，因此 T26 必须分别校准排版模式与大源码文档的写入频率，不能再假定 5～64 MiB 会进入 Milkdown。
+- 自动保存 800 ms/2 秒/5 秒尺寸分级和大文件快照 10 秒限频是待实测候选常量；T23 已将排版模式临时门槛校准为 `≤2 MiB 且 ≤2000 个非空内容行`，超过后进入源码模式，因此 T26 必须分别校准排版模式与大源码文档的写入频率，不能再假定 5～64 MiB 会进入 Milkdown。
 - 首版图片导入支持 PNG/JPEG/GIF/WebP，SVG 因主动内容风险明确拒绝；若要支持 SVG，需先补安全渲染规则和验收后另行确认。
 - 单次图片大小上限已在 T22 固化为 20 MiB；Web 输入使用 raw IPC 避免 JSON 数字数组放大，超限和格式错误返回稳定错误且不产生 Markdown 断链。
 - 文档内查找使用 CodeMirror 能力，仅在源码模式直接显示；排版模式的当前文档查找可延后到同阶段 T25 的统一 command 实现，但不得升级为 R12 工作区搜索。
