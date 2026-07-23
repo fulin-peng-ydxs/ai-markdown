@@ -108,6 +108,7 @@ export type SessionMutationResult =
   | { status: "stale"; session: ReadyDocumentSession }
   | { status: "readonly"; session: ReadyDocumentSession }
   | { status: "mode_unavailable"; session: ReadyDocumentSession }
+  | { status: "save_in_flight"; session: ReadyDocumentSession }
   | { status: "history_unavailable"; session: ReadyDocumentSession };
 
 export function createEmptyDocumentSession(generation = 0): DocumentSessionState {
@@ -272,6 +273,49 @@ export function applyDocumentEdit(
   };
 }
 
+export function reassessDocumentCompatibility(
+  session: ReadyDocumentSession,
+  generation: number,
+  expectedEditVersion: number,
+  compatibility: VisualEditingCompatibility,
+): SessionMutationResult {
+  if (
+    generation !== session.generation ||
+    expectedEditVersion !== session.editVersion
+  ) {
+    return { status: "stale", session };
+  }
+  const effectiveCompatibility = compatibilityForCurrentMarkdown(
+    session.markdown,
+    compatibility,
+  );
+  const forcesSourceMode =
+    session.mode === "visual" &&
+    effectiveCompatibility.mode === "source-only";
+  const sourceOffset =
+    session.selection.kind === "visual"
+      ? session.selection.from
+      : session.selection.head;
+  return {
+    status: "applied",
+    session: {
+      ...session,
+      compatibility: effectiveCompatibility,
+      mode: forcesSourceMode ? "source" : session.mode,
+      selection: forcesSourceMode
+        ? { kind: "source", anchor: sourceOffset, head: sourceOffset }
+        : session.selection,
+      anchor: forcesSourceMode
+        ? {
+            kind: "source",
+            offset: sourceOffset,
+            scrollTop: session.anchor.scrollTop,
+          }
+        : session.anchor,
+    },
+  };
+}
+
 export function undoDocumentSession(
   session: ReadyDocumentSession,
 ): SessionMutationResult {
@@ -331,6 +375,9 @@ export function beginDocumentSave(
 ): SessionMutationResult {
   if (session.saveState.kind === "readonly") {
     return { status: "readonly", session };
+  }
+  if (session.saveState.kind === "saving") {
+    return { status: "save_in_flight", session };
   }
   if (session.saveState.kind === "conflict") {
     return { status: "stale", session };
@@ -408,6 +455,30 @@ export function sourceFormatFromRevision(
   return { encoding: revision.encoding, lineEnding: revision.lineEnding };
 }
 
+export function lineEndingFromMarkdown(markdown: string): LineEnding {
+  let hasLf = false;
+  let hasCrLf = false;
+  let hasCr = false;
+  for (let index = 0; index < markdown.length; index += 1) {
+    const code = markdown.charCodeAt(index);
+    if (code === 0x0d) {
+      if (markdown.charCodeAt(index + 1) === 0x0a) {
+        hasCrLf = true;
+        index += 1;
+      } else {
+        hasCr = true;
+      }
+    } else if (code === 0x0a) {
+      hasLf = true;
+    }
+    if (Number(hasLf) + Number(hasCrLf) + Number(hasCr) > 1) return "mixed";
+  }
+  if (hasCrLf) return "crlf";
+  if (hasCr) return "cr";
+  if (hasLf) return "lf";
+  return "none";
+}
+
 function initialSelection(mode: EditorMode): EditorSelection {
   return mode === "visual"
     ? { kind: "visual", from: 0, to: 0 }
@@ -437,4 +508,15 @@ function saveStateAfterContentChange(
   return saveState.kind === "saving"
     ? { ...saveState, changedAfterStart: true }
     : { kind: "dirty" };
+}
+
+function compatibilityForCurrentMarkdown(
+  markdown: string,
+  compatibility: VisualEditingCompatibility,
+): VisualEditingCompatibility {
+  if (lineEndingFromMarkdown(markdown) !== "mixed") return compatibility;
+  return {
+    mode: "source-only",
+    reasons: [...new Set([...compatibility.reasons, "mixed-line-endings"])].sort(),
+  };
 }

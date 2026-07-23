@@ -39,11 +39,11 @@
 - Milkdown 官方能力采用插件化接入：CommonMark/GFM、history、clipboard、listener、upload；生产实现不得直接复制原型中的 `contenteditable`/`textarea` 演示逻辑。
 - CodeMirror 6 负责源码高亮、行号、查找替换、括号匹配和源码选择；不建立第二份 Markdown 文件或独立保存通道。
 - 选型依据：[Milkdown 官方文档](https://milkdown.dev/docs)、[Milkdown 插件说明](https://milkdown.dev/docs/plugin/using-plugins)、[ProseMirror Guide](https://prosemirror.net/docs/guide/) 和 [CodeMirror Markdown 官方仓库](https://github.com/codemirror/lang-markdown)。
-- 第一阶段测试基线为 115 个 Rust 单测、3 个路径工具测试、18 个树状态测试、4 个永久删除反馈测试、35 个 React 测试、1 个 fixture 测试、4 个许可证测试和 4 个桌面 E2E。T18 新增 7 个编辑器 PoC 测试，T19 新增 25 个 session/history/AST 契约测试与 1 个 P1 陈旧读取回归，当前 `pnpm test` 的 Vitest 汇总为 68 项；第二阶段不得删除或弱化这些基线来换取绿灯。
+- 第一阶段测试基线为 115 个 Rust 单测、3 个路径工具测试、18 个树状态测试、4 个永久删除反馈测试、35 个 React 测试、1 个 fixture 测试、4 个许可证测试和 4 个桌面 E2E。T18 新增 7 个编辑器 PoC 测试，T19 新增 28 个 session/history/AST 契约测试与 1 个 P1 陈旧读取回归，当前 `pnpm test` 的 Vitest 汇总为 71 项；第二阶段不得删除或弱化这些基线来换取绿灯。
 
 ### 2.2 已有代码与可复用能力
 
-- `src/features/workbench/WorkspaceWorkbench.tsx` 当前已接入文件树、读取、CRUD、watch、窗口决策和只读 `<pre>`，但只有单一 `documentState`，没有编辑会话、保存控制器或恢复/冲突模型。
+- `src/features/workbench/WorkspaceWorkbench.tsx` 当前已接入文件树、读取、CRUD、watch、窗口决策和只读 `<pre>`，并已消费单一 `DocumentSession` 与文档级陈旧读取保护；仍没有可编辑 adapter、保存控制器或恢复/冲突持久链路。
 - `src/features/workbench/workbenchGateway.ts` 已封装读取、扫描、监听、CRUD、删除、定位和窗口命令；`src/services/desktop/files.ts` 已提供尚未被 P1 消费的 `safeWriteMarkdownFile`。
 - `src/services/desktop/contracts.ts` 已定义 `FileRevision`、`MarkdownReadResult`、`SafeWriteResult` 和稳定错误码；Rust↔TypeScript parity 测试已经存在，新契约必须纳入同一防漂移机制。
 - `src-tauri/src/fs/safe_write.rs` 已实现受授权根约束、双重修订校验、同目录临时文件、平台原子替换、清理日志和失败不破坏原文件；本阶段必须复用，不另写前端文件覆盖逻辑。
@@ -174,6 +174,7 @@ src-tauri/src/
 
 - 统一历史记录可逆文本 patch、事务分组、前后 hash 与选择锚点；不得按每次按键保存整份 64 MiB 文档。
 - T19 的初始内存边界为每会话 8 MiB patch 数据或 500 个历史项，先到者触发最旧记录淘汰；单次 patch 自身超过预算时当前编辑仍成立，但该步不可撤销并以 `truncated` 暴露。该值是后续真实编辑器压测可校准的工程边界，不是正文大小上限。
+- 当前 patch 计算、前后 hash 和撤销校验仍是 O(文档长度)，1 B patch 只证明历史存储有界，不代表 64 MiB 文档每次输入廉价。T19 本机单次探针为记录约 486 ms、撤销约 255 ms；该数据只用于暴露风险，不是跨机器产品阈值。T23/T26 必须分别记录真实 adapter 连续输入的每击延迟和保存链路开销，无法保持交互时明确降级 source-only/只读或改为增量算法，不能用 patch 字节数替代性能验收。
 - `sourceFormat` 是 `diskRevision` 的只读显式投影，不是第二份可独立修改的事实；读取成功时从 Rust `FileRevision` 建立，原文件保存继续把 expected revision 交给 safe-write 以保留 UTF-8 BOM 与单一 LF/CRLF/CR 风格，保存成功后用返回 revision 一起刷新。`Mixed` 必须保持显式状态：若 T18 证明 adapter 无法保留逐行分隔，自动保存不得静默统一换行，只能保留源码安全路径或在首次写入前让用户明确选择统一风格。非 UTF-8 文件不进入可写 session，另存副本必须明确使用 UTF-8 输出策略。
 - 两个 editor 内部历史不作为跨模式事实源；`Cmd/Ctrl+Z`、`Cmd/Ctrl+Shift+Z` 统一调用 `DocumentHistory`，adapter 只负责应用结果与恢复选择。
 - 切换模式前先从活动 adapter 提交最新事务；目标 adapter 从同一 `markdown` 更新，切换失败保留原模式和内容。
@@ -341,7 +342,7 @@ plainroot-recovery-v1/
 - 边界与异常：64 MiB 文档不得因每次按键全量快照无限增长；切换文件/模式时陈旧事务被拒绝；不支持编码和超大文件保持只读/错误事实。
 - 验证方式：状态转移、encoding/lineEnding 基线与成功 revision 刷新、UTF-8 BOM 和 LF/CRLF/CR/mixed 透传、patch 逆向、事务合并、跨模式撤销、陈旧 generation、内存预算和空文档测试；TypeScript 类型检查。
 - 完成标准：同一内容只有一个 session 事实源，encoding/lineEnding 来源与保存刷新路径明确，所有状态均为可枚举 union，历史能跨 adapter 恢复内容与选择且无无限增长。
-- 实际落地情况：已建立 `DocumentSessionState` 与 `DocumentSaveState` discriminated union，统一表达文档身份、generation、Markdown、磁盘 revision、`sourceFormat`、editVersion、模式、选择/锚点、保存、内容安全、恢复与冲突证据；P1 原只读文档状态已改为消费该 session，同一工作区内慢返回的旧读取不能覆盖后来选择的文档。`sourceFormat` 只从读取或成功保存返回的 `FileRevision` 刷新；UTF-8 BOM 与 none/LF/CRLF/CR/mixed 均有测试，mixed 在尚无明确规范化决策时强制 source-only。`DocumentHistory` 以最小可逆 patch、事务步骤组、前后 hash、跨模式选择和 8 MiB/500 项双上限工作，不保存逐次全文；64 MiB 文档追加单字符实测只占 1 B patch。生产兼容性分类器只消费 AST/解析诊断，不复用 T18 行级启发式；真实 Milkdown AST parser 由 T23 adapter 提供，在此之前 P1 继续明确只读/source-only。`EditorAdapter` 已定义 load/apply/focus/selection/change/command/destroy 边界，现有工作台 gateway 继承统一读接口；尚未创建 Milkdown/CodeMirror 实例、自动保存、恢复仓储、冲突或可见编辑控件。25 个专项测试与 1 个 P1 竞态回归通过，`pnpm test` 为 68/68、类型检查和生产 Web 构建通过。证据见 `t19-document-session.md`。
+- 实际落地情况：已建立 `DocumentSessionState` 与 `DocumentSaveState` discriminated union，统一表达文档身份、generation、Markdown、磁盘 revision、`sourceFormat`、editVersion、模式、选择/锚点、保存、内容安全、恢复与冲突证据；P1 原只读文档状态已改为消费该 session，同一工作区内慢返回的旧读取不能覆盖后来选择的文档。`sourceFormat` 只从读取或成功保存返回的 `FileRevision` 刷新；UTF-8 BOM 与 none/LF/CRLF/CR/mixed 均有测试，mixed 在尚无明确规范化决策时强制 source-only。`DocumentHistory` 以最小可逆 patch、事务步骤组、前后 hash、跨模式选择和 8 MiB/500 项双上限工作，不保存逐次全文；64 MiB 文档追加单字符只占 1 B patch，但本机探针明确记录 O(n) 成本约为写入历史 486 ms、撤销 255 ms，性能仍由 T23/T26 门禁。生产兼容性分类器只消费 AST/解析诊断，不复用 T18 行级启发式；session 已提供绑定 generation/editVersion 的 compatibility 重评估，源码删除未知语法或规范化 mixed 换行后可解除 source-only，真实 Milkdown AST parser 由 T23 adapter 提供。`beginDocumentSave` 已在模型层拒绝第二个 in-flight requestId，T26 仍需实现控制器单飞。`EditorAdapter` 已定义 load/apply/focus/selection/change/command/destroy 边界，现有工作台 gateway 继承统一读接口；尚未创建 Milkdown/CodeMirror 实例、自动保存、恢复仓储、冲突或可见编辑控件。28 个专项测试与 1 个 P1 竞态回归通过，`pnpm test` 为 71/71、类型检查和生产 Web 构建通过。证据见 `t19-document-session.md`。
 
 ### 6.3 任务 T20：版本化恢复快照仓储与命令契约
 
@@ -391,11 +392,11 @@ plainroot-recovery-v1/
 - 依赖：T18、T19；T22 提供图片 hook 契约。
 - 涉及文件/模块：`src/features/editor/adapters/milkdown/`、`VisualMarkdownEditor.tsx`、编辑器 CSS/token、语法/交互测试、`t23-visual-editor.md`。
 - 目标：把确认通过的 Milkdown 方案接入统一 session，覆盖 R3 常用语法和排版编辑操作。
-- 操作：配置 CommonMark/GFM、listener、clipboard、selection、输入规则和受控 upload hook；实现标题/粗斜体/删除线/代码/链接/引用/列表/任务/表格/分隔线命令，并为有效选区提供克制的上下文格式栏；支持按用户选择复制为纯文本、Markdown 或富文本，富文本粘贴只转换可表达结构，无法安全转换的内容提示或保留为受控原始片段；接入只读、焦点、选择锚点和 adapter 生命周期；所有样式消费语义 token。
+- 操作：配置 CommonMark/GFM、listener、clipboard、selection、输入规则和受控 upload hook；实现标题/粗斜体/删除线/代码/链接/引用/列表/任务/表格/分隔线命令，并为有效选区提供克制的上下文格式栏；支持按用户选择复制为纯文本、Markdown 或富文本，富文本粘贴只转换可表达结构，无法安全转换的内容提示或保留为受控原始片段；接入只读、焦点、选择锚点和 adapter 生命周期；单独记录 adapter 更新与 `DocumentSession` patch/hash 的每击延迟，不能只记录挂载或 patch 字节；所有样式消费语义 token。
 - 产出：可嵌入 P1 的排版 editor adapter、格式命令和组件测试。
 - 影响范围：P1 中央内容区；不实现主题、大纲、分页或协作插件。
 - 边界与异常：初始化/解析失败回退源码；原始片段不可编辑时可见且提供源码入口；IME composition 中不触发错误自动保存；64 MiB 达不到可交互挂载门槛时必须进入明确的源码/只读降级，不能冻结页面；卸载不泄漏监听器。
-- 验证方式：语法输入规则、格式命令、三种复制输出、粘贴纯文本/Markdown/富文本及不可转换结构、真实浏览器/WebView 中文 IME、撤销命令接线、只读、销毁重建、100 KiB/5 MiB/20 MiB/64 MiB 挂载解析/连续输入/峰值内存与降级阈值、token 扫描。
+- 验证方式：语法输入规则、格式命令、三种复制输出、粘贴纯文本/Markdown/富文本及不可转换结构、真实浏览器/WebView 中文 IME、撤销命令接线、只读、销毁重建、100 KiB/5 MiB/20 MiB/64 MiB 挂载解析/连续输入的每击延迟/峰值内存与降级阈值、token 扫描。
 - 完成标准：真实 session 驱动排版编辑，常用语法可编辑并输出统一 Markdown，不存在独立保存副本。
 - 实际落地情况：待实施。
 
@@ -419,7 +420,7 @@ plainroot-recovery-v1/
 - 依赖：T19、T23、T24。
 - 涉及文件/模块：`DocumentEditorShell.tsx`、`EditorToolbar.tsx`、`SaveStatus.tsx`、document session/history、P1 接入测试、`t25-editor-shell.md`。
 - 目标：在一个稳定容器内完成排版/源码切换、统一撤销、保存状态和空/加载/错误/只读呈现。
-- 操作：组合两个 adapter；模式切换先提交再恢复语义锚点；统一 undo/redo/format/find command bus；空文档使用 UI placeholder 而不写入正文；解析失败引导源码；暴露内容/字数/选择变化事件供后续大纲/search 消费但不实现消费者。
+- 操作：组合两个 adapter；模式切换先提交再恢复语义锚点；从源码切换排版前对当前 editVersion 重新解析并调用 session compatibility 重评估，已删除未知语法或已规范化 mixed 换行时允许解除 source-only，陈旧解析结果拒绝应用；统一 undo/redo/format/find command bus；空文档使用 UI placeholder 而不写入正文；解析失败引导源码；暴露内容/字数/选择变化事件供后续大纲/search 消费但不实现消费者。
 - 产出：P1 可消费的编辑器壳、命令总线、状态组件和交互测试。
 - 影响范围：P1 中央区与文档工具层；不创建页签容器。
 - 边界与异常：切换或 adapter 初始化失败保留旧模式；busy 时拒绝重入；跨模式 undo/redo 不丢 source-only 语法；只读仅允许选择/复制/查找/另存。
@@ -433,7 +434,7 @@ plainroot-recovery-v1/
 - 依赖：T19～T21、T25；复用 window coordinator 和 watcher。
 - 涉及文件/模块：`src/features/editor/save/`、workbench gateway/P1、`src-tauri/src/window.rs`、`menu.rs`、`lib.rs`、保存/关闭测试、`t26-save-lifecycle.md`。
 - 目标：让自动保存、手动保存、模式风险边界、关闭窗口、退出和当前窗口替换共享一条可验证结算链路。
-- 操作：实现尺寸分级防抖（候选为 800 ms/2 秒/5 秒）、单飞保存、pending edit 追赶、恢复快照单飞/合并与大文件 10 秒限频、manual save；处理 safe-write 返回、watch、revision 和状态；把 session dirty/clean/放弃/安全关闭转换为 T20 活动集合的登记/释放；切换当前文件、关闭窗口、当前窗口替换根目录前都走同一结算门禁；建立非阻塞 close/replace intent-id 握手，避免 coordinator mutex 横跨前端等待；接入应用退出多窗口结算。
+- 操作：实现尺寸分级防抖（候选为 800 ms/2 秒/5 秒）、单飞保存、pending edit 追赶、恢复快照单飞/合并与大文件 10 秒限频、manual save；控制器与 session 两层都不得用新 requestId 覆盖 in-flight 保存；处理 safe-write 返回、watch、revision 和状态；记录大文档 patch/hash 与写盘各自耗时，必要时合并输入、降频或触发明确安全降级；把 session dirty/clean/放弃/安全关闭转换为 T20 活动集合的登记/释放；切换当前文件、关闭窗口、当前窗口替换根目录前都走同一结算门禁；建立非阻塞 close/replace intent-id 握手，避免 coordinator mutex 横跨前端等待；接入应用退出多窗口结算。
 - 产出：`DocumentSaveController`、窗口意图/确认命令、菜单事件、状态机与故障测试。
 - 影响范围：当前窗口单文档、所有打开窗口的退出流程和当前窗口根替换；阶段 3 扩展到页签列表。
 - 边界与异常：5/20/64 MiB 文档的写放大和输入延迟、保存中继续输入、快照容量降级、保存失败、冲突、窗口失效、前端无响应、重复 close、应用强制退出；未解决状态绝不关闭或替换，超时不自动放弃内容。
@@ -662,6 +663,7 @@ T18/T30/T31 若新增稳定脚本，必须同步 `package.json`、README、AGENT
 - 冲突、恢复、资源目录和另存副本弹层没有 P1 HTML 原型证据。缓解：明确以 requirement 5.5/5.6/7.1.2、现有 AppDialog/AsyncStatePanel/focusContainment 和 DESIGN 弹层规范为事实源；T27/T29 在编码前审查信息层级、危险动作、键盘焦点和 1280/820/740 px，若出现会改变流程或验收的布局歧义则暂停并补原型/确认。
 - Milkdown/Remark 序列化可能规范化空白、列表或表格写法，并可能无法原样承载未知扩展语法。缓解：T18 硬门禁、raw 节点/源码降级、语义往返语料；失败即停，不静默缩需求。
 - 两个 editor 的事务模型不同，跨模式统一撤销可能出现历史分叉或高内存。缓解：app-level 可逆 patch、adapter 内部 history 不作事实源、内存上限和大文档压力测试。
+- 当前 app-level patch、hash 与撤销校验对每次变更仍为 O(全文长度)，64 MiB 小编辑虽只保存 1 B patch，本机单次记录/撤销仍约 486/255 ms。缓解：T23 分离测量 adapter 与 session 每击延迟，T26 测量保存链路；根据证据采用增量算法、输入合并或明确 source-only/只读降级，不把内存有界误写成性能通过。
 - 恢复快照包含敏感正文。缓解：只在 app data、opaque 名称、Unix `0600`、短期限/有界容量、用户可删除，不上传、不记录日志正文。
 - 自动保存与 watch 竞态可能把自身写入误判为外部冲突或漏掉真实外部变化。缓解：继续使用 operation id 一批次消费，同时以 revision/hash 为最终权威。
 - 关闭/退出握手可能与 window coordinator 锁形成死锁。缓解：锁内只创建 intent/记录状态，绝不持锁等待前端；重复/失效 intent 有明确幂等测试。

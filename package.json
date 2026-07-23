@@ -18,6 +18,7 @@
     "test:editor-poc": "vitest run src/features/editor/poc/editorPoc.test.ts",
     "test:editor-poc:performance": "node scripts/editor-poc-report.mjs",
     "test:document-session": "vitest run src/features/editor/documentHistory.test.ts src/features/editor/markdownCompatibility.test.ts src/features/editor/documentSession.test.ts",
+    "test:document-session:performance": "node --experimental-strip-types scripts/document-history-report.mjs",
     "test:workspace-path": "node --test --experimental-strip-types scripts/workspace-path.test.mjs",
     "test:ui": "vitest run",
     "test:workspace-tree": "node --test --experimental-strip-types scripts/workspace-tree-state.test.mjs",

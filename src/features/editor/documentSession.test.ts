@@ -14,6 +14,8 @@ import {
   completeDocumentSave,
   createEmptyDocumentSession,
   failDocumentSave,
+  lineEndingFromMarkdown,
+  reassessDocumentCompatibility,
   resolveDocumentRead,
   undoDocumentSession,
   type ReadyDocumentSession,
@@ -189,6 +191,92 @@ describe("DocumentSession", () => {
     ).toBe("mode_unavailable");
   });
 
+  it("reassesses current source after unsupported syntax or mixed endings are removed", () => {
+    const mixedLoading = beginDocumentLoad(createEmptyDocumentSession(), {
+      workspaceId: "workspace-a",
+      relativePath: "note.md",
+    });
+    const mixed = resolveDocumentRead(
+      mixedLoading,
+      mixedLoading.generation,
+      read("one\r\ntwo\n", revision("utf8", "mixed")),
+      sourceOnly,
+      true,
+    );
+    if (mixed.status !== "ready") throw new Error("expected ready source session");
+    const normalized = applyDocumentEdit(mixed, {
+      generation: mixed.generation,
+      expectedEditVersion: mixed.editVersion,
+      markdown: "one\ntwo\n",
+      mode: "source",
+      selection: { kind: "source", anchor: 8, head: 8 },
+      anchor: { kind: "source", offset: 8, scrollTop: 20 },
+      transactionGroup: null,
+    });
+    if (normalized.status !== "applied") throw new Error("normalization should apply");
+
+    const reassessed = reassessDocumentCompatibility(
+      normalized.session,
+      normalized.session.generation,
+      normalized.session.editVersion,
+      compatible,
+    );
+    expect(reassessed).toMatchObject({
+      status: "applied",
+      session: {
+        mode: "source",
+        compatibility: compatible,
+        sourceFormat: { lineEnding: "mixed" },
+      },
+    });
+    if (reassessed.status !== "applied") throw new Error("reassessment should apply");
+    expect(
+      applyDocumentEdit(reassessed.session, {
+        generation: reassessed.session.generation,
+        expectedEditVersion: reassessed.session.editVersion,
+        markdown: reassessed.session.markdown,
+        mode: "visual",
+        selection: { kind: "visual", from: 8, to: 8 },
+        anchor: { kind: "semantic", blockId: null, fallbackOffset: 8, scrollTop: 20 },
+        transactionGroup: null,
+      }).status,
+    ).toBe("applied");
+  });
+
+  it("safely downgrades visual mode, rejects stale parses and detects line endings", () => {
+    const visualSession = readySession();
+    expect(
+      reassessDocumentCompatibility(
+        visualSession,
+        visualSession.generation,
+        visualSession.editVersion,
+        sourceOnly,
+      ),
+    ).toMatchObject({
+      status: "applied",
+      session: {
+        mode: "source",
+        selection: { kind: "source", anchor: 0, head: 0 },
+        anchor: { kind: "source", offset: 0, scrollTop: 0 },
+      },
+    });
+
+    const session = readySession({ compatibility: sourceOnly });
+    expect(
+      reassessDocumentCompatibility(
+        session,
+        session.generation,
+        session.editVersion + 1,
+        compatible,
+      ).status,
+    ).toBe("stale");
+    expect(lineEndingFromMarkdown("plain")).toBe("none");
+    expect(lineEndingFromMarkdown("a\nb")).toBe("lf");
+    expect(lineEndingFromMarkdown("a\r\nb")).toBe("crlf");
+    expect(lineEndingFromMarkdown("a\rb")).toBe("cr");
+    expect(lineEndingFromMarkdown("a\r\nb\n")).toBe("mixed");
+  });
+
   it("records a cross-mode edit and restores the former mode and selection", () => {
     const session = readySession();
     const edited = applyDocumentEdit(session, {
@@ -234,6 +322,16 @@ describe("DocumentSession", () => {
         saveState: { kind: "saved", savedAt: 20 },
         contentSafety: { kind: "disk" },
       },
+    });
+  });
+
+  it("rejects a second save request while one is already in flight", () => {
+    const saving = beginDocumentSave(readySession(), "save-first");
+    if (saving.status !== "applied") throw new Error("save should start");
+
+    expect(beginDocumentSave(saving.session, "save-second")).toEqual({
+      status: "save_in_flight",
+      session: saving.session,
     });
   });
 

@@ -26,6 +26,7 @@ pnpm test:fixtures
 pnpm test:editor-poc
 pnpm test:editor-poc:performance
 pnpm test:document-session
+pnpm test:document-session:performance
 pnpm test:licenses
 pnpm licenses:check
 cargo check --locked --manifest-path src-tauri/Cargo.toml
