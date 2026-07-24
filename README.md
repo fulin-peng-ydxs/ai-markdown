@@ -1,6 +1,6 @@
 # Plainroot
 
-Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成本地、macOS 实机与 macOS/Windows 双平台 CI 验收：当前具备 Tauri/React 工程、受控工作区授权、文件扫描与安全写入底座、文件操作/监听、原生窗口菜单、工作区窗口协调、真实 P2 启动页以及隔离的 P1/P2 桌面 E2E。第二阶段 T18～T31 已完成编辑器技术门禁、统一单文档会话、有界跨模式历史、Milkdown/CodeMirror adapter、自动/手动保存、窗口结算、恢复/冲突/另存、图片资源链、原生菜单与状态栏、统一测试门禁和 macOS/Windows 8/8 桌面回归。当前仍没有页签、大纲，第二阶段 T32 总体验收尚未开始。
+Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成桌面底座验收；第二阶段 T18～T32 已完成单文档编辑阶段验收。当前具备受控工作区授权、文件扫描与安全写入、窗口协调、真实 P1/P2、统一 `DocumentSession`、Milkdown/CodeMirror 两种投影、自动/手动保存、恢复/冲突/另存、图片资源、原生菜单与状态栏，以及 macOS/Windows 8/8 隔离桌面回归。当前仍没有多页签、大纲、工作区搜索、分页阅读或主题工作室，第二阶段完成不代表完整产品验收。
 
 ## 工具链
 
@@ -41,7 +41,7 @@ pnpm tauri build --no-bundle
 pnpm tauri build --bundles app
 ```
 
-`pnpm test:e2e` 会构建独立 identifier/capability 的测试版本，以临时状态目录和每套件独立复制的工作区启动 embedded WebDriver。当前 8 条用例覆盖 P2/P1 真 IPC、1100/740 px 布局与焦点、两模式编辑、图片输入/上传、保存重开、外部修改与恢复；确定性业务流程不启用测试重试。测试 feature 默认关闭，生产前端产物和 release 二进制均不包含 WDIO、fixture 或 E2E 命令。提交 `bd583db452352c6410fbdaa8b05a68c2df122872` 对应的 GitHub Actions run `30062045288` 已在 macOS/Windows runner 完成 8/8 套件、非桌面门禁、未签名生产构建和 artifact 上传。
+`pnpm test:e2e` 会构建独立 identifier/capability 的测试版本，以临时状态目录和每套件独立复制的工作区启动 embedded WebDriver。当前 8 条用例覆盖 P2/P1 真 IPC、1100/740 px 布局与焦点、两模式编辑、图片输入/上传、保存重开、外部修改与恢复；确定性业务流程不启用测试重试。测试 feature 默认关闭，生产前端产物和 release 二进制均不包含 WDIO、fixture 或 E2E 命令。提交 `71cab73070bce27ec59fc8e35c670680d6ee2021` 对应的 GitHub Actions run `30063241410` 已在 macOS/Windows runner 完成 8/8 套件、非桌面门禁、未签名生产构建和 artifact 上传。
 
 开发模式在依赖安装完成后运行：
 
@@ -54,7 +54,9 @@ pnpm tauri dev
 - 产品范围与验收：`agent-works/markdown-editor-desktop/requirement.md`
 - 第一阶段计划与实际状态：`agent-works/markdown-editor-desktop/stage-1-desktop-foundation/plan.md`
 - 第二阶段编辑与保存计划：`agent-works/markdown-editor-desktop/stage-2-markdown-editing/plan.md`
+- 第二阶段验收：`agent-works/markdown-editor-desktop/stage-2-markdown-editing/t32-stage-acceptance.md`
 - 当前桌面底座架构：`agent-works/markdown-editor-desktop/architecture/desktop-foundation.md`
+- Markdown 文档编辑架构：`agent-works/markdown-editor-desktop/architecture/markdown-document-editing.md`
 - 视觉与交互规范：`DESIGN.md`
 
-第一阶段验收只代表 P1/P2 与文件/窗口底座达到当前阶段里程碑，不等于完整 R1/R2/R5/R14 或编辑器产品完成。Windows 原生选择器、回收站、Explorer、菜单与辅助技术仍缺人工实机证据。
+阶段验收只代表对应计划里程碑完成，不等于完整 R1/R2/R5/R11/R14/R30/R31 或完整产品完成。Windows 原生选择器、回收站、Explorer、菜单与辅助技术仍缺人工实机证据。
