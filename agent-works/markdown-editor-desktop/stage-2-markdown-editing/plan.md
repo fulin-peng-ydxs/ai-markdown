@@ -4,7 +4,7 @@
 >
 > 当前阶段：阶段 2——统一 Markdown 文档模型、排版编辑/源码编辑和完整单文档保存、恢复、冲突、图片资源链路
 >
-> 计划状态：进行中（T18～T30 已完成；T31 本地实现与 macOS 桌面基线已完成，待推送取得远端 macOS/Windows CI；T32 未开始）
+> 计划状态：进行中（T18～T30 已完成；T31 本地实现与 macOS 桌面基线已完成，首次远端矩阵已运行并正在修复 Windows 条件编译 lint；T32 未开始）
 >
 > 需求编号规则：完全沿用 `requirement.md` 的 R1～R34，不新增、重排或改变 R 编号含义。
 
@@ -524,8 +524,8 @@ plainroot-recovery-v1/
 
 ### 6.14 任务 T31：桌面 E2E、跨模块回归与 macOS/Windows CI
 
-- 状态：进行中（本地实现、全量回归和 macOS 8/8 桌面 E2E 已完成；待用户授权推送后取得远端 macOS/Windows CI）
-- 依赖：T30；需要用户授权推送后取得远端证据。
+- 状态：进行中（本地实现、全量回归和 macOS 8/8 桌面 E2E 已完成；首次远端矩阵已运行并正在修复 Windows 条件编译 lint）
+- 依赖：T30；远端失败修复后必须重跑 macOS/Windows 完整矩阵。
 - 涉及文件/模块：`tests/e2e/`、E2E runner/config、`package.json` 桌面脚本、`.github/workflows/ci.yml`、平台 fixtures、`t31-e2e-cross-platform-ci.md`。
 - 目标：在 T30 契约/服务测试之上，完成 P1/P2 真 IPC E2E、第一阶段跨模块回归、macOS 实机和 macOS/Windows 远端门禁。
 - 操作：扩展隔离桌面 E2E 覆盖打开→两模式编辑→保存→重开、冲突、恢复和图片；运行第一阶段 P1/P2/文件/窗口完整回归；本机 macOS 验证原生打开/另存/关闭、中文 IME、剪贴板/拖放、图片、冲突和恢复；CI 矩阵运行锁定工具链、全部非桌面测试、P1/P2 E2E 和生产构建；上传日志、截图和 artifact/hash。
@@ -540,7 +540,7 @@ plainroot-recovery-v1/
   - 真 IPC 暴露并修复三处此前单元测试未能穿透的跨层缺陷：恢复仓储曾把真实 `FileRevision.contentHash` 的 `sha256:` 前缀误判为非法；保存控制器在定时快照时重复注册已活动会话；Milkdown/CodeMirror 在 React 投影返回前的连续本地事务复用了旧 `editVersion`，且陈旧投影可能覆盖较新的 adapter 内容。Rust 现在分别校验带前缀 revision hash 与内部裸摘要，控制器复用已完成注册，两种 adapter 本地单调推进版本并拒绝同 generation 的低版本投影；均补有定向回归。
   - 本机 macOS arm64 已通过：`pnpm typecheck`、`pnpm test`（Node 30/30、Vitest 173/173、Rust 176/176，另 1 项手动性能探针忽略）、`pnpm build`、许可证 727/508/0、Rust fmt、全 feature Clippy/测试、`pnpm test:e2e` 8/8 和 `pnpm tauri build --no-bundle`。正式前端产物与 release 二进制扫描未发现 `PLAINROOT_E2E_DATA_DIR`、WDIO 或测试命令标记。
   - 本次没有修改数据库、SQL、seed、业务环境变量、正式 capability、菜单或持久配置；`.github/workflows/ci.yml` 已执行现有统一脚本并会自动消费新增 8 条套件，因此未为凑任务重复改写 workflow。
-  - 尚未推送，故没有本次最新提交对应的 GitHub Actions run、macOS/Windows 双绿、artifact/hash 或 Windows WebView2 证据；T31 不能标记完成。系统 IME 候选窗、原生保存选择器、系统剪贴板/Finder 拖入、系统关闭/退出、峰值内存和 Windows 原生系统 UI 也没有被 WebView 自动化替代。证据见 `t31-e2e-cross-platform-ci.md`。
+  - 提交 `2084489fa078cdcd02d640d0c00dd57971a9e0a2` 已推送并触发 GitHub Actions run `30060302937`。macOS 作业的桌面 E2E 已通过；Windows 在 Rust lint 阶段真实暴露 Unix 专用测试 fixture 未门控、Unix 权限字段在 Windows 未读取两处告警，因此该 run 不是双绿，T31 不能标记完成。现已用 `#[cfg(unix)]` 收紧测试和字段，而非通过宽泛 `allow` 屏蔽告警；本机 fmt、全目标/全 feature Clippy 和 176/176 Rust 测试通过，Windows 本地交叉 lint 仍因缺少 `llvm-rc` 无法越过 Tauri 资源编译，最终证据必须来自修复提交对应的 Windows runner。系统 IME 候选窗、原生保存选择器、系统剪贴板/Finder 拖入、系统关闭/退出、峰值内存和 Windows 原生系统 UI 也没有被 WebView 自动化替代。证据见 `t31-e2e-cross-platform-ci.md`。
 
 ### 6.15 任务 T32：第二阶段整体复核、架构文档和阶段验收
 
@@ -637,7 +637,7 @@ plainroot-recovery-v1/
 ### 8.6 回归测试
 
 - 计划：T30 先把 editor/roundtrip/recovery/assets 的单元、服务集成和 parity 纳入统一 `pnpm test` 或明确的 CI 必跑脚本；T31 再运行第一阶段全部文件树、CRUD、watch、安全写、窗口、一目录一窗口、P1/P2、焦点和桌面 E2E 跨模块回归。
-- 具体完成情况：T30 已新增 `test:editor`、`test:roundtrip`、`test:rust`，并由 `pnpm test` 统一运行 Node、Vitest 和 Rust 非桌面门禁；T31 最新本机结果为 Node 30/30、Vitest 173/173、Rust 176/176（另 1 项手动性能探针忽略）。默认全量 `cargo test` 的既有并发 flaky 已以统一临时目录修复并连续 10/10 通过；T31 又把第一阶段 P1/P2 基线与第二阶段编辑、资源、保存、外部修改、恢复串成 8 条真桌面用例。远端跨平台矩阵尚未执行。
+- 具体完成情况：T30 已新增 `test:editor`、`test:roundtrip`、`test:rust`，并由 `pnpm test` 统一运行 Node、Vitest 和 Rust 非桌面门禁；T31 最新本机结果为 Node 30/30、Vitest 173/173、Rust 176/176（另 1 项手动性能探针忽略）。默认全量 `cargo test` 的既有并发 flaky 已以统一临时目录修复并连续 10/10 通过；T31 又把第一阶段 P1/P2 基线与第二阶段编辑、资源、保存、外部修改、恢复串成 8 条真桌面用例。首次远端矩阵 run `30060302937` 的 Windows Rust lint 失败已按平台边界修复，待新提交重跑完整矩阵。
 
 ### 8.7 异常与边界测试
 
@@ -647,7 +647,7 @@ plainroot-recovery-v1/
 ### 8.8 桌面 E2E 与跨平台
 
 - 计划：由 T31 扩展现有隔离 E2E，至少覆盖 P1 打开 fixture→排版编辑→源码验证→保存→重开，外部修改→冲突，崩溃快照→恢复，图片导入→磁盘/链接；macOS/Windows runner 均执行 T30 非桌面门禁、平台适用测试、桌面 E2E 和生产构建。
-- 具体完成情况：T31 已在本机 macOS 重新构建专用 E2E 应用并通过 8/8：前四条保留 P2/P1 IPC、布局与焦点基线，后四条覆盖两模式编辑/资源输入/保存重开、恢复仓储、外部修改内容安全和显式恢复。套件使用独立临时工作区、确定性流程不重试；正式构建确认不含 E2E 标记。最新远端 macOS/Windows 矩阵、artifact/hash 与 Windows 原生系统对话框、拖放、剪贴板、菜单和辅助技术仍待推送/人工证据，不能由本机结果外推。
+- 具体完成情况：T31 已在本机 macOS 重新构建专用 E2E 应用并通过 8/8：前四条保留 P2/P1 IPC、布局与焦点基线，后四条覆盖两模式编辑/资源输入/保存重开、恢复仓储、外部修改内容安全和显式恢复。套件使用独立临时工作区、确定性流程不重试；正式构建确认不含 E2E 标记。首次远端矩阵 run `30060302937` 已执行但 Windows Rust lint 失败，不能作为双平台通过证据；修复提交仍需重跑 macOS/Windows 完整矩阵。Windows 原生系统对话框、拖放、剪贴板、菜单和辅助技术继续保留人工未验证。
 
 ### 8.9 验证清单
 

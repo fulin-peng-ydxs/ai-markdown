@@ -704,6 +704,7 @@ enum RecoveryFault {
 
 #[derive(Debug)]
 struct RecoveryStore {
+    #[cfg(unix)]
     root: PathBuf,
     manifest_path: PathBuf,
     snapshots_path: PathBuf,
@@ -718,6 +719,7 @@ impl RecoveryStore {
         Self {
             manifest_path: root.join(RECOVERY_MANIFEST_FILE_NAME),
             snapshots_path: root.join(SNAPSHOT_DIRECTORY_NAME),
+            #[cfg(unix)]
             root,
             #[cfg(test)]
             fault,

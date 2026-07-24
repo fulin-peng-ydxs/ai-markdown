@@ -7,7 +7,7 @@
 - 本次边界：扩展真实 Tauri IPC 桌面 E2E，运行第一阶段底座与第二阶段编辑链的完整本机回归，修复测试实际暴露的跨层问题，并确认正式构建不包含 E2E 测试缝。
 - 未扩张范围：不实现页签、大纲、工作区搜索、阅读、主题或新的产品配置；不新增数据库、SQL、seed、业务环境变量、正式 capability、菜单或持久化格式。
 
-T31 的完成标准包含“最新提交取得 GitHub Actions macOS/Windows 双绿”。本次没有用户推送授权，故任务状态只能登记为“本地实现与 macOS 桌面基线完成，待远端双平台 CI”，不能提前标记完成，也不进入 T32。
+T31 的完成标准包含“最新提交取得 GitHub Actions macOS/Windows 双绿”。提交 `2084489fa078cdcd02d640d0c00dd57971a9e0a2` 已按用户授权推送；首次远端 run `30060302937` 的 Windows Rust lint 失败，因此任务仍为“进行中”，不能提前标记完成，也不进入 T32。
 
 ## 2. 实际改动
 
@@ -78,16 +78,24 @@ T31 的完成标准包含“最新提交取得 GitHub Actions macOS/Windows 双�
 | `pnpm test:e2e` | 重新构建 E2E 应用后真实 macOS Tauri/WebKit 8/8 通过 |
 | `pnpm tauri build --no-bundle` | 通过，产出正式 release 二进制 |
 | 正式产物 E2E 标记扫描 | 前端与 release 二进制均未发现测试标记 |
+| GitHub Actions run `30060302937` | 已执行；macOS 桌面 E2E 通过，Windows 在 Rust lint 阶段失败，不是双绿 |
+
+首次 Windows runner 暴露两处本机 macOS 不会编译出的 `-D warnings`：
+
+- `assets.rs` 的 symlink 重定向测试只在 Unix 有业务意义，但 fixture 曾在 Windows 仍被创建，触发未使用变量；
+- `recovery.rs` 的仓储根字段只服务 Unix `0700` 权限收紧，却在 Windows 结构体中保留，触发未读取字段。
+
+修复将整个 symlink 测试和 `root` 字段按 `#[cfg(unix)]` 门控，没有添加宽泛 `allow`。修复后本机 `cargo fmt`、全目标/全 feature Clippy 和 Rust 全量测试通过（176/176，另 1 项手工性能探针忽略）。本机虽已安装 `x86_64-pc-windows-msvc` target，但 Tauri Windows 资源构建因 macOS 缺少 `llvm-rc` 在进入 crate lint 前停止；该项明确未通过本机交叉验证，必须由下一次真实 Windows runner 复验。
 
 WDIO 运行时仍会输出“未安装外部 `tauri-driver`”的可选诊断和 session 结束后的 mock 清理提示；当前套件使用编译期 embedded driver，8 条用例和进程退出码均为成功。该输出不能替代远端 runner 实测，若远端首次运行失败必须按真实日志修复，不能屏蔽。
 
 ## 5. 未验证与后续
 
-- 未推送，未运行本次最新提交对应的 GitHub Actions；没有 macOS/Windows 双绿链接、artifact 或 hash，Windows 编译/WebView2 结果不得从第一阶段或本机 macOS 外推。
+- 首次推送已触发 run `30060302937`，但 Windows Rust lint 失败；它只能证明门禁真实生效，不能作为双平台通过、artifact 或 Windows WebView2 证据。修复提交必须重新运行完整矩阵。
 - WebView `DataTransfer/File` 验证了页面事件、raw IPC 和磁盘链路，但不等于系统剪贴板、Finder/Explorer 原生拖入或原生图片选择器人工证据。
 - 系统 IME 候选窗、原生保存/另存对话框、系统关闭/应用退出、系统辅助技术、峰值内存、网络卷/休眠/卸载与超大目录长时行为未执行。
 - JPEG/WebP 尾字节兼容、图片 Blob 并发总量和引用式图片移动改写仍是既有非阻塞边界，本任务没有把它们伪装为已解决。
-- 用户后续明确授权推送后，应以最新提交的 macOS/Windows 两个作业均绿为准补齐 T31；红灯修复后需重跑完整矩阵。T31 真正完成前不得开始 T32 总体验收。
+- 应以修复后最新提交的 macOS/Windows 两个作业均绿为准补齐 T31；红灯修复后重跑完整矩阵。T31 真正完成前不得开始 T32 总体验收。
 
 ## 6. 关联文档同步
 

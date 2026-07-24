@@ -1135,29 +1135,27 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn nested_directory_creation_rejects_symlink_redirection() {
         let fixture = Fixture::new();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::symlink;
-            let outside = fixture.root.path().join("outside");
-            fs::create_dir_all(&outside).unwrap();
-            symlink(&outside, fixture.workspace_root.join("linked")).unwrap();
-            assert_eq!(
-                fixture
-                    .service
-                    .begin_upload(
-                        fixture.workspace_id.clone(),
-                        &fixture.workspace_root,
-                        WorkspaceRelativePath::parse("linked/images").unwrap(),
-                        "image/png",
-                        "image.png",
-                    )
-                    .unwrap_err()
-                    .code,
-                DesktopErrorCode::SymlinkNotAllowed
-            );
-        }
+        use std::os::unix::fs::symlink;
+        let outside = fixture.root.path().join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        symlink(&outside, fixture.workspace_root.join("linked")).unwrap();
+        assert_eq!(
+            fixture
+                .service
+                .begin_upload(
+                    fixture.workspace_id.clone(),
+                    &fixture.workspace_root,
+                    WorkspaceRelativePath::parse("linked/images").unwrap(),
+                    "image/png",
+                    "image.png",
+                )
+                .unwrap_err()
+                .code,
+            DesktopErrorCode::SymlinkNotAllowed
+        );
     }
 
     #[test]
