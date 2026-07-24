@@ -76,6 +76,7 @@ T31 的完成标准包含“最新提交取得 GitHub Actions macOS/Windows 双�
 | `cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings` | 通过 |
 | `cargo test --locked --manifest-path src-tauri/Cargo.toml --all-features` | 176/176，通过；另 1 项手动性能探针忽略 |
 | `pnpm test:e2e` | 重新构建 E2E 应用后真实 macOS Tauri/WebKit 8/8 通过 |
+| Windows CRLF 与恢复断言收敛后再次执行 `pnpm test:e2e` | 真实 macOS Tauri/WebKit 8/8 通过；确定性业务流程仍为 0 次重试 |
 | `pnpm tauri build --no-bundle` | 通过，产出正式 release 二进制 |
 | 正式产物 E2E 标记扫描 | 前端与 release 二进制均未发现测试标记 |
 | GitHub Actions run `30060302937` | 已执行；macOS 桌面 E2E 通过，Windows 在 Rust lint 阶段失败，不是双绿 |
@@ -87,11 +88,21 @@ T31 的完成标准包含“最新提交取得 GitHub Actions macOS/Windows 双�
 
 修复将整个 symlink 测试和 `root` 字段按 `#[cfg(unix)]` 门控，没有添加宽泛 `allow`。修复后本机 `cargo fmt`、全目标/全 feature Clippy 和 Rust 全量测试通过（176/176，另 1 项手工性能探针忽略）。本机虽已安装 `x86_64-pc-windows-msvc` target，但 Tauri Windows 资源构建因 macOS 缺少 `llvm-rc` 在进入 crate lint 前停止；该项明确未通过本机交叉验证，必须由下一次真实 Windows runner 复验。
 
+修复提交 `11e3857fbdd0a9cc45ba908fef3923b71322d23a` 对应 run `30060937964` 随后证明 Windows Rust lint 与 Rust tests 均已通过；Windows Desktop E2E 继续暴露第二层跨平台假设：
+
+- GitHub Windows checkout 将未指定 `eol` 的 fixture Markdown 转为 CRLF，首条文件断言却固定要求 LF；
+- CodeMirror 可见源码按 LF 投影，磁盘安全写入按需求保留原 CRLF，保存用例用前者直接对子串匹配后者，因换行不同误判为“保存不完整”；
+- 外部修改测试固定追加 LF，在 Windows CRLF fixture 上还会人为制造 mixed EOL，污染原本只验证冲突保护的场景。
+
+测试现将文档内容比较归一到 LF 语义，仍对标题、正文、两模式编辑标记和图片链接逐项断言；制造外部修改时改为沿用磁盘现有换行。该处理不改变产品保存实现，也没有添加业务用例重试。
+
+换行修复后的本机完整 E2E 首次复跑还暴露了恢复用例的时间边界不精确：原断言在载入恢复内容、等待页面状态并切换到源码模式之后才读取磁盘，已经可能超过 800 ms 正常自动保存防抖。需求只禁止恢复动作未经确认直接覆盖原文件；用户确认载入后会形成普通 dirty session，随后进入既有自动保存链路。用例现改为在点击“恢复到编辑区”前记录磁盘字节，并在页面确认恢复内容已载入后、进入模式切换前断言磁盘仍完全一致，再继续验证恢复正文；不再把后续正常自动保存误判为恢复动作直接写盘。
+
 WDIO 运行时仍会输出“未安装外部 `tauri-driver`”的可选诊断和 session 结束后的 mock 清理提示；当前套件使用编译期 embedded driver，8 条用例和进程退出码均为成功。该输出不能替代远端 runner 实测，若远端首次运行失败必须按真实日志修复，不能屏蔽。
 
 ## 5. 未验证与后续
 
-- 首次推送已触发 run `30060302937`，但 Windows Rust lint 失败；它只能证明门禁真实生效，不能作为双平台通过、artifact 或 Windows WebView2 证据。修复提交必须重新运行完整矩阵。
+- run `30060302937` 在 Windows Rust lint 失败；run `30060937964` 已越过 lint 与 Rust tests，但在 Windows E2E 的 CRLF 测试假设处失败。两次都只能证明门禁真实生效，不能作为双平台通过、生产 artifact 或 Windows WebView2 完整证据；换行修复提交必须重新运行完整矩阵。
 - WebView `DataTransfer/File` 验证了页面事件、raw IPC 和磁盘链路，但不等于系统剪贴板、Finder/Explorer 原生拖入或原生图片选择器人工证据。
 - 系统 IME 候选窗、原生保存/另存对话框、系统关闭/应用退出、系统辅助技术、峰值内存、网络卷/休眠/卸载与超大目录长时行为未执行。
 - JPEG/WebP 尾字节兼容、图片 Blob 并发总量和引用式图片移动改写仍是既有非阻塞边界，本任务没有把它们伪装为已解决。

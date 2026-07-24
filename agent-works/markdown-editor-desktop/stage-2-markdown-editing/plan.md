@@ -4,7 +4,7 @@
 >
 > 当前阶段：阶段 2——统一 Markdown 文档模型、排版编辑/源码编辑和完整单文档保存、恢复、冲突、图片资源链路
 >
-> 计划状态：进行中（T18～T30 已完成；T31 本地实现与 macOS 桌面基线已完成，首次远端矩阵已运行并正在修复 Windows 条件编译 lint；T32 未开始）
+> 计划状态：进行中（T18～T30 已完成；T31 本地实现与 macOS 桌面基线已完成，远端矩阵正在按真实 Windows lint 与 CRLF E2E 结果迭代；T32 未开始）
 >
 > 需求编号规则：完全沿用 `requirement.md` 的 R1～R34，不新增、重排或改变 R 编号含义。
 
@@ -524,7 +524,7 @@ plainroot-recovery-v1/
 
 ### 6.14 任务 T31：桌面 E2E、跨模块回归与 macOS/Windows CI
 
-- 状态：进行中（本地实现、全量回归和 macOS 8/8 桌面 E2E 已完成；首次远端矩阵已运行并正在修复 Windows 条件编译 lint）
+- 状态：进行中（本地实现、全量回归和 macOS 8/8 桌面 E2E 已完成；远端矩阵正在按真实 Windows lint 与 CRLF E2E 结果迭代）
 - 依赖：T30；远端失败修复后必须重跑 macOS/Windows 完整矩阵。
 - 涉及文件/模块：`tests/e2e/`、E2E runner/config、`package.json` 桌面脚本、`.github/workflows/ci.yml`、平台 fixtures、`t31-e2e-cross-platform-ci.md`。
 - 目标：在 T30 契约/服务测试之上，完成 P1/P2 真 IPC E2E、第一阶段跨模块回归、macOS 实机和 macOS/Windows 远端门禁。
@@ -540,7 +540,7 @@ plainroot-recovery-v1/
   - 真 IPC 暴露并修复三处此前单元测试未能穿透的跨层缺陷：恢复仓储曾把真实 `FileRevision.contentHash` 的 `sha256:` 前缀误判为非法；保存控制器在定时快照时重复注册已活动会话；Milkdown/CodeMirror 在 React 投影返回前的连续本地事务复用了旧 `editVersion`，且陈旧投影可能覆盖较新的 adapter 内容。Rust 现在分别校验带前缀 revision hash 与内部裸摘要，控制器复用已完成注册，两种 adapter 本地单调推进版本并拒绝同 generation 的低版本投影；均补有定向回归。
   - 本机 macOS arm64 已通过：`pnpm typecheck`、`pnpm test`（Node 30/30、Vitest 173/173、Rust 176/176，另 1 项手动性能探针忽略）、`pnpm build`、许可证 727/508/0、Rust fmt、全 feature Clippy/测试、`pnpm test:e2e` 8/8 和 `pnpm tauri build --no-bundle`。正式前端产物与 release 二进制扫描未发现 `PLAINROOT_E2E_DATA_DIR`、WDIO 或测试命令标记。
   - 本次没有修改数据库、SQL、seed、业务环境变量、正式 capability、菜单或持久配置；`.github/workflows/ci.yml` 已执行现有统一脚本并会自动消费新增 8 条套件，因此未为凑任务重复改写 workflow。
-  - 提交 `2084489fa078cdcd02d640d0c00dd57971a9e0a2` 已推送并触发 GitHub Actions run `30060302937`。macOS 作业的桌面 E2E 已通过；Windows 在 Rust lint 阶段真实暴露 Unix 专用测试 fixture 未门控、Unix 权限字段在 Windows 未读取两处告警，因此该 run 不是双绿，T31 不能标记完成。现已用 `#[cfg(unix)]` 收紧测试和字段，而非通过宽泛 `allow` 屏蔽告警；本机 fmt、全目标/全 feature Clippy 和 176/176 Rust 测试通过，Windows 本地交叉 lint 仍因缺少 `llvm-rc` 无法越过 Tauri 资源编译，最终证据必须来自修复提交对应的 Windows runner。系统 IME 候选窗、原生保存选择器、系统剪贴板/Finder 拖入、系统关闭/退出、峰值内存和 Windows 原生系统 UI 也没有被 WebView 自动化替代。证据见 `t31-e2e-cross-platform-ci.md`。
+  - 提交 `2084489fa078cdcd02d640d0c00dd57971a9e0a2` 触发 run `30060302937`，Windows Rust lint 暴露 Unix 专用测试 fixture 未门控、Unix 权限字段在 Windows 未读取两处告警；修复提交 `11e3857fbdd0a9cc45ba908fef3923b71322d23a` 对应 run `30060937964` 已证明 Windows lint 与 Rust tests 通过，但桌面 E2E 又真实暴露 fixture 被 Windows checkout 转为 CRLF 后，测试仍固定按 LF 比较的跨平台假设。现已用 `#[cfg(unix)]` 收紧 Rust 平台边界，并把 E2E 的内容比较改为换行语义比较、外部修改沿用磁盘原换行风格；没有通过宽泛 `allow` 或测试重试屏蔽失败。本机 Windows 交叉 lint 仍因缺少 `llvm-rc` 无法越过 Tauri 资源编译，最终证据必须来自后续真实 Windows runner。T31 仍未完成；系统 IME 候选窗、原生保存选择器、系统剪贴板/Finder 拖入、系统关闭/退出、峰值内存和 Windows 原生系统 UI 也没有被 WebView 自动化替代。证据见 `t31-e2e-cross-platform-ci.md`。
 
 ### 6.15 任务 T32：第二阶段整体复核、架构文档和阶段验收
 
@@ -647,7 +647,7 @@ plainroot-recovery-v1/
 ### 8.8 桌面 E2E 与跨平台
 
 - 计划：由 T31 扩展现有隔离 E2E，至少覆盖 P1 打开 fixture→排版编辑→源码验证→保存→重开，外部修改→冲突，崩溃快照→恢复，图片导入→磁盘/链接；macOS/Windows runner 均执行 T30 非桌面门禁、平台适用测试、桌面 E2E 和生产构建。
-- 具体完成情况：T31 已在本机 macOS 重新构建专用 E2E 应用并通过 8/8：前四条保留 P2/P1 IPC、布局与焦点基线，后四条覆盖两模式编辑/资源输入/保存重开、恢复仓储、外部修改内容安全和显式恢复。套件使用独立临时工作区、确定性流程不重试；正式构建确认不含 E2E 标记。首次远端矩阵 run `30060302937` 已执行但 Windows Rust lint 失败，不能作为双平台通过证据；修复提交仍需重跑 macOS/Windows 完整矩阵。Windows 原生系统对话框、拖放、剪贴板、菜单和辅助技术继续保留人工未验证。
+- 具体完成情况：T31 已在本机 macOS 重新构建专用 E2E 应用并通过 8/8：前四条保留 P2/P1 IPC、布局与焦点基线，后四条覆盖两模式编辑/资源输入/保存重开、恢复仓储、外部修改内容安全和显式恢复。套件使用独立临时工作区、确定性流程不重试；正式构建确认不含 E2E 标记。run `30060302937` 暴露 Windows Rust lint，run `30060937964` 已越过该 lint 与 Rust tests，但桌面 E2E 因 fixture CRLF 与测试固定 LF 假设失败；两次均不能作为双平台通过证据。换行语义修复后仍需重跑 macOS/Windows 完整矩阵。Windows 原生系统对话框、拖放、剪贴板、菜单和辅助技术继续保留人工未验证。
 
 ### 8.9 验证清单
 

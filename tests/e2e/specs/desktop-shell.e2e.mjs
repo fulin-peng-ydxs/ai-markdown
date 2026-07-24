@@ -35,6 +35,16 @@ function platformPathIdentity(path) {
     .toLocaleLowerCase("en-US");
 }
 
+function normalizeLineEndings(markdown) {
+  return markdown.replace(/\r\n|\r/g, "\n");
+}
+
+function lineEndingFromMarkdown(markdown) {
+  if (markdown.includes("\r\n")) return "\r\n";
+  if (markdown.includes("\r")) return "\r";
+  return "\n";
+}
+
 function isTrustedTauriAppUrl(url) {
   return /^(?:tauri:\/\/localhost|http:\/\/tauri\.localhost)(?:\/|$)/.test(url);
 }
@@ -251,7 +261,9 @@ describe("Plainroot desktop shell", () => {
       "fixture Markdown was not read through the production visual editor",
     );
     assert.equal(
-      await readFile(join(fixture.root, "note.md"), "utf8"),
+      normalizeLineEndings(
+        await readFile(join(fixture.root, "note.md"), "utf8"),
+      ),
       "# Plainroot fixture\n\nThis Markdown file belongs only to the automated test fixture.\n",
     );
   });
@@ -339,7 +351,9 @@ describe("Plainroot desktop shell", () => {
       async () => {
         const content = await readFile(join(fixture.root, "note.md"), "utf8");
         return (
-          content.includes(sourceBeforeImage) &&
+          normalizeLineEndings(content).includes(
+            normalizeLineEndings(sourceBeforeImage),
+          ) &&
           /!\[t31-image]\(assets\/t31-image\.png\)/.test(content)
         );
       },
@@ -353,7 +367,12 @@ describe("Plainroot desktop shell", () => {
       { timeout: 10_000, timeoutMsg: "manual save did not reach the saved state" },
     );
     const persisted = await readFile(join(fixture.root, "note.md"), "utf8");
-    assert.equal(persisted.includes(sourceBeforeImage), true);
+    assert.equal(
+      normalizeLineEndings(persisted).includes(
+        normalizeLineEndings(sourceBeforeImage),
+      ),
+      true,
+    );
     assert.match(persisted, /!\[t31-image]\(assets\/t31-image\.png\)/);
 
     await browser.refresh();
@@ -403,9 +422,10 @@ describe("Plainroot desktop shell", () => {
       `\n\n${LOCAL_CONFLICT_MARKER}`,
     );
     const diskBeforeConflict = await readFile(join(fixture.root, "note.md"), "utf8");
+    const diskLineEnding = lineEndingFromMarkdown(diskBeforeConflict);
     await writeFile(
       join(fixture.root, "note.md"),
-      `${diskBeforeConflict}\n\n${EXTERNAL_MARKER}\n`,
+      `${diskBeforeConflict}${diskLineEnding}${diskLineEnding}${EXTERNAL_MARKER}${diskLineEnding}`,
       "utf8",
     );
     await $('[aria-label="保存当前文档"]').click();
@@ -467,13 +487,22 @@ describe("Plainroot desktop shell", () => {
     const recoveryTitle = await $("#recovery-title");
     await recoveryTitle.waitForDisplayed();
     assert.equal(await recoveryTitle.getText(), "检查尚未写入原文件的内容");
+    const diskBeforeRestore = await readFile(
+      join(fixture.root, "note.md"),
+      "utf8",
+    );
     await $('button=恢复到编辑区').click();
     await browser.waitUntil(
       async () =>
         (await $(".workbench__status-activity").getText()).includes(
           "恢复副本已载入为未保存内容",
-        ),
+      ),
       { timeout: 10_000, timeoutMsg: "recovery snapshot was not loaded into the editor" },
+    );
+    assert.equal(
+      await readFile(join(fixture.root, "note.md"), "utf8"),
+      diskBeforeRestore,
+      "loading recovery must not write the source Markdown before the normal autosave debounce",
     );
     await switchToSource();
     assert.equal(
@@ -481,13 +510,6 @@ describe("Plainroot desktop shell", () => {
         LOCAL_CONFLICT_MARKER,
       ),
       true,
-    );
-    assert.equal(
-      (await readFile(join(fixture.root, "note.md"), "utf8")).includes(
-        LOCAL_CONFLICT_MARKER,
-      ),
-      false,
-      "restoring must not synchronously overwrite the source Markdown",
     );
   });
 });
