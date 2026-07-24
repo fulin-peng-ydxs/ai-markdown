@@ -4,7 +4,7 @@ use tauri::State;
 
 use crate::error::{DesktopError, DesktopErrorCode};
 use crate::fs::delete::{DeleteResult, PermanentDeleteProposal, WorkspaceDeleteService};
-use crate::fs::mutate::{WorkspaceMutationResult, WorkspaceMutationService};
+use crate::fs::mutate::{WorkspaceMoveRisk, WorkspaceMutationResult, WorkspaceMutationService};
 use crate::fs::read::{self, MarkdownReadResult};
 use crate::fs::safe_write::{SafeWriteResult, WorkspaceSafeWriteService};
 use crate::fs::scan::{WorkspaceScanBatch, WorkspaceScanService, WorkspaceScanStart};
@@ -12,6 +12,7 @@ use crate::fs::watch::{WorkspaceWatchBatch, WorkspaceWatchService, WorkspaceWatc
 use crate::fs::{
     resolve_existing_workspace_path, FileRevision, WorkspaceId, WorkspaceRelativePath,
 };
+use crate::preferences::{default_asset_directory, PreferencesRepository};
 
 use super::workspace::WorkspaceAccessService;
 
@@ -177,6 +178,33 @@ pub fn rename_workspace_entry(
     let result = mutations.rename(workspace.canonical_root(), &relative_path, &name)?;
     watches.record_mutation(&workspace_id, &result);
     Ok(result)
+}
+
+#[tauri::command]
+pub async fn inspect_workspace_move_risk(
+    workspace_id: WorkspaceId,
+    relative_path: String,
+    access: State<'_, WorkspaceAccessService>,
+    mutations: State<'_, WorkspaceMutationService>,
+    preferences: State<'_, PreferencesRepository>,
+) -> Result<WorkspaceMoveRisk, DesktopError> {
+    let workspace = access.workspace(&workspace_id)?;
+    let root = workspace.canonical_root().to_path_buf();
+    let (asset_directory, preference_unavailable) = match preferences.get(&workspace_id) {
+        Ok(preference) => (preference.asset_directory, false),
+        Err(_) => (default_asset_directory(), true),
+    };
+    let service = mutations.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        service.inspect_move_risk(
+            &root,
+            &relative_path,
+            &asset_directory,
+            preference_unavailable,
+        )
+    })
+    .await
+    .map_err(|_| DesktopError::new(DesktopErrorCode::MutationUnavailable, true, true))?
 }
 
 #[tauri::command]

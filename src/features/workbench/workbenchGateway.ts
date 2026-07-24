@@ -3,6 +3,7 @@ import type {
   EditorMenuState,
   WorkspaceDescriptor,
   WorkspaceId,
+  WorkspaceMoveRisk,
   WorkspaceMutationResult,
   WorkspaceOpenDisposition,
   WorkspaceOpenOutcome,
@@ -20,6 +21,7 @@ import {
   cancelWorkspaceScan,
   createMarkdownFile,
   createWorkspaceDirectory,
+  inspectWorkspaceMoveRisk,
   moveWorkspaceEntry,
   pollWorkspaceScan,
   pollWorkspaceWatch,
@@ -68,6 +70,7 @@ export interface WorkspaceWorkbenchGateway extends EditorDocumentGateway {
   createFile(workspaceId: WorkspaceId, name: string, parent: WorkspaceRelativePath | null): Promise<WorkspaceMutationResult>;
   createDirectory(workspaceId: WorkspaceId, name: string, parent: WorkspaceRelativePath | null): Promise<WorkspaceMutationResult>;
   rename(workspaceId: WorkspaceId, path: WorkspaceRelativePath, name: string): Promise<WorkspaceMutationResult>;
+  inspectMoveRisk(workspaceId: WorkspaceId, path: WorkspaceRelativePath): Promise<WorkspaceMoveRisk>;
   move(workspaceId: WorkspaceId, path: WorkspaceRelativePath, target: WorkspaceRelativePath | null): Promise<WorkspaceMutationResult>;
   trash(workspaceId: WorkspaceId, path: WorkspaceRelativePath): Promise<DeleteResult>;
   reveal(workspaceId: WorkspaceId, path: WorkspaceRelativePath): Promise<void>;
@@ -107,6 +110,7 @@ export const desktopWorkspaceWorkbenchGateway: WorkspaceWorkbenchGateway = {
   createFile: createMarkdownFile,
   createDirectory: createWorkspaceDirectory,
   rename: renameWorkspaceEntry,
+  inspectMoveRisk: inspectWorkspaceMoveRisk,
   move: moveWorkspaceEntry,
   trash: trashWorkspaceEntry,
   reveal: revealWorkspaceEntry,

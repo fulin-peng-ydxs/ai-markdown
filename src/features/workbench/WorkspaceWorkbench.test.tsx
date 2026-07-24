@@ -55,8 +55,28 @@ function gateway(overrides: Partial<WorkspaceWorkbenchGateway> = {}): WorkspaceW
     cancelled: false,
   };
   return {
-    scan: vi.fn().mockResolvedValue({ scanId: "scan-1", workspaceId: workspace.id, directory: null }),
-    pollScan: vi.fn().mockResolvedValue(completeScan),
+    scan: vi.fn().mockImplementation(
+      (_workspaceId, directory: string | null) =>
+        Promise.resolve({
+          scanId: directory ? `scan-${directory}` : "scan-1",
+          workspaceId: workspace.id,
+          directory,
+        }),
+    ),
+    pollScan: vi.fn().mockImplementation((scanId: string) =>
+      Promise.resolve(
+        scanId === "scan-1"
+          ? completeScan
+          : {
+              scanId,
+              processed: 0,
+              entries: [],
+              issues: [],
+              complete: true,
+              cancelled: false,
+            },
+      ),
+    ),
     cancelScan: vi.fn().mockResolvedValue(true),
     watch: vi.fn().mockResolvedValue({ watchId: "watch-1", workspaceId: workspace.id }),
     restartWatch: vi.fn().mockResolvedValue({ watchId: "watch-2", workspaceId: workspace.id }),
@@ -75,6 +95,13 @@ function gateway(overrides: Partial<WorkspaceWorkbenchGateway> = {}): WorkspaceW
     }),
     createDirectory: vi.fn(),
     rename: vi.fn(),
+    inspectMoveRisk: vi.fn().mockResolvedValue({
+      entryKind: "directory",
+      configuredAssetDirectoryAffected: false,
+      containsSupportedImages: false,
+      inspectionLimited: false,
+      mayBreakImageLinks: false,
+    }),
     move: vi.fn(),
     trash: vi.fn(),
     reveal: vi.fn().mockResolvedValue(undefined),
@@ -293,6 +320,124 @@ describe("WorkspaceWorkbench", () => {
         }) as HTMLInputElement
       ).checked,
     ).toBe(true);
+  });
+
+  it("requires explicit confirmation before moving a directory that may break image links", async () => {
+    const api = gateway({
+      inspectMoveRisk: vi.fn().mockResolvedValue({
+        entryKind: "directory",
+        configuredAssetDirectoryAffected: true,
+        containsSupportedImages: true,
+        inspectionLimited: false,
+        mayBreakImageLinks: true,
+      }),
+      move: vi.fn().mockResolvedValue({
+        kind: "move",
+        previousPath: "guides",
+        entry: { ...folder, relativePath: "archive/guides" },
+      }),
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole("treeitem", { name: /guides/ }));
+    await user.click(screen.getByRole("button", { name: "移动" }));
+    const target = screen.getByLabelText("目标文件夹（留空表示根目录）");
+    await user.clear(target);
+    await user.type(target, "archive");
+    await user.click(screen.getByRole("button", { name: "提交到磁盘" }));
+
+    expect(api.inspectMoveRisk).toHaveBeenCalledWith("workspace-a", "guides");
+    expect(api.move).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(/未打开 Markdown 文档中的相对图片链接可能失效/),
+    ).toBeTruthy();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "继续移动（链接可能失效）",
+      }),
+    );
+    await waitFor(() =>
+      expect(api.move).toHaveBeenCalledWith(
+        "workspace-a",
+        "guides",
+        "archive",
+      ),
+    );
+  });
+
+  it("cancels a directory move from the image-link risk confirmation without touching disk", async () => {
+    const api = gateway({
+      inspectMoveRisk: vi.fn().mockResolvedValue({
+        entryKind: "directory",
+        configuredAssetDirectoryAffected: false,
+        containsSupportedImages: false,
+        inspectionLimited: true,
+        mayBreakImageLinks: true,
+      }),
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole("treeitem", { name: /guides/ }));
+    await user.click(screen.getByRole("button", { name: "移动" }));
+    await user.click(screen.getByRole("button", { name: "提交到磁盘" }));
+    expect(await screen.findByText(/未能完整检查所选目录/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(api.move).not.toHaveBeenCalled();
+  });
+
+  it("moves a directory immediately after a clean image-link risk inspection", async () => {
+    const api = gateway({
+      move: vi.fn().mockResolvedValue({
+        kind: "move",
+        previousPath: "guides",
+        entry: { ...folder, relativePath: "archive/guides" },
+      }),
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole("treeitem", { name: /guides/ }));
+    await user.click(screen.getByRole("button", { name: "移动" }));
+    const target = screen.getByLabelText("目标文件夹（留空表示根目录）");
+    await user.clear(target);
+    await user.type(target, "archive");
+    await user.click(screen.getByRole("button", { name: "提交到磁盘" }));
+
+    await waitFor(() =>
+      expect(api.move).toHaveBeenCalledWith(
+        "workspace-a",
+        "guides",
+        "archive",
+      ),
+    );
+    expect(
+      screen.queryByRole("button", {
+        name: "继续移动（链接可能失效）",
+      }),
+    ).toBeNull();
   });
 
   it("does not let a slower old document read replace the latest selection", async () => {

@@ -141,6 +141,7 @@ pub fn run() {
             commands::files::create_markdown_file,
             commands::files::create_workspace_directory,
             commands::files::rename_workspace_entry,
+            commands::files::inspect_workspace_move_risk,
             commands::files::move_workspace_entry,
             commands::files::trash_workspace_entry,
             commands::files::prepare_permanent_delete,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile, readdir, realpath, writeFile } from "node:fs/promises";
+import { readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { createWorkspaceFixture } from "../../support/workspace-fixture.mjs";
@@ -266,6 +266,68 @@ describe("Plainroot desktop shell", () => {
       ),
       "# Plainroot fixture\n\nThis Markdown file belongs only to the automated test fixture.\n",
     );
+  });
+
+  it("requires an explicit warning confirmation before moving a directory with images", async () => {
+    const warningImage = join(fixture.root, "guides", "move-warning.png");
+    await writeFile(warningImage, new Uint8Array(PNG_BYTES));
+    try {
+      const risk = await invoke("inspect_workspace_move_risk", {
+        workspaceId,
+        relativePath: "guides",
+      });
+      assert.equal(risk.containsSupportedImages, true);
+      assert.equal(risk.mayBreakImageLinks, true);
+
+      const guideEntry = await $('[role="treeitem"][data-tree-path="guides"]');
+      await guideEntry.waitForDisplayed();
+      await guideEntry.click();
+      await $('button=移动').click();
+      const operationDialog = await $("dialog[open]");
+      await operationDialog.waitForDisplayed();
+      await operationDialog.$("button=提交到磁盘").click();
+
+      const warning = await $("#workbench-operation-description");
+      await browser.waitUntil(
+        async () =>
+          (await warning.getText()).includes(
+            "未打开 Markdown 文档中的相对图片链接可能失效",
+          ),
+        {
+          timeout: 10_000,
+          timeoutMsg: "directory move risk warning did not replace the move description",
+        },
+      );
+      assert.equal(
+        await operationDialog
+          .$("button=继续移动（链接可能失效）")
+          .isDisplayed(),
+        true,
+      );
+      await operationDialog
+        .$(".app-dialog__actions button:first-child")
+        .click();
+      await browser.waitUntil(async () => !(await $("dialog[open]").isExisting()), {
+        timeoutMsg: "cancelling the move warning did not close the operation dialog",
+      });
+      assert.equal(
+        await invoke("read_markdown_file", {
+          workspaceId,
+          relativePath: "guides/inside.md",
+        }).then((result) => result.status),
+        "ready",
+        "cancelling the warning must not move the directory",
+      );
+    } finally {
+      const openDialog = await $("dialog[open]");
+      if (await openDialog.isExisting().catch(() => false)) {
+        await openDialog
+          .$(".app-dialog__actions button:first-child")
+          .click()
+          .catch(() => undefined);
+      }
+      await rm(warningImage, { force: true });
+    }
   });
 
   it("edits in both modes, imports an image, saves, and reopens the real file", async () => {

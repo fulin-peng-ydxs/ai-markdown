@@ -12,6 +12,8 @@ use super::{
     WorkspaceRelativePath,
 };
 
+const MAX_MOVE_RISK_SCAN_ENTRIES: usize = 10_000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkspaceMutationKind {
@@ -38,7 +40,17 @@ pub struct WorkspaceMutationResult {
     pub entry: FsEntry,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceMoveRisk {
+    pub entry_kind: FsEntryKind,
+    pub configured_asset_directory_affected: bool,
+    pub contains_supported_images: bool,
+    pub inspection_limited: bool,
+    pub may_break_image_links: bool,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct WorkspaceMutationService {
     operation_lock: Arc<Mutex<()>>,
 }
@@ -172,11 +184,115 @@ impl WorkspaceMutationService {
         ))
     }
 
+    pub fn inspect_move_risk(
+        &self,
+        canonical_root: &Path,
+        source: &str,
+        asset_directory: &WorkspaceRelativePath,
+        preference_unavailable: bool,
+    ) -> Result<WorkspaceMoveRisk, DesktopError> {
+        let _guard = self.lock()?;
+        validate_mutation_root(canonical_root)?;
+        let source_relative = WorkspaceRelativePath::parse(source)?;
+        let source_path = resolve_existing_workspace_path(canonical_root, &source_relative)?;
+        let metadata = fs::metadata(&source_path)
+            .map_err(|error| DesktopError::from_io(&error, &source_path, true))?;
+        let entry_kind = supported_kind(&source_path, &metadata)?;
+        if entry_kind != FsEntryKind::Directory {
+            return Ok(WorkspaceMoveRisk {
+                entry_kind,
+                configured_asset_directory_affected: false,
+                contains_supported_images: false,
+                inspection_limited: false,
+                may_break_image_links: false,
+            });
+        }
+
+        let configured_asset_directory_affected =
+            is_same_or_inside(asset_directory.as_str(), source_relative.as_str());
+        let (contains_supported_images, directory_scan_limited) =
+            inspect_directory_images(&source_path, MAX_MOVE_RISK_SCAN_ENTRIES);
+        let inspection_limited = preference_unavailable || directory_scan_limited;
+        Ok(WorkspaceMoveRisk {
+            entry_kind,
+            configured_asset_directory_affected,
+            contains_supported_images,
+            inspection_limited,
+            may_break_image_links: configured_asset_directory_affected
+                || contains_supported_images
+                || inspection_limited,
+        })
+    }
+
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, ()>, DesktopError> {
         self.operation_lock
             .lock()
             .map_err(|_| DesktopError::new(DesktopErrorCode::MutationUnavailable, true, true))
     }
+}
+
+fn is_same_or_inside(path: &str, ancestor: &str) -> bool {
+    path == ancestor
+        || path
+            .strip_prefix(ancestor)
+            .is_some_and(|remainder| remainder.starts_with('/'))
+}
+
+fn inspect_directory_images(root: &Path, entry_limit: usize) -> (bool, bool) {
+    let mut pending = vec![root.to_path_buf()];
+    let mut inspected = 0_usize;
+    let mut limited = false;
+
+    while let Some(directory) = pending.pop() {
+        let entries = match fs::read_dir(&directory) {
+            Ok(entries) => entries,
+            Err(_) => {
+                limited = true;
+                continue;
+            }
+        };
+        for entry in entries {
+            if inspected >= entry_limit {
+                return (false, true);
+            }
+            inspected += 1;
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(_) => {
+                    limited = true;
+                    continue;
+                }
+            };
+            let file_type = match entry.file_type() {
+                Ok(file_type) => file_type,
+                Err(_) => {
+                    limited = true;
+                    continue;
+                }
+            };
+            if file_type.is_symlink() {
+                continue;
+            }
+            if file_type.is_dir() {
+                pending.push(entry.path());
+            } else if file_type.is_file() && is_supported_image_path(&entry.path()) {
+                return (true, limited);
+            }
+        }
+    }
+
+    (false, limited)
+}
+
+fn is_supported_image_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "png" | "jpg" | "jpeg" | "gif" | "webp"
+            )
+        })
 }
 
 fn create_empty_file(
@@ -481,6 +597,7 @@ mod tests {
 
     use crate::contract_test::{assert_interface_matches, typescript_string_constant_values};
     use crate::error::DesktopErrorCode;
+    use crate::fs::WorkspaceRelativePath;
 
     use super::{WorkspaceMutationKind, WorkspaceMutationService};
 
@@ -630,6 +747,72 @@ mod tests {
             );
         }
         assert!(root.path().join("docs/child").is_dir());
+    }
+
+    #[test]
+    fn move_risk_detects_configured_asset_directory_and_nested_images() {
+        let root = Fixture::new();
+        fs::create_dir_all(root.path().join("guides/media/nested")).unwrap();
+        fs::write(root.path().join("guides/media/nested/cover.PNG"), b"image").unwrap();
+        let service = WorkspaceMutationService::default();
+        let asset_directory = WorkspaceRelativePath::parse("guides/media").unwrap();
+
+        let risk = service
+            .inspect_move_risk(root.path(), "guides", &asset_directory, false)
+            .unwrap();
+
+        assert!(risk.configured_asset_directory_affected);
+        assert!(risk.contains_supported_images);
+        assert!(!risk.inspection_limited);
+        assert!(risk.may_break_image_links);
+        assert_interface_matches("WorkspaceMoveRisk", &risk);
+    }
+
+    #[test]
+    fn move_risk_does_not_warn_for_directory_without_images() {
+        let root = Fixture::new();
+        fs::create_dir_all(root.path().join("guides/nested")).unwrap();
+        fs::write(root.path().join("guides/nested/readme.md"), b"# safe").unwrap();
+        let service = WorkspaceMutationService::default();
+        let asset_directory = WorkspaceRelativePath::parse("assets").unwrap();
+
+        let risk = service
+            .inspect_move_risk(root.path(), "guides", &asset_directory, false)
+            .unwrap();
+
+        assert!(!risk.configured_asset_directory_affected);
+        assert!(!risk.contains_supported_images);
+        assert!(!risk.inspection_limited);
+        assert!(!risk.may_break_image_links);
+    }
+
+    #[test]
+    fn move_risk_does_not_apply_directory_preference_failures_to_files() {
+        let root = Fixture::new();
+        fs::write(root.path().join("note.md"), b"# safe").unwrap();
+        let service = WorkspaceMutationService::default();
+        let asset_directory = WorkspaceRelativePath::parse("assets").unwrap();
+
+        let risk = service
+            .inspect_move_risk(root.path(), "note.md", &asset_directory, true)
+            .unwrap();
+
+        assert_eq!(risk.entry_kind, crate::fs::FsEntryKind::MarkdownFile);
+        assert!(!risk.inspection_limited);
+        assert!(!risk.may_break_image_links);
+    }
+
+    #[test]
+    fn incomplete_move_risk_inspection_fails_safe_without_claiming_an_image() {
+        let root = Fixture::new();
+        fs::create_dir_all(root.path().join("guides/nested")).unwrap();
+        fs::write(root.path().join("guides/nested/readme.md"), b"# safe").unwrap();
+
+        let (contains_supported_images, inspection_limited) =
+            super::inspect_directory_images(&root.path().join("guides"), 1);
+
+        assert!(!contains_supported_images);
+        assert!(inspection_limited);
     }
 
     #[test]

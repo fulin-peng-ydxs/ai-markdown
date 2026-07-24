@@ -8,6 +8,7 @@ import type {
   WorkspaceRelativePath,
   WorkspaceScanBatch,
   WorkspaceScanStart,
+  WorkspaceMoveRisk,
   WorkspaceMutationResult,
   DeleteResult,
   PermanentDeleteProposal,
@@ -128,6 +129,16 @@ export function moveWorkspaceEntry(
     workspaceId,
     relativePath,
     targetDirectory,
+  });
+}
+
+export function inspectWorkspaceMoveRisk(
+  workspaceId: WorkspaceId,
+  relativePath: WorkspaceRelativePath,
+): Promise<WorkspaceMoveRisk> {
+  return invoke<WorkspaceMoveRisk>("inspect_workspace_move_risk", {
+    workspaceId,
+    relativePath,
   });
 }
 

@@ -1,6 +1,6 @@
 # Plainroot
 
-Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成桌面底座验收；第二阶段 T18～T32 已完成单文档编辑阶段验收。当前具备受控工作区授权、文件扫描与安全写入、窗口协调、真实 P1/P2、统一 `DocumentSession`、Milkdown/CodeMirror 两种投影、自动/手动保存、恢复/冲突/另存、图片资源、原生菜单与状态栏，以及 macOS/Windows 8/8 隔离桌面回归。当前仍没有多页签、大纲、工作区搜索、分页阅读或主题工作室，第二阶段完成不代表完整产品验收。
+Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成桌面底座验收；第二阶段 T18～T33 已完成单文档编辑阶段验收及目录图片移动风险补强。当前具备受控工作区授权、文件扫描与安全写入、窗口协调、真实 P1/P2、统一 `DocumentSession`、Milkdown/CodeMirror 两种投影、自动/手动保存、恢复/冲突/另存、图片资源、目录图片移动风险提示、原生菜单与状态栏。已推送基线取得 macOS/Windows 8/8 隔离桌面回归，本地最新套件为 9/9；当前仍没有多页签、大纲、工作区搜索、分页阅读或主题工作室，第二阶段完成不代表完整产品验收。
 
 ## 工具链
 
@@ -41,7 +41,7 @@ pnpm tauri build --no-bundle
 pnpm tauri build --bundles app
 ```
 
-`pnpm test:e2e` 会构建独立 identifier/capability 的测试版本，以临时状态目录和每套件独立复制的工作区启动 embedded WebDriver。当前 8 条用例覆盖 P2/P1 真 IPC、1100/740 px 布局与焦点、两模式编辑、图片输入/上传、保存重开、外部修改与恢复；确定性业务流程不启用测试重试。测试 feature 默认关闭，生产前端产物和 release 二进制均不包含 WDIO、fixture 或 E2E 命令。提交 `71cab73070bce27ec59fc8e35c670680d6ee2021` 对应的 GitHub Actions run `30063241410` 已在 macOS/Windows runner 完成 8/8 套件、非桌面门禁、未签名生产构建和 artifact 上传。
+`pnpm test:e2e` 会构建独立 identifier/capability 的测试版本，以临时状态目录和每套件独立复制的工作区启动 embedded WebDriver。当前本地 9 条用例覆盖 P2/P1 真 IPC、1100/740 px 布局与焦点、两模式编辑、图片输入/上传、保存重开、外部修改、恢复，以及含图片目录移动前的风险确认与取消零副作用；确定性业务流程不启用测试重试。测试 feature 默认关闭，生产前端产物和 release 二进制均不包含 WDIO、fixture 或 E2E 命令。提交 `71cab73070bce27ec59fc8e35c670680d6ee2021` 对应的 GitHub Actions run `30063241410` 已在 macOS/Windows runner 完成当时的 8/8 套件、非桌面门禁、未签名生产构建和 artifact 上传；第 9 条目前只有本地 macOS 证据。
 
 开发模式在依赖安装完成后运行：
 

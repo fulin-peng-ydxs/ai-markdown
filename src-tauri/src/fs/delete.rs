@@ -378,40 +378,37 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::{mpsc, Arc};
     use std::thread;
-    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, Instant};
 
     use crate::contract_test::{assert_interface_matches, typescript_string_constant_values};
     use crate::error::DesktopErrorCode;
     use crate::fs::mutate::WorkspaceMutationService;
     use crate::fs::WorkspaceId;
+    use crate::test_support::TestDirectory;
 
     use super::{
         reveal_workspace_entry_with, WorkspaceDeleteKind, WorkspaceDeleteService,
         CONFIRMATION_LIFETIME, MAX_PENDING_CONFIRMATIONS,
     };
 
-    struct Fixture(PathBuf);
+    struct Fixture {
+        _directory: TestDirectory,
+        canonical_root: PathBuf,
+    }
 
     impl Fixture {
         fn new() -> Self {
-            let nonce = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("clock should be after epoch")
-                .as_nanos();
-            let path = std::env::temp_dir()
-                .join(format!("plainroot-delete-{}-{nonce}", std::process::id()));
-            fs::create_dir_all(&path).unwrap();
-            Self(fs::canonicalize(path).unwrap())
+            let directory = TestDirectory::create("delete");
+            let canonical_root =
+                fs::canonicalize(directory.path()).expect("test directory should canonicalize");
+            Self {
+                _directory: directory,
+                canonical_root,
+            }
         }
 
         fn path(&self) -> &Path {
-            &self.0
-        }
-    }
-
-    impl Drop for Fixture {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
+            &self.canonical_root
         }
     }
 

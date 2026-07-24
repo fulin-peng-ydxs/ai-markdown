@@ -68,7 +68,7 @@ flowchart LR
 | 版本化状态 | `src-tauri/src/state.rs` | 最近工作区与根窗口会话的原子持久化、损坏备份和未知版本保护 | 不保存 Markdown 正文、打开偏好、账号或远端状态 |
 | 版本化恢复 | `src-tauri/src/editor/recovery.rs`、`commands/editor.rs`、`src/services/desktop/recovery.ts` | app data 内最新单文档快照、活动脏会话保护、锁外大正文 I/O、并发读取租约、期限/条目/容量清理、损坏隔离和 IPC/TS 契约；P1/P2 已提供受控查询和恢复入口 | 不替代工作区 `.md`；恢复只进入 dirty session；正文读取与删除必须匹配已授权 workspace、snapshot id 与相对路径 |
 | 冲突覆盖与安全另存 | `src-tauri/src/editor/save_copy.rs`、`commands/editor.rs`、`src/services/desktop/editorSave.ts`、`src/features/editor/editorGateway.ts`、`src/features/editor/recovery/` | 生成冲突磁盘证据；签发绑定 workspace/path/revision/content hash 的一次性覆盖令牌；由 Rust 原生保存对话框签发单目标另存令牌；前端展示第二次确认和目标状态，成功后更新唯一 session | 令牌仅进程内、最多 32 项、5 分钟且确认即消费；前端不能提交绝对目标路径；工作区外目标不形成持久目录授权 |
-| 资源偏好与图片导入 | `src-tauri/src/preferences.rs`、`src-tauri/src/editor/assets.rs`、`commands/editor.rs`、`src/services/desktop/assets.ts`、`src/features/editor/assets/`、`src/features/editor/adapters/milkdown/workspaceImageNodeView.ts` | 按工作区保存/读取/重置资源目录；以当前授权根重新校验目录；通过 raw IPC 或 Rust 原生选择器导入 PNG/JPEG/GIF/WebP，校验签名和 20 MiB 上限后原子写入不覆盖的唯一资源名；P1 将工作区资源路径转换为当前文档相对链接，承接选择、剪贴板、拖放、缺失占位、重新定位和移动后链接调整 | 偏好不包含正文；SVG 拒绝；原始图片不删除；上传/导入令牌仅进程内、最多 32 项、5 分钟且单次消费；插入成功后 confirm 保留，失败/取消只清理身份/hash 未变化的本次副本；预览读取仍由 Rust 重新授权、限制大小并校验签名 |
+| 资源偏好、图片导入与目录移动风险 | `src-tauri/src/preferences.rs`、`src-tauri/src/editor/assets.rs`、`src-tauri/src/fs/mutate.rs`、`commands/editor.rs`、`commands/files.rs`、`src/services/desktop/assets.ts`、`files.ts`、`src/features/editor/assets/`、`src/features/editor/adapters/milkdown/workspaceImageNodeView.ts` | 按工作区保存/读取/重置资源目录；以当前授权根重新校验目录；通过 raw IPC 或 Rust 原生选择器导入 PNG/JPEG/GIF/WebP，校验签名和 20 MiB 上限后原子写入不覆盖的唯一资源名；P1 将工作区资源路径转换为当前文档相对链接，承接选择、剪贴板、拖放、缺失占位、重新定位和当前文档移动后的链接调整；目录移动前以有界检查提示可能影响未打开文档 | 偏好不包含正文；SVG 拒绝；原始图片不删除；上传/导入令牌仅进程内、最多 32 项、5 分钟且单次消费；插入成功后 confirm 保留，失败/取消只清理身份/hash 未变化的本次副本；目录风险检查不解析 Markdown、不声称引用命中、不批量改写其他文档，检查不完整时保守提示 |
 
 ## 4. 核心运行不变量
 
@@ -99,7 +99,7 @@ flowchart LR
 - 资源服务返回的 `assetPath` 是工作区相对路径；编辑器插入 Markdown 前必须根据当前文档所在目录转换为文档相对链接。根目录与多层子目录文档不能共用未经转换的链接文本。
 - 图片落盘与 Markdown 插入是显式两阶段：落盘返回 import token，插入成功后确认保留，插入失败/取消时仅凭原生文件身份、长度与 SHA-256 清理本次未变化副本。强制进程终止可能在两阶段之间留下孤立资源，缺少持久证据时不得猜测删除。
 - 图片预览不能直接使用前端拼接的文件 URL。前端先把当前文档相对链接解析为工作区相对路径，Rust 再以当前 workspace 授权、根内路径、普通文件、20 MiB 上限和签名白名单重新校验后返回原始字节；WebView 只为本次投影创建可撤销的 Blob URL。CSP 仅为图片增加 `blob:`，不增加前端文件系统 capability。
-- 移动文档或包含图片的目录时，先完成磁盘移动，再以 Markdown AST 位置只重写受影响图片的 URL；重写结果进入原 `DocumentSession` dirty 状态，由同一自动保存/恢复链持久化。磁盘移动失败前不得改写正文。
+- 移动当前打开文档或其包含目录时，先完成磁盘移动，再以 Markdown AST 位置只重写该 `DocumentSession` 中受影响的内联图片 URL；重写结果进入同一 dirty/自动保存/恢复链，磁盘移动失败前不得改写正文。移动已配置资源目录或递归包含受支持图片的目录前，Rust 在授权根内执行最多 10,000 项的有界检查，P1 明确提示未打开文档的相对图片链接可能失效；用户取消不移动。该检查不构成跨文档引用索引，其他文档不会被自动批量重写。
 - 文件监听把应用自身变化与外部变化分开归并，最终以磁盘重扫保持一致，不把平台事件序列当作跨平台契约。
 
 ### 4.3 窗口与状态事务
@@ -135,9 +135,9 @@ flowchart LR
 
 ## 7. 测试与跨平台边界
 
-- 前端测试覆盖许可证策略、路径代数、文件树 reducer、fixture、React 页面/组件状态、统一编辑器壳、Milkdown/CodeMirror adapter、生产 Markdown 往返语料、恢复/冲突/另存交互、资源目录、文档相对图片路径、选择/剪贴板部分失败、缺失占位/重新定位和移动链接确认，以及保存控制器的尺寸分级、单飞/立即追赶、快照限频、失败与结算；Rust 测试继续覆盖授权、路径、状态/恢复/偏好仓储、文件操作、安全写、监听、窗口事务、结算 intent、资源导入和受控图片读取。契约总守卫要求每个 TypeScript 导出 interface 和字符串常量都能追溯到 Rust 字段或枚举 parity 断言。
+- 前端测试覆盖许可证策略、路径代数、文件树 reducer、fixture、React 页面/组件状态、统一编辑器壳、Milkdown/CodeMirror adapter、生产 Markdown 往返语料、恢复/冲突/另存交互、资源目录、文档相对图片路径、选择/剪贴板部分失败、缺失占位/重新定位、当前文档移动链接确认和目录图片移动风险确认，以及保存控制器的尺寸分级、单飞/立即追赶、快照限频、失败与结算；Rust 测试继续覆盖授权、路径、状态/恢复/偏好仓储、文件操作、安全写、监听、窗口事务、结算 intent、资源导入、受控图片读取和有界目录风险分类。契约总守卫要求每个 TypeScript 导出 interface 和字符串常量都能追溯到 Rust 字段或枚举 parity 断言。
 - 所有文件系统测试必须使用带进程 ID、时间与原子序号的统一临时目录工厂；仅依赖时间戳的夹具会在并行测试中碰撞清理日志或临时文件，禁止新增。
-- `pnpm test:e2e` 使用独立 identifier、临时状态目录和每套件临时复制工作区，当前 8 条用例覆盖 P2/P1 真实 Tauri IPC、1100/740 px、焦点、两模式编辑、WebView 文件输入到 Rust 图片上传、保存重开、外部修改内容安全与恢复。确定性业务流程重试为 0；只有驱动连接层可保留有界启动重试。
+- `pnpm test:e2e` 使用独立 identifier、临时状态目录和每套件临时复制工作区，当前本地 9 条用例覆盖 P2/P1 真实 Tauri IPC、1100/740 px、焦点、两模式编辑、WebView 文件输入到 Rust 图片上传、保存重开、外部修改内容安全、恢复和目录图片移动风险确认/取消。确定性业务流程重试为 0；只有驱动连接层可保留有界启动重试。
 - GitHub Actions 在 macOS/Windows 运行许可证、类型、前端/Rust、桌面 E2E 和未签名生产构建。提交 `71cab73070bce27ec59fc8e35c670680d6ee2021` 对应的 run `30063241410` 已在两个平台完整通过 8 条桌面套件、生产构建和 artifact 上传；该 WebView 自动化证据不替代 Windows 原生系统交互的人工验收。
 - macOS 已有系统选择器、Finder、废纸篓、多窗口、监听和单实例人工证据。Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍需人工实机验收；网络卷、休眠、文件系统卸载和超大目录长时行为也没有产品级证据。
 

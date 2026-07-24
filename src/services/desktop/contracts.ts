@@ -387,6 +387,14 @@ export interface WorkspaceMutationResult {
   entry: FsEntry;
 }
 
+export interface WorkspaceMoveRisk {
+  entryKind: FsEntryKind;
+  configuredAssetDirectoryAffected: boolean;
+  containsSupportedImages: boolean;
+  inspectionLimited: boolean;
+  mayBreakImageLinks: boolean;
+}
+
 export const WORKSPACE_DELETE_KINDS = [
   "trash",
   "permanent",

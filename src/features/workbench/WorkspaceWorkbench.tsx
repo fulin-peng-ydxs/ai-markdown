@@ -22,6 +22,7 @@ import type {
   RecoverySnapshotMetadata,
   SafeWriteResult,
   WorkspaceDescriptor,
+  WorkspaceMoveRisk,
   WorkspaceMutationResult,
   WorkspaceOpenDisposition,
   WorkspaceOpenOutcome,
@@ -98,6 +99,7 @@ interface PendingOperation {
   value: string;
   adjustImageLinks?: boolean;
   localImageCount?: number;
+  moveRisk?: WorkspaceMoveRisk;
 }
 
 interface PendingConfirmation {
@@ -137,6 +139,7 @@ export function WorkspaceWorkbench({
   const [pageError, setPageError] = useState<DesktopError | null>(null);
   const [operation, setOperation] = useState<PendingOperation | null>(null);
   const [operationError, setOperationError] = useState<DesktopError | null>(null);
+  const [operationInspecting, setOperationInspecting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<FsEntry | null>(null);
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<FsEntry | null>(null);
   const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
@@ -935,6 +938,37 @@ export function WorkspaceWorkbench({
     if (!operation || mutationInFlightRef.current) return;
     const value = operation.value;
     if (!value.trim() && operation.kind !== "move") return;
+    if (
+      operation.kind === "move" &&
+      selectedEntry?.kind === "directory" &&
+      !operation.moveRisk
+    ) {
+      mutationInFlightRef.current = true;
+      setOperationInspecting(true);
+      setBusyLabel("正在检查图片链接风险");
+      setOperationError(null);
+      try {
+        const risk = await gateway.inspectMoveRisk(
+          workspace.id,
+          selectedEntry.relativePath,
+        );
+        if (risk.mayBreakImageLinks) {
+          setOperation((current) =>
+            current?.kind === "move" ? { ...current, moveRisk: risk } : current,
+          );
+          return;
+        }
+      } catch (reason) {
+        setOperationError(
+          normalizeDesktopError(reason, "mutation_unavailable"),
+        );
+        return;
+      } finally {
+        mutationInFlightRef.current = false;
+        setOperationInspecting(false);
+        setBusyLabel(null);
+      }
+    }
     const currentDocument = documentStateRef.current;
     const movedDocumentSnapshot =
       operation.kind === "move" &&
@@ -1207,6 +1241,23 @@ export function WorkspaceWorkbench({
   const pageRetryAvailable = pageError
     ? supportsPageRetry(pageError, selectedEntry !== null)
     : false;
+  const operationProcessing = mutationProcessing || operationInspecting;
+  const operationDescription = operation?.moveRisk
+    ? `${
+        operation.moveRisk.inspectionLimited
+          ? "未能完整检查所选目录；"
+          : operation.moveRisk.configuredAssetDirectoryAffected
+            ? "所选目录包含当前工作区配置的资源目录；"
+            : "所选目录中包含受支持的图片文件；"
+      }移动后，未打开 Markdown 文档中的相对图片链接可能失效。Plainroot 不会自动批量改写其他文档。`
+    : "只有磁盘操作成功后，文件树才会更新。";
+  const operationSubmitLabel = operationInspecting
+    ? "正在检查…"
+    : mutationProcessing
+      ? "正在提交…"
+      : operation?.moveRisk
+        ? "继续移动（链接可能失效）"
+        : "提交到磁盘";
 
   const statusText = useMemo(() => {
     if (busyLabel) return busyLabel;
@@ -1274,18 +1325,18 @@ export function WorkspaceWorkbench({
             <button aria-label="关闭文件目录" className="workbench__drawer-close" onClick={closeDrawer} type="button">×</button>
           </div>
           <div className="workbench__tree-actions" aria-label="文件操作">
-            <button disabled={!workspace.writable || mutationProcessing} onClick={() => openOperation("create_file")} title={workspace.writable ? "新建 Markdown 文档" : "工作区只读，无法新建文档"} type="button">＋文档</button>
-            <button disabled={!workspace.writable || mutationProcessing} onClick={() => openOperation("create_directory")} title={workspace.writable ? "新建文件夹" : "工作区只读，无法新建文件夹"} type="button">＋文件夹</button>
+            <button disabled={!workspace.writable || operationProcessing} onClick={() => openOperation("create_file")} title={workspace.writable ? "新建 Markdown 文档" : "工作区只读，无法新建文档"} type="button">＋文档</button>
+            <button disabled={!workspace.writable || operationProcessing} onClick={() => openOperation("create_directory")} title={workspace.writable ? "新建文件夹" : "工作区只读，无法新建文件夹"} type="button">＋文件夹</button>
             <button onClick={() => void scanDirectory(workspace, null)} title="刷新文件树" type="button">↻</button>
           </div>
           {selectedEntry ? (
             <div className="workbench__selection-actions" aria-label={`操作 ${selectedEntry.name}`}>
               <span title={selectedEntry.relativePath}>{selectedEntry.name}</span>
               <div>
-                <button disabled={!selectedEntry.writable || mutationProcessing} onClick={() => openOperation("rename")} type="button">重命名</button>
-                <button disabled={!selectedEntry.writable || mutationProcessing} onClick={() => openOperation("move")} type="button">移动</button>
+                <button disabled={!selectedEntry.writable || operationProcessing} onClick={() => openOperation("rename")} type="button">重命名</button>
+                <button disabled={!selectedEntry.writable || operationProcessing} onClick={() => openOperation("move")} type="button">移动</button>
                 <button onClick={() => void revealSelected()} type="button">定位</button>
-                <button className="is-danger" disabled={!selectedEntry.writable || mutationProcessing} onClick={() => setDeleteTarget(selectedEntry)} type="button">删除</button>
+                <button className="is-danger" disabled={!selectedEntry.writable || operationProcessing} onClick={() => setDeleteTarget(selectedEntry)} type="button">删除</button>
               </div>
             </div>
           ) : null}
@@ -1357,8 +1408,8 @@ export function WorkspaceWorkbench({
       />
 
       <AppDialog
-        actions={<><button className="plainroot-button" disabled={mutationProcessing} onClick={() => setOperation(null)} type="button">取消</button><button className="plainroot-button plainroot-button--primary" disabled={mutationProcessing || (!operation?.value.trim() && operation?.kind !== "move")} onClick={() => void submitOperation()} type="button">{mutationProcessing ? "正在提交…" : "提交到磁盘"}</button></>}
-        closeDisabled={mutationProcessing}
+        actions={<><button className="plainroot-button" disabled={operationProcessing} onClick={() => setOperation(null)} type="button">取消</button><button className="plainroot-button plainroot-button--primary" disabled={operationProcessing || (!operation?.value.trim() && operation?.kind !== "move")} onClick={() => void submitOperation()} type="button">{operationSubmitLabel}</button></>}
+        closeDisabled={operationProcessing}
         describedBy="workbench-operation-description"
         labelledBy="workbench-operation-title"
         onRequestClose={() => setOperation(null)}
@@ -1366,8 +1417,13 @@ export function WorkspaceWorkbench({
       >
         <div className="workbench-dialog-copy">
           <h2 id="workbench-operation-title">{operation?.title}</h2>
-          <p id="workbench-operation-description">只有磁盘操作成功后，文件树才会更新。</p>
-          <label>{operation?.label}<input autoFocus onChange={(event) => setOperation((current) => current ? { ...current, value: event.target.value } : null)} value={operation?.value ?? ""} /></label>
+          <p
+            aria-live={operation?.moveRisk ? "assertive" : undefined}
+            id="workbench-operation-description"
+          >
+            {operationDescription}
+          </p>
+          <label>{operation?.label}<input autoFocus disabled={operationProcessing} onChange={(event) => setOperation((current) => current ? { ...current, value: event.target.value } : null)} value={operation?.value ?? ""} /></label>
           {operation?.kind === "move" &&
           (operation.localImageCount ?? 0) > 0 ? (
             <label>
