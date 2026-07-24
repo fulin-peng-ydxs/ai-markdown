@@ -649,7 +649,7 @@ export const DocumentEditorShell = forwardRef<
       >
         {session.markdown.length === 0 ? (
           <p className="document-editor-shell__placeholder">
-            开始输入 Markdown；此提示不会写入文档。
+            开始输入 Markdown
           </p>
         ) : null}
         <Suspense

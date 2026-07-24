@@ -56,6 +56,15 @@ export function DocumentStatusBar({
       <span data-status-priority="tertiary">
         {workspaceWritable ? "工作区可写" : "工作区只读"}
       </span>
+      {session.status === "ready" ? (
+        <span
+          className="workbench__document-path"
+          data-status-priority="tertiary"
+          title={session.relativePath}
+        >
+          {session.relativePath}
+        </span>
+      ) : null}
     </footer>
   );
 }

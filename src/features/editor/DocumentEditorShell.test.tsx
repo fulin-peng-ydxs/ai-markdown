@@ -35,7 +35,7 @@ describe("DocumentEditorShell", () => {
     await waitFor(() =>
       expect(rendered.container.querySelector(".ProseMirror")).not.toBeNull(),
     );
-    expect(screen.getByText("磁盘版本")).toBeTruthy();
+    expect(screen.queryByText("磁盘版本")).toBeNull();
   });
 
   it("reassesses the current edit before leaving source-only mode", async () => {
@@ -156,7 +156,6 @@ describe("DocumentEditorShell", () => {
       expect(rendered.container.querySelector(".ProseMirror")).not.toBeNull(),
     );
     expect(rendered.container.textContent).toContain("Before");
-    expect(screen.getByText("未保存")).toBeTruthy();
   });
 
   it("keeps an empty-document placeholder outside the Markdown value", async () => {
@@ -167,9 +166,7 @@ describe("DocumentEditorShell", () => {
         session={readySession("")}
       />,
     );
-    expect(
-      screen.getByText("开始输入 Markdown；此提示不会写入文档。"),
-    ).toBeTruthy();
+    expect(screen.getByText("开始输入 Markdown")).toBeTruthy();
     await waitFor(() =>
       expect(rendered.container.querySelector(".ProseMirror")).not.toBeNull(),
     );
@@ -188,8 +185,6 @@ describe("DocumentEditorShell", () => {
       (screen.getByRole("button", { name: "加粗" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
-    expect(screen.getByText("只读")).toBeTruthy();
-
     await user.click(screen.getByRole("button", { name: "切换源码并查找" }));
     await waitFor(() => expect(screen.getByLabelText("查找")).toBeTruthy());
   });
@@ -208,7 +203,7 @@ describe("DocumentEditorShell", () => {
     await user.click(screen.getByRole("button", { name: "保存当前文档" }));
 
     expect(onSave).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("磁盘版本")).toBeTruthy();
+    expect(screen.queryByText("磁盘版本")).toBeNull();
   });
 
   it("inserts a selected image only after the workspace resource is prepared", async () => {
@@ -217,6 +212,12 @@ describe("DocumentEditorShell", () => {
     const rendered = render(
       <Harness assetGateway={api} initial={readySession("# Images")} />,
     );
+    await user.click(screen.getByRole("button", { name: "设置图片资源目录" }));
+    expect(
+      await screen.findByRole("heading", { name: "图片保存目录" }),
+    ).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "取消" }));
+
     await user.click(screen.getByRole("button", { name: "源码" }));
     await waitFor(() =>
       expect(rendered.container.querySelector(".cm-editor")).not.toBeNull(),

@@ -179,7 +179,8 @@ describe("WorkspaceWorkbench", () => {
       />,
     );
     await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
-    await screen.findByText(/真实文档/);
+    await screen.findByText("磁盘版本");
+    await waitFor(() => expect(settlementListener).toBeDefined());
 
     await act(async () => {
       settlementListener?.({
@@ -203,7 +204,7 @@ describe("WorkspaceWorkbench", () => {
 
     expect(await screen.findByText(/真实文档/)).toBeTruthy();
     expect(screen.getByRole("toolbar", { name: "文档编辑工具" })).toBeTruthy();
-    expect(screen.getAllByText("磁盘版本")).toHaveLength(2);
+    expect(screen.getAllByText("磁盘版本")).toHaveLength(1);
     expect(api.read).toHaveBeenCalledWith("workspace-a", "note.md");
     await waitFor(() => expect(api.setTitle).toHaveBeenCalledWith("note.md"));
   });
@@ -285,6 +286,23 @@ describe("WorkspaceWorkbench", () => {
     expect(statusbar?.textContent).toContain("字/词");
     expect(statusbar?.textContent).toContain("UTF-8 · LF");
     expect(statusbar?.textContent).toContain("排版光标");
+    expect(statusbar?.textContent).toContain("note.md");
+    expect(
+      rendered.container.querySelectorAll(".document-save-status"),
+    ).toHaveLength(1);
+    expect(
+      rendered.container.querySelector(
+        ".document-editor-toolbar__actions [aria-label=\"保存当前文档\"]",
+      ),
+    ).not.toBeNull();
+    expect(
+      rendered.container.querySelector(
+        ".document-editor-toolbar__actions [aria-label=\"切换源码并查找\"]",
+      ),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "设置图片资源目录" }).textContent,
+    ).toBe("⋯");
   });
 
   it("offers explicit local-image link adjustment before moving an open document", async () => {
@@ -821,7 +839,7 @@ describe("WorkspaceWorkbench", () => {
       expect(screen.queryByRole("dialog")).toBeNull(),
     );
     expect(await screen.findByText(/恢复后的内容/)).toBeTruthy();
-    expect(screen.getAllByText("未保存")).toHaveLength(2);
+    expect(screen.getAllByText("未保存")).toHaveLength(1);
     expect(api.saveGateway.write).not.toHaveBeenCalled();
   });
 

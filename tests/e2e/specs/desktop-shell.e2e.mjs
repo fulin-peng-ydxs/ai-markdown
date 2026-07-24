@@ -92,6 +92,56 @@ async function layoutSnapshot() {
   });
 }
 
+async function editorChromeSnapshot() {
+  return browser.execute(() => {
+    const toolbar = document.querySelector(".document-editor-toolbar");
+    const actions = document.querySelector(".document-editor-toolbar__actions");
+    const scrollRegion = document.querySelector(
+      ".document-editor-toolbar__scroll-region",
+    );
+    const save = document.querySelector('[aria-label="保存当前文档"]');
+    const find = document.querySelector(
+      '[aria-label="切换源码并查找"], [aria-label="在当前文档中查找"]',
+    );
+    const statusbar = document.querySelector(".workbench__statusbar");
+    const path = document.querySelector(".workbench__document-path");
+    if (
+      !(toolbar instanceof HTMLElement) ||
+      !(actions instanceof HTMLElement) ||
+      !(scrollRegion instanceof HTMLElement) ||
+      !(save instanceof HTMLElement) ||
+      !(find instanceof HTMLElement) ||
+      !(statusbar instanceof HTMLElement) ||
+      !(path instanceof HTMLElement)
+    ) {
+      throw new Error("editor chrome is not available");
+    }
+    const toolbarRect = toolbar.getBoundingClientRect();
+    const actionRect = actions.getBoundingClientRect();
+    const saveRect = save.getBoundingClientRect();
+    const findRect = find.getBoundingClientRect();
+    return {
+      horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth,
+      toolbarOverflow: toolbar.scrollWidth > toolbar.clientWidth,
+      formatRegionOverflowX: getComputedStyle(scrollRegion).overflowX,
+      actionsInsideToolbar:
+        actionRect.left >= toolbarRect.left &&
+        actionRect.right <= toolbarRect.right + 1,
+      saveVisible:
+        saveRect.width > 0 &&
+        saveRect.left >= toolbarRect.left &&
+        saveRect.right <= toolbarRect.right + 1,
+      findVisible:
+        findRect.width > 0 &&
+        findRect.left >= toolbarRect.left &&
+        findRect.right <= toolbarRect.right + 1,
+      saveStatusCount: document.querySelectorAll(".document-save-status").length,
+      statusPath: path.textContent?.trim() ?? "",
+      statusPathTitle: path.getAttribute("title"),
+    };
+  });
+}
+
 async function invoke(command, args = {}) {
   const result = await browser.executeAsync((nextCommand, nextArgs, done) => {
     const tauriInvoke = window.__TAURI_INTERNALS__?.invoke;
@@ -266,6 +316,20 @@ describe("Plainroot desktop shell", () => {
       ),
       "# Plainroot fixture\n\nThis Markdown file belongs only to the automated test fixture.\n",
     );
+    for (const width of [1100, 1050, 820, 740]) {
+      await resizeApp(width, 720);
+      const chrome = await editorChromeSnapshot();
+      assert.equal(chrome.horizontalOverflow, false);
+      assert.equal(chrome.toolbarOverflow, false);
+      assert.equal(chrome.formatRegionOverflowX, "auto");
+      assert.equal(chrome.actionsInsideToolbar, true);
+      assert.equal(chrome.saveVisible, true);
+      assert.equal(chrome.findVisible, true);
+      assert.equal(chrome.saveStatusCount, 1);
+      assert.equal(chrome.statusPath, "note.md");
+      assert.equal(chrome.statusPathTitle, "note.md");
+    }
+    await resizeApp(1100, 720);
   });
 
   it("requires an explicit warning confirmation before moving a directory with images", async () => {

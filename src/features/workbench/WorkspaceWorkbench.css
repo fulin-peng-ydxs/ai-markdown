@@ -375,6 +375,11 @@ input {
   min-width: 0;
 }
 
+.workbench__document-path {
+  flex: 0 1 220px;
+  font: var(--font-code);
+}
+
 .workbench-dialog-copy h2,
 .workbench-dialog-copy p {
   margin: 0;

@@ -1,6 +1,5 @@
 import type { EditorCommand, EditorMode } from "./editorAdapter";
 import type { DocumentSaveState } from "./documentSession";
-import { SaveStatus } from "./SaveStatus";
 
 export interface EditorToolbarProps {
   busy: boolean;
@@ -37,156 +36,173 @@ export function EditorToolbar({
   const visualCommandsDisabled = readonly || busy || mode !== "visual";
   return (
     <div className="document-editor-toolbar" role="toolbar" aria-label="文档编辑工具">
-      <div className="document-editor-toolbar__modes" aria-label="编辑模式">
-        <button
-          aria-pressed={mode === "visual"}
-          disabled={busy}
-          onClick={() => onModeChange("visual")}
-          title={
-            sourceOnlyReason
-              ? `${sourceOnlyReason} 重新检查当前内容`
-              : "切换到排版模式"
-          }
-          type="button"
-        >
-          排版
-        </button>
-        <button
-          aria-pressed={mode === "source"}
-          disabled={busy}
-          onClick={() => onModeChange("source")}
-          title="切换到 Markdown 源码模式"
-          type="button"
-        >
-          源码
-        </button>
+      <div className="document-editor-toolbar__scroll-region">
+        <div className="document-editor-toolbar__modes" aria-label="编辑模式">
+          <button
+            aria-pressed={mode === "visual"}
+            disabled={busy}
+            onClick={() => onModeChange("visual")}
+            title={
+              sourceOnlyReason
+                ? `${sourceOnlyReason} 重新检查当前内容`
+                : "切换到排版模式"
+            }
+            type="button"
+          >
+            排版
+          </button>
+          <button
+            aria-pressed={mode === "source"}
+            disabled={busy}
+            onClick={() => onModeChange("source")}
+            title="切换到 Markdown 源码模式"
+            type="button"
+          >
+            源码
+          </button>
+        </div>
+
+        <span aria-hidden="true" className="document-editor-toolbar__divider" />
+
+        <div className="document-editor-toolbar__group" aria-label="历史">
+          <ToolbarButton
+            disabled={readonly || busy || !canUndo}
+            label="撤销"
+            onClick={() => onCommand({ kind: "history", direction: "undo" })}
+          >
+            ↶
+          </ToolbarButton>
+          <ToolbarButton
+            disabled={readonly || busy || !canRedo}
+            label="重做"
+            onClick={() => onCommand({ kind: "history", direction: "redo" })}
+          >
+            ↷
+          </ToolbarButton>
+        </div>
+
+        <span aria-hidden="true" className="document-editor-toolbar__divider" />
+
+        <div className="document-editor-toolbar__group" aria-label="排版格式">
+          <ToolbarButton
+            disabled={visualCommandsDisabled}
+            label="一级标题"
+            onClick={() => onCommand({ kind: "heading", level: 1 })}
+          >
+            H1
+          </ToolbarButton>
+          <ToolbarButton
+            disabled={visualCommandsDisabled}
+            label="二级标题"
+            onClick={() => onCommand({ kind: "heading", level: 2 })}
+          >
+            H2
+          </ToolbarButton>
+          <ToolbarButton
+            disabled={visualCommandsDisabled}
+            label="加粗"
+            onClick={() => onCommand({ kind: "format", format: "bold" })}
+          >
+            <strong>B</strong>
+          </ToolbarButton>
+          <ToolbarButton
+            disabled={visualCommandsDisabled}
+            label="斜体"
+            onClick={() => onCommand({ kind: "format", format: "italic" })}
+          >
+            <em>I</em>
+          </ToolbarButton>
+          <ToolbarButton
+            disabled={visualCommandsDisabled}
+            label="引用"
+            onClick={() => onCommand({ kind: "block", block: "quote" })}
+          >
+            “
+          </ToolbarButton>
+          <ToolbarButton
+            disabled={visualCommandsDisabled}
+            label="无序列表"
+            onClick={() => onCommand({ kind: "block", block: "bullet_list" })}
+          >
+            •
+          </ToolbarButton>
+        </div>
       </div>
 
-      <span aria-hidden="true" className="document-editor-toolbar__divider" />
-
-      <div className="document-editor-toolbar__group" aria-label="历史">
-        <ToolbarButton
-          disabled={readonly || busy || !canUndo}
-          label="撤销"
-          onClick={() => onCommand({ kind: "history", direction: "undo" })}
-        >
-          ↶
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={readonly || busy || !canRedo}
-          label="重做"
-          onClick={() => onCommand({ kind: "history", direction: "redo" })}
-        >
-          ↷
-        </ToolbarButton>
-      </div>
-
-      <span aria-hidden="true" className="document-editor-toolbar__divider" />
-
-      <div className="document-editor-toolbar__group" aria-label="排版格式">
-        <ToolbarButton
-          disabled={visualCommandsDisabled}
-          label="一级标题"
-          onClick={() => onCommand({ kind: "heading", level: 1 })}
-        >
-          H1
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={visualCommandsDisabled}
-          label="二级标题"
-          onClick={() => onCommand({ kind: "heading", level: 2 })}
-        >
-          H2
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={visualCommandsDisabled}
-          label="加粗"
-          onClick={() => onCommand({ kind: "format", format: "bold" })}
-        >
-          <strong>B</strong>
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={visualCommandsDisabled}
-          label="斜体"
-          onClick={() => onCommand({ kind: "format", format: "italic" })}
-        >
-          <em>I</em>
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={visualCommandsDisabled}
-          label="引用"
-          onClick={() => onCommand({ kind: "block", block: "quote" })}
-        >
-          “
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={visualCommandsDisabled}
-          label="无序列表"
-          onClick={() => onCommand({ kind: "block", block: "bullet_list" })}
-        >
-          •
-        </ToolbarButton>
-      </div>
-
-      <span aria-hidden="true" className="document-editor-toolbar__divider" />
-
-      {saveState.kind === "conflict" && onResolveConflict ? (
-        <ToolbarButton
-          disabled={busy}
-          label="处理磁盘冲突"
-          onClick={onResolveConflict}
-        >
-          处理冲突
-        </ToolbarButton>
-      ) : onSave ? (
-        <ToolbarButton
-          disabled={readonly || busy || saveState.kind === "saving"}
-          label="保存当前文档"
-          onClick={onSave}
-        >
-          保存
-        </ToolbarButton>
-      ) : null}
-
-      {onSaveCopy ? (
-        <ToolbarButton
-          disabled={busy || saveState.kind === "saving"}
-          label="另存当前内容副本"
-          onClick={onSaveCopy}
-        >
-          另存副本
-        </ToolbarButton>
-      ) : null}
-
-      {onInsertImage ? (
-        <ToolbarButton
-          disabled={readonly || busy}
-          label="从本机选择并插入图片"
-          onClick={onInsertImage}
-        >
-          图片
-        </ToolbarButton>
-      ) : null}
-
-      {onAssetSettings ? (
-        <ToolbarButton
-          disabled={busy}
-          label="设置图片资源目录"
-          onClick={onAssetSettings}
-        >
-          资源目录
-        </ToolbarButton>
-      ) : null}
-
-      <ToolbarButton
-        disabled={busy}
-        label={mode === "source" ? "在当前文档中查找" : "切换源码并查找"}
-        onClick={() => onCommand({ kind: "find" })}
+      <div
+        aria-label="文档与资源操作"
+        className="document-editor-toolbar__actions"
+        role="group"
       >
-        查找
-      </ToolbarButton>
+        {saveState.kind === "conflict" && onResolveConflict ? (
+          <ToolbarButton
+            disabled={busy}
+            label="处理磁盘冲突"
+            onClick={onResolveConflict}
+          >
+            处理冲突
+          </ToolbarButton>
+        ) : onSave ? (
+          <ToolbarButton
+            disabled={readonly || busy || saveState.kind === "saving"}
+            label="保存当前文档"
+            onClick={onSave}
+          >
+            保存
+          </ToolbarButton>
+        ) : null}
 
-      <SaveStatus state={saveState} />
+        {onSaveCopy ? (
+          <ToolbarButton
+            disabled={busy || saveState.kind === "saving"}
+            label="另存当前内容副本"
+            onClick={onSaveCopy}
+          >
+            另存副本
+          </ToolbarButton>
+        ) : null}
+
+        <ToolbarButton
+          disabled={busy}
+          label={mode === "source" ? "在当前文档中查找" : "切换源码并查找"}
+          onClick={() => onCommand({ kind: "find" })}
+        >
+          查找
+        </ToolbarButton>
+
+        {onInsertImage || onAssetSettings ? (
+          <>
+            <span
+              aria-hidden="true"
+              className="document-editor-toolbar__divider"
+            />
+            <div
+              aria-label="图片资源"
+              className="document-editor-toolbar__group"
+              role="group"
+            >
+              {onInsertImage ? (
+                <ToolbarButton
+                  disabled={readonly || busy}
+                  label="从本机选择并插入图片"
+                  onClick={onInsertImage}
+                >
+                  图片
+                </ToolbarButton>
+              ) : null}
+              {onAssetSettings ? (
+                <ToolbarButton
+                  disabled={busy}
+                  label="设置图片资源目录"
+                  onClick={onAssetSettings}
+                >
+                  ⋯
+                </ToolbarButton>
+              ) : null}
+            </div>
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

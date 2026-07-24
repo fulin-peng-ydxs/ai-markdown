@@ -10,16 +10,36 @@
 }
 
 .document-editor-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-xs);
   min-width: 0;
   padding: var(--space-xs) var(--space-md);
-  overflow-x: auto;
+  overflow: hidden;
   color: var(--color-muted);
   background: var(--color-chrome);
   border-bottom: 1px solid var(--color-line);
+}
+
+.document-editor-toolbar__scroll-region,
+.document-editor-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.document-editor-toolbar__scroll-region {
+  min-width: 0;
+  overflow-x: auto;
   scrollbar-width: thin;
+}
+
+.document-editor-toolbar__actions {
+  flex: none;
+  padding-left: var(--space-xs);
+  background: var(--color-chrome);
+  border-left: 1px solid var(--color-line);
 }
 
 .document-editor-toolbar__modes,
@@ -208,9 +228,5 @@
   .document-editor-toolbar {
     padding-right: var(--space-sm);
     padding-left: var(--space-sm);
-  }
-
-  .document-save-status {
-    margin-left: var(--space-xs);
   }
 }
