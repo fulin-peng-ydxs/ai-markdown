@@ -1,7 +1,7 @@
 # Plainroot Markdown 桌面编辑器需求闭环分析
 
 > 产品名称：Plainroot  
-> 闭环状态：产品范围与业务闭环已确认；第一阶段桌面底座已落地，后续完整闭环仍按正式需求推进<br>
+> 闭环状态：产品范围与业务闭环已确认；桌面底座与单文档编辑阶段已落地，多页签、阅读、主题和完整产品闭环仍按正式需求推进<br>
 > 目标平台：Windows + macOS  
 > 品牌表达：A calm, local-first Markdown editor. Write clearly. Keep it yours.
 

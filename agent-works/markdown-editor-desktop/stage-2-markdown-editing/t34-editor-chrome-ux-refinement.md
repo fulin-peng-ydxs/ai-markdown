@@ -103,7 +103,7 @@
 
 ### 未执行或未取得的证据
 
-- T34 未推送，因此没有新的 GitHub Actions、Windows runner 或远端 artifact 证据；不得沿用 T31 的远端 8/8 结果宣称 T34 双平台通过。
+- T34 后续已随当前 HEAD `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 推送；GitHub Actions run `30082725332` 已在 macOS/Windows 通过包含四档编辑 chrome 断言的 9/9 桌面套件、非桌面门禁、未签名生产构建和 artifact 上传。WebView 自动化仍不替代原生系统输入、辅助技术与 Windows 原生 UI 人工验收。
 - 未做 Windows 原生系统 UI、系统辅助技术、系统 IME、图片原生剪贴板/拖放人工验收。
 - 未建立暗色 token，未做暗色像素验收。
 - 长路径的完整 tooltip 契约已由组件测试覆盖，但没有用极端长路径做真实像素级截图验收。

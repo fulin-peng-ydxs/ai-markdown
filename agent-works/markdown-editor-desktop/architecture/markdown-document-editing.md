@@ -158,7 +158,7 @@ UTF-8 BOM 与单一 LF/CRLF/CR 优先沿用原文件；mixed 或不支持编码�
 - `pnpm test:roundtrip` 使用生产 adapter 验证 CommonMark/GFM、图片、受支持 HTML 与 source-only 语料。
 - Rust 契约测试登记所有 TypeScript 导出 interface 和字符串枚举/tag，防止 Rust↔TypeScript 字段漂移。
 - `pnpm test:e2e` 使用独立 identifier、临时状态目录和每套件复制的临时工作区，当前本地 9 条真桌面用例覆盖 P1/P2、两种模式、图片、保存重开、外部修改、恢复和目录图片移动风险确认/取消。
-- 远端 GitHub Actions run `30063241410` 已在提交 `71cab73070bce27ec59fc8e35c670680d6ee2021` 上完成 macOS/Windows 双绿；两个平台均通过 23 个 Vitest 文件/173 项、8/8 桌面 E2E、Rust 门禁和未签名生产构建。
+- 远端 GitHub Actions run `30082725332` 已在提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 上完成 macOS/Windows 双绿；当前 23 个 Vitest 文件/176 项、9/9 桌面 E2E、Rust 门禁、未签名生产构建和 artifact 上传均已纳入该矩阵。
 
 ## 9. 已知边界
 
