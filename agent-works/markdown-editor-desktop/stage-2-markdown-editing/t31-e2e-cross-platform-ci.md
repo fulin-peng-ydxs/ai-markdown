@@ -7,7 +7,7 @@
 - 本次边界：扩展真实 Tauri IPC 桌面 E2E，运行第一阶段底座与第二阶段编辑链的完整本机回归，修复测试实际暴露的跨层问题，并确认正式构建不包含 E2E 测试缝。
 - 未扩张范围：不实现页签、大纲、工作区搜索、阅读、主题或新的产品配置；不新增数据库、SQL、seed、业务环境变量、正式 capability、菜单或持久化格式。
 
-T31 的完成标准包含“最新提交取得 GitHub Actions macOS/Windows 双绿”。提交 `2084489fa078cdcd02d640d0c00dd57971a9e0a2` 已按用户授权推送；首次远端 run `30060302937` 的 Windows Rust lint 失败，因此任务仍为“进行中”，不能提前标记完成，也不进入 T32。
+T31 的完成标准包含“最新代码提交取得 GitHub Actions macOS/Windows 双绿”。提交 `bd583db452352c6410fbdaa8b05a68c2df122872` 对应的 run `30062045288` 已于 2026-07-24 完整通过：macOS 6 分 12 秒、Windows 18 分 38 秒，两个作业均完成许可证、类型与前端、Rust lint/测试、8/8 桌面 E2E、未签名生产构建、校验和收集和 artifact 上传。T31 据此标记完成；T32 仍未开始。
 
 ## 2. 实际改动
 
@@ -80,6 +80,10 @@ T31 的完成标准包含“最新提交取得 GitHub Actions macOS/Windows 双�
 | `pnpm tauri build --no-bundle` | 通过，产出正式 release 二进制 |
 | 正式产物 E2E 标记扫描 | 前端与 release 二进制均未发现测试标记 |
 | GitHub Actions run `30060302937` | 已执行；macOS 桌面 E2E 通过，Windows 在 Rust lint 阶段失败，不是双绿 |
+| GitHub Actions run `30060937964` | 已执行；macOS 通过，Windows 已越过 Rust lint/测试，但桌面 E2E 暴露 CRLF 测试假设，不是双绿 |
+| GitHub Actions run `30062045288` | 通过；提交 `bd583db452352c6410fbdaa8b05a68c2df122872` 的 macOS/Windows 两个作业均绿，总时长 18 分 48 秒 |
+| 远端测试摘要 | macOS/Windows 均为 23 个 Vitest 文件、173 项 Vitest 通过；桌面 E2E 均为 8/8 |
+| 远端 artifacts | `plainroot-macos-30062045288`（3.74 MB，digest `75c830745bd3343aa8b6ae5b0ec9c7a5b0a3f90cc1fb876f51ed9a7308b24657`）；`plainroot-windows-30062045288`（3.63 MB，digest `2733ae904da905b254f8c7cae09a8e8e56bbabb7ec39b23cf7c18842c8f6d9ef`） |
 
 首次 Windows runner 暴露两处本机 macOS 不会编译出的 `-D warnings`：
 
@@ -98,15 +102,15 @@ T31 的完成标准包含“最新提交取得 GitHub Actions macOS/Windows 双�
 
 换行修复后的本机完整 E2E 首次复跑还暴露了恢复用例的时间边界不精确：原断言在载入恢复内容、等待页面状态并切换到源码模式之后才读取磁盘，已经可能超过 800 ms 正常自动保存防抖。需求只禁止恢复动作未经确认直接覆盖原文件；用户确认载入后会形成普通 dirty session，随后进入既有自动保存链路。用例现改为在点击“恢复到编辑区”前记录磁盘字节，并在页面确认恢复内容已载入后、进入模式切换前断言磁盘仍完全一致，再继续验证恢复正文；不再把后续正常自动保存误判为恢复动作直接写盘。
 
-WDIO 运行时仍会输出“未安装外部 `tauri-driver`”的可选诊断和 session 结束后的 mock 清理提示；当前套件使用编译期 embedded driver，8 条用例和进程退出码均为成功。该输出不能替代远端 runner 实测，若远端首次运行失败必须按真实日志修复，不能屏蔽。
+WDIO 运行时仍会输出“未安装外部 `tauri-driver`”的可选诊断和 session 结束后的 mock 清理提示；当前套件使用编译期 embedded driver，8 条用例和进程退出码均为成功。run `30062045288` 已在 macOS 与 Windows runner 取得真实绿灯，说明这些提示没有被当作失败或通过判据。
 
 ## 5. 未验证与后续
 
-- run `30060302937` 在 Windows Rust lint 失败；run `30060937964` 已越过 lint 与 Rust tests，但在 Windows E2E 的 CRLF 测试假设处失败。两次都只能证明门禁真实生效，不能作为双平台通过、生产 artifact 或 Windows WebView2 完整证据；换行修复提交必须重新运行完整矩阵。
+- run `30060302937` 在 Windows Rust lint 失败；run `30060937964` 已越过 lint 与 Rust tests，但在 Windows E2E 的 CRLF 测试假设处失败。两次红灯均按真实日志修复且没有削弱 `-D warnings`、断言或业务重试策略；run `30062045288` 已重新运行完整矩阵并取得双绿、Windows WebView2 E2E、生产构建与 artifact 证据。
 - WebView `DataTransfer/File` 验证了页面事件、raw IPC 和磁盘链路，但不等于系统剪贴板、Finder/Explorer 原生拖入或原生图片选择器人工证据。
 - 系统 IME 候选窗、原生保存/另存对话框、系统关闭/应用退出、系统辅助技术、峰值内存、网络卷/休眠/卸载与超大目录长时行为未执行。
 - JPEG/WebP 尾字节兼容、图片 Blob 并发总量和引用式图片移动改写仍是既有非阻塞边界，本任务没有把它们伪装为已解决。
-- 应以修复后最新提交的 macOS/Windows 两个作业均绿为准补齐 T31；红灯修复后重跑完整矩阵。T31 真正完成前不得开始 T32 总体验收。
+- T31 的自动化和跨平台 CI 验收已完成。T32 仍需独立执行第二阶段整体复核、专项架构文档和阶段验收；本任务不提前认领 T32。
 
 ## 6. 关联文档同步
 

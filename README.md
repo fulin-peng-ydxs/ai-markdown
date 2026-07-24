@@ -1,6 +1,6 @@
 # Plainroot
 
-Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成本地、macOS 实机与 macOS/Windows 双平台 CI 验收：当前具备 Tauri/React 工程、受控工作区授权、文件扫描与安全写入底座、文件操作/监听、原生窗口菜单、工作区窗口协调、真实 P2 启动页以及隔离的 P1/P2 桌面 E2E。第二阶段 T18～T30 已完成编辑器技术门禁、统一单文档会话、有界跨模式历史、Milkdown/CodeMirror adapter、自动/手动保存、窗口结算、恢复/冲突/另存、图片资源链、原生菜单与状态栏，以及统一的编辑器/往返/Rust 服务测试门禁；T31 本机已通过扩展后的 macOS Tauri/WebKit 8/8 桌面回归和正式构建隔离。当前仍没有页签、大纲，最新 macOS/Windows 远端矩阵和第二阶段总体验收尚未完成。
+Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成本地、macOS 实机与 macOS/Windows 双平台 CI 验收：当前具备 Tauri/React 工程、受控工作区授权、文件扫描与安全写入底座、文件操作/监听、原生窗口菜单、工作区窗口协调、真实 P2 启动页以及隔离的 P1/P2 桌面 E2E。第二阶段 T18～T31 已完成编辑器技术门禁、统一单文档会话、有界跨模式历史、Milkdown/CodeMirror adapter、自动/手动保存、窗口结算、恢复/冲突/另存、图片资源链、原生菜单与状态栏、统一测试门禁和 macOS/Windows 8/8 桌面回归。当前仍没有页签、大纲，第二阶段 T32 总体验收尚未开始。
 
 ## 工具链
 
@@ -41,7 +41,7 @@ pnpm tauri build --no-bundle
 pnpm tauri build --bundles app
 ```
 
-`pnpm test:e2e` 会构建独立 identifier/capability 的测试版本，以临时状态目录和每套件独立复制的工作区启动 embedded WebDriver。当前 8 条用例覆盖 P2/P1 真 IPC、1100/740 px 布局与焦点、两模式编辑、图片输入/上传、保存重开、外部修改与恢复；确定性业务流程不启用测试重试。测试 feature 默认关闭，生产前端产物和 release 二进制均不包含 WDIO、fixture 或 E2E 命令。提交 `9a1690a` 的 4/4 第一阶段套件已在 GitHub Actions macOS/Windows runner 通过；扩展后的 8/8 套件当前只有本机 macOS 证据，尚待最新提交推送后取得远端双平台结果。
+`pnpm test:e2e` 会构建独立 identifier/capability 的测试版本，以临时状态目录和每套件独立复制的工作区启动 embedded WebDriver。当前 8 条用例覆盖 P2/P1 真 IPC、1100/740 px 布局与焦点、两模式编辑、图片输入/上传、保存重开、外部修改与恢复；确定性业务流程不启用测试重试。测试 feature 默认关闭，生产前端产物和 release 二进制均不包含 WDIO、fixture 或 E2E 命令。提交 `bd583db452352c6410fbdaa8b05a68c2df122872` 对应的 GitHub Actions run `30062045288` 已在 macOS/Windows runner 完成 8/8 套件、非桌面门禁、未签名生产构建和 artifact 上传。
 
 开发模式在依赖安装完成后运行：
 
