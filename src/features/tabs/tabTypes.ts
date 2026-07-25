@@ -119,6 +119,17 @@ export interface WorkspaceTabOpenRequest {
   restoredView?: WorkspaceTabViewState | null;
 }
 
+export function deriveWorkspaceTabPathPresentation(
+  relativePath: WorkspaceRelativePath,
+): Pick<WorkspaceTabDescriptor, "displayName" | "parentHint"> {
+  const separator = relativePath.lastIndexOf("/");
+  return {
+    displayName:
+      separator < 0 ? relativePath : relativePath.slice(separator + 1),
+    parentHint: parentPath(relativePath),
+  };
+}
+
 export function createWorkspaceTabDescriptor(
   input: WorkspaceTabOpenRequest,
   incarnation: number,
@@ -129,18 +140,16 @@ export function createWorkspaceTabDescriptor(
   if (!Number.isSafeInteger(incarnation) || incarnation < 1) {
     throw new Error("Workspace tab incarnation must be a positive integer");
   }
-  const separator = input.path.relativePath.lastIndexOf("/");
+  const presentation = deriveWorkspaceTabPathPresentation(
+    input.path.relativePath,
+  );
   return {
     tabId: input.tabId,
     incarnation,
     workspaceId: input.workspaceId,
     relativePath: input.path.relativePath,
     pathIdentity: input.path.identity,
-    displayName:
-      separator < 0
-        ? input.path.relativePath
-        : input.path.relativePath.slice(separator + 1),
-    parentHint: parentPath(input.path.relativePath),
+    ...presentation,
     loadState: { kind: "idle", generation: 0 },
     restoredView: input.restoredView ?? null,
     lastActivatedAt: input.lastActivatedAt,
@@ -153,7 +162,9 @@ export function projectWorkspaceTabStatus(
 ): WorkspaceTabStatus {
   const states = loadStates(tab.loadState);
   if (tab.loadState.kind === "ready") {
-    states.push(...sessionStates(runtime?.session ?? null));
+    const matchingRuntime =
+      runtime?.incarnation === tab.incarnation ? runtime : null;
+    states.push(...sessionStates(matchingRuntime?.session ?? null));
   }
   const state = resolveAsyncState(states);
   return {

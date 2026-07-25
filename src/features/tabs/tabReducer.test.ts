@@ -24,6 +24,7 @@ import {
 import {
   acceptWorkspaceTabPath,
   type WorkspaceTabPath,
+  type WorkspaceTabPathIdentity,
 } from "./tabPath";
 import {
   createWorkspaceTabDescriptor,
@@ -411,6 +412,43 @@ describe("workspace tab reducer", () => {
       ]),
     );
   });
+
+  it("rejects invalid and inconsistent recently closed path metadata", () => {
+    const state = createWorkspaceTabCollection("workspace-a");
+    const invalidIdentity = "" as WorkspaceTabPathIdentity;
+    const corrupted: WorkspaceTabCollection = {
+      ...state,
+      recentlyClosed: [
+        {
+          workspaceId: "workspace-a",
+          relativePath: "../invalid.md",
+          pathIdentity: invalidIdentity,
+          displayName: "wrong.md",
+          parentHint: "wrong",
+          view: null,
+          closedAt: 2,
+        },
+        {
+          workspaceId: "workspace-a",
+          relativePath: "valid.md",
+          pathIdentity: invalidIdentity,
+          displayName: "valid.md",
+          parentHint: null,
+          view: null,
+          closedAt: 1,
+        },
+      ],
+    };
+
+    expect(validateWorkspaceTabCollection(corrupted)).toEqual(
+      expect.arrayContaining([
+        "recent tab path is invalid: ../invalid.md",
+        "recent tab path presentation is invalid: ../invalid.md",
+        "recent tab path is invalid: valid.md",
+        "recent tab path is duplicated: valid.md",
+      ]),
+    );
+  });
 });
 
 describe("workspace tab status contract", () => {
@@ -483,6 +521,23 @@ describe("workspace tab status contract", () => {
       ),
     ).toMatchObject({
       state: "permission_denied",
+      presentation: { role: "alert", live: "assertive" },
+    });
+  });
+
+  it("does not project a runtime from an earlier tab incarnation", () => {
+    const tab = {
+      ...createWorkspaceTabDescriptor(request(1), 2),
+      loadState: { kind: "ready", generation: 1 } as const,
+    };
+    const staleRuntime: WorkspaceTabRuntime = {
+      incarnation: 1,
+      session: readySession(tab.relativePath, ""),
+      saveController: null,
+    };
+
+    expect(projectWorkspaceTabStatus(tab, staleRuntime)).toMatchObject({
+      state: "error",
       presentation: { role: "alert", live: "assertive" },
     });
   });

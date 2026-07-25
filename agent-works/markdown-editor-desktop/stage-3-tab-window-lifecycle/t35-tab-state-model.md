@@ -48,9 +48,9 @@
 ### 2.4 审查问题整改
 
 - 路径身份：原实现直接用未经规范化的相对路径字符串索引，现改为“Rust 规范化相对路径 + 不透明平台 identity”的受控类型；测试锁定分隔符别名、点段、绝对路径和 Windows 大小写等价身份。
-- 异步 ABA：原实现只比较 generation，现由集合分配不可复用 incarnation，begin/resolve/runtime 投影都必须同时匹配 incarnation；“加载中关闭→复用 tabId 重开→旧结果晚到”已被测试拒绝。
+- 异步 ABA：原实现只比较 generation，现由集合分配不可复用 incarnation，begin/resolve、活动 selector 和状态投影都必须同时匹配 incarnation；“加载中关闭→复用 tabId 重开→旧结果晚到”及“旧 runtime 污染新页签状态”均被测试拒绝。
 - 状态真实性：idle 与真实空文档分离为 unloaded/empty。
-- 不变量：新增 map key 与 descriptor ID、顺序、路径索引、incarnation、活动项、最近关闭和工作区的双向损坏矩阵验证。
+- 不变量：新增 map key 与 descriptor ID、顺序、路径索引、incarnation、活动项、最近关闭和工作区的双向损坏矩阵验证；最近关闭项同步检查规范化路径、非空 identity、重复身份及派生文件名/父路径。
 - 性能口径：T35 只保留可失败的轻量结构/容量/延迟门禁；`vitest bench` 是报告型样本。真实 Milkdown/CodeMirror 单挂载和 heap/RSS 门禁明确移入 T37，并成为 T38 前置。
 
 ## 3. 验证证据
@@ -58,8 +58,8 @@
 ### 3.1 自动化
 
 - `pnpm typecheck`：通过。
-- `pnpm test:tabs`：22/22 通过。
-- `pnpm test`：Node 独立回归全部通过；Vitest 24 个文件 198/198；Rust 180 项通过，另 1 项手动性能探针忽略。
+- `pnpm test:tabs`：24/24 通过。
+- `pnpm test`：Node 独立回归全部通过；Vitest 24 个文件 200/200；Rust 180 项通过，另 1 项手动性能探针忽略。
 - `pnpm build`：通过；既有源码 chunk 大小提示保留，T35 未增加生产入口或 bundle 依赖。
 - `pnpm licenses:check`：727 个 Node 包、508 个 Rust 包、0 个阻断项。
 - `cargo fmt --check`、全 target/all feature Clippy `-D warnings`：通过。

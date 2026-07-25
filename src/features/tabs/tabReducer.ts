@@ -1,6 +1,7 @@
 import type { WorkspaceId } from "../../services/desktop/contracts";
 import {
   createWorkspaceTabDescriptor,
+  deriveWorkspaceTabPathPresentation,
   type RecentlyClosedWorkspaceTab,
   type WorkspaceTabDescriptor,
   type WorkspaceTabId,
@@ -199,6 +200,9 @@ export function validateWorkspaceTabCollection(
     ) {
       issues.push(`tab path is invalid: ${mapTabId}`);
     }
+    if (!hasExpectedPathPresentation(tab)) {
+      issues.push(`tab path presentation is invalid: ${mapTabId}`);
+    }
     if (incarnations.has(tab.incarnation)) {
       issues.push(`tab incarnation is duplicated: ${tab.incarnation}`);
     }
@@ -243,6 +247,19 @@ export function validateWorkspaceTabCollection(
         `recent tab belongs to another workspace: ${recent.relativePath}`,
       );
     }
+    if (
+      !isValidWorkspaceTabPath({
+        relativePath: recent.relativePath,
+        identity: recent.pathIdentity,
+      })
+    ) {
+      issues.push(`recent tab path is invalid: ${recent.relativePath}`);
+    }
+    if (!hasExpectedPathPresentation(recent)) {
+      issues.push(
+        `recent tab path presentation is invalid: ${recent.relativePath}`,
+      );
+    }
     if (recentIdentities.has(recent.pathIdentity)) {
       issues.push(`recent tab path is duplicated: ${recent.relativePath}`);
     }
@@ -264,6 +281,18 @@ export function validateWorkspaceTabCollection(
     issues.push("persisted revision must be within the current revision");
   }
   return issues;
+}
+
+function hasExpectedPathPresentation(input: {
+  relativePath: RecentlyClosedWorkspaceTab["relativePath"];
+  displayName: string;
+  parentHint: RecentlyClosedWorkspaceTab["parentHint"];
+}): boolean {
+  const expected = deriveWorkspaceTabPathPresentation(input.relativePath);
+  return (
+    input.displayName === expected.displayName &&
+    input.parentHint === expected.parentHint
+  );
 }
 
 function openTab(

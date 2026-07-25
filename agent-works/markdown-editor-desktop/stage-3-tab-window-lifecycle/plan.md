@@ -46,7 +46,7 @@
 ### 2.1 工程与验证基线
 
 - 当前技术基线为 Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以清单和锁文件为准。
-- 2026-07-25 已在当前阶段基线重新执行完整 `pnpm test`：Node 独立回归 30/30、Vitest 24 个文件 198/198、Rust 180 项通过且 1 项手动性能探针忽略；页签专项 22/22、类型检查、生产构建、Rust fmt/全 feature Clippy 和许可证 727/508/0 同步通过。T32 验收记录中的 176 Rust/173 Vitest 仅是 T32 当时的历史快照。当前 9 条隔离桌面 E2E 的最新远端证据仍为 GitHub Actions run `30082725332` 在 macOS/Windows 完整通过，尚未覆盖第三阶段本地提交。
+- 2026-07-25 已在当前阶段基线重新执行完整 `pnpm test`：Node 独立回归 30/30、Vitest 24 个文件 200/200、Rust 180 项通过且 1 项手动性能探针忽略；页签专项 24/24、类型检查、生产构建、Rust fmt/全 feature Clippy 和许可证 727/508/0 同步通过。T32 验收记录中的 176 Rust/173 Vitest 仅是 T32 当时的历史快照。当前 9 条隔离桌面 E2E 的最新远端证据仍为 GitHub Actions run `30082725332` 在 macOS/Windows 完整通过，尚未覆盖第三阶段本地提交。
 - 第三阶段不得删除、降低或用重试掩盖上述基线。新增页签测试必须加入统一 `pnpm test`、真实桌面 E2E 和双平台 CI。
 - 当前依赖已能实现页签状态、拖动、菜单、持久化和测试；计划不预设新增运行时依赖。若实现前确认必须引入拖拽或状态库，先补许可证、包体、复用理由和回滚方案，再修改清单。
 
@@ -395,9 +395,9 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 - 验证方式：Vitest 覆盖平台路径别名、非法/未规范化路径、顺序、活动项、关闭/恢复、generation+incarnation 陈旧结果、双向不变量、unloaded/empty 分离和轻量活动 runtime 投影；类型检查、生产构建、许可证扫描。
 - 完成标准：身份、状态、不变量与序列化边界可执行，轻量模型可失败门禁通过；真实 adapter 单挂载和 heap/RSS 门禁必须在 T37 完成并作为 T38 前置。
 - 实际落地情况：已新增 `src/features/tabs/tabPath.ts`、`tabTypes.ts` 与 `tabReducer.ts`，固化窗口内稳定 `tabId`、集合单调分配的 incarnation、Rust 规范化相对路径与不透明平台路径身份、派生文件名/父路径、`idle/loading/ready/error/missing/permission_denied` 加载状态、视图恢复描述、10 种结算原因和最近关闭 50 项边界。纯 reducer 使用有序 ID、平台身份索引、活动项、revision/persistedRevision 表达唯一打开、聚焦、排序、关闭相邻项接替、重新打开、generation/incarnation 双重陈旧拒绝和持久化待提交状态；不变量双向校验 map key、descriptor、order、path index、active、incarnation 与最近关闭。
-  - 页签 DTO 只保存轻量描述；`DocumentSession` 与 `DocumentSaveController` 位于独立 runtime map，runtime 必须匹配当前 incarnation，活动 editor adapter 不进入集合或恢复 DTO。`selectActiveWorkspaceTabProjection` 只投影一个身份匹配的活动项。
+  - 页签 DTO 只保存轻量描述；`DocumentSession` 与 `DocumentSaveController` 位于独立 runtime map，runtime 必须匹配当前 incarnation，活动 editor adapter 不进入集合或恢复 DTO。活动 selector 与 `projectWorkspaceTabStatus` 都独立拒绝旧 incarnation；最近关闭项也校验规范化路径、identity、派生文件名和父路径。
   - 复用审查确认 `AsyncStatePanel` 已是公共状态优先级事实源，因此把其纯契约提取到 `src/components/asyncState.ts`，现有面板和页签投影共同消费同一 `resolveAsyncState`/presentation，不复制私有优先级。页签状态把 load/session/save/recovery/content-safety 组合后严格遵循 DESIGN 的主状态和 assertive/polite 契约。
-  - 页签专项 22/22 覆盖路径分隔符/点段/绝对路径拒绝、Windows 大小写别名身份、同一路径唯一打开、顺序、活动项、关闭/恢复、tabId 复用 ABA、generation、revision、损坏集合矩阵、unloaded/empty 分离、状态优先级、恢复序列化边界和 incarnation runtime 投影；统一 `pnpm test` 为 Vitest 198/198、Rust 180 通过且 1 项手动探针忽略、Node 独立回归 30/30。
+  - 页签专项 24/24 覆盖路径分隔符/点段/绝对路径拒绝、Windows 大小写别名身份、同一路径唯一打开、顺序、活动项、关闭/恢复、tabId 复用 ABA、generation、revision、打开项/最近关闭损坏矩阵、unloaded/empty 分离、状态优先级、恢复序列化边界和 incarnation selector/status 投影；统一 `pnpm test` 为 Vitest 200/200、Rust 180 通过且 1 项手动探针忽略、Node 独立回归 30/30。
   - 单元门禁要求 100 项恢复描述小于 64 KiB、不含 `markdown`、`history` 或 `saveController`，且固定 fixture 的轻量集合操作在本机阈值内完成。`pnpm test:tabs:performance` 仅为本机报告型样本，不会因均值漂移失败，不能作为 adapter 或内存门禁。
   - 未修改 Rust、磁盘、配置、菜单、权限、SQL/seed、环境变量或可见页面；未执行桌面 E2E，原因是 T35 尚无生产页面/IPC 消费者。证据见 `t35-tab-state-model.md`。
 
@@ -418,10 +418,10 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 ### 6.3 任务 T37：每页签 DocumentSession/SaveController 管理器
 
 - 状态：待开始。
-- 依赖：T35。
+- 依赖：T35、T36。
 - 涉及文件/模块：`WorkspaceTabManager.ts`、`tabSessionGateway.ts`、`WorkspaceWorkbench.tsx`、`DocumentSession`、`DocumentSaveController`、recovery/assets 集成与测试。
 - 目标：把当前单一会话改为每页签独立会话，同时保持活动 editor、状态栏、标题和菜单只有一个来源。
-- 操作：基于可注入的 `tabSessionGateway` 接口实现 open/focus/lazy-load/switch/destroy，不等待 T36 Rust repository 才建立内存会话；gateway 只接收 Rust 返回的规范化路径与平台身份；为已加载页签创建独立保存控制器和恢复身份；切换前提交 adapter 状态；只挂载活动 adapter；inactive dirty 页签继续自动保存/快照。新增真实 Milkdown/CodeMirror adapter factory 计数测试缝和 WebView runtime 内存探针，T36 的真实持久化接线留到 T42。
+- 操作：在 T36 已落地的 Rust 路径身份契约上，基于可注入的 `tabSessionGateway` 实现 open/focus/lazy-load/switch/destroy；gateway 只接收 Rust 返回的规范化路径与平台身份。为已加载页签创建独立保存控制器和恢复身份；切换前提交 adapter 状态；只挂载活动 adapter；inactive dirty 页签继续自动保存/快照。新增真实 Milkdown/CodeMirror adapter factory 计数测试缝和 WebView runtime 内存探针；T36 会话仓储与 manager 的完整恢复接线仍留到 T42。
 - 产出：真实 manager、P1 活动页签投影、生命周期测试和 `t37-tab-session-manager.md`。
 - 影响范围：P1 文档生命周期与内存；不改变 Rust 磁盘协议。
 - 边界与异常：慢读取、慢 adapter、陈旧保存和陈旧恢复不得覆盖后来活动页签；manager 销毁必须结算/释放每个控制器；错误 tab 不阻断其他 tab。
@@ -524,7 +524,7 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 - 影响范围：测试和脚本；不降低现有门禁。
 - 边界与异常：不得仅比较顶层字段名而漏掉 tagged union 值；测试只用临时目录/fixture；并发测试不能共享状态根。
 - 验证方式：Node、Vitest、Rust all-features/no-default-features、fmt、Clippy、typecheck、build、licenses。
-- 完成标准：新 checkout 可一条统一命令复现所有非桌面状态与服务门禁，T35 当前 180 Rust/198 Vitest/30 Node 基线不回退。
+- 完成标准：新 checkout 可一条统一命令复现所有非桌面状态与服务门禁，T35 当前 180 Rust/200 Vitest/30 Node 基线不回退。
 - 实际落地情况：待实施。
 
 ### 6.11 任务 T45：真实桌面 E2E、双平台 CI 与页面验收
