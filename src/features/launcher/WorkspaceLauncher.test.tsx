@@ -25,6 +25,7 @@ function snapshot(): WorkspaceLauncherSnapshot {
       },
     ],
     workspaceSessions: [],
+    windowSessionSummaries: [],
     activeWorkspaceIds: [],
     currentWorkspaceId: null,
     windowLabel: "plainroot-window-1",

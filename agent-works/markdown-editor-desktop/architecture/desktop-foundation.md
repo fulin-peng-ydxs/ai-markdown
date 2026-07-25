@@ -2,9 +2,9 @@
 
 ## 1. 文档定位
 
-本文描述 Plainroot 当前已经落地的桌面底座模块、数据流、权限边界和运行约束。产品范围与最终验收以 `../requirement.md` 为准，第一、二阶段任务状态与验证证据分别以 `../stage-1-desktop-foundation/plan.md`、`../stage-2-markdown-editing/plan.md` 为准；Markdown 统一会话、两种编辑投影、保存/恢复/冲突与图片资源的详细架构以 `markdown-document-editing.md` 为专项事实源；代码、清单、配置和自动化测试是实现事实源。
+本文描述 Plainroot 当前已经落地的桌面底座模块、数据流、权限边界和运行约束。产品范围与最终验收以 `../requirement.md` 为准，各阶段任务状态与验证证据以对应阶段目录的 `plan.md` 为准；Markdown 统一会话、两种编辑投影、保存/恢复/冲突与图片资源的详细架构以 `markdown-document-editing.md` 为专项事实源；代码、清单、配置和自动化测试是实现事实源。
 
-当前架构覆盖 P2 工作区启动页、P1 单文档编辑工作台、本地文件与窗口底座，并概览单一 `DocumentSession`、保存/恢复、资源和菜单与底座之间的边界。编辑子系统的内部状态机和数据流由专项文档维护。多页签、大纲、全文搜索、主题工作室和分页阅读仍未落地。
+当前架构覆盖 P2 工作区启动页、P1 单文档编辑工作台、本地文件与窗口底座，并概览单一 `DocumentSession`、保存/恢复、资源、菜单和内容无关页签会话仓储与底座之间的边界。编辑子系统的内部状态机和数据流由专项文档维护。P1 仍未消费多页签 runtime；大纲、全文搜索、主题工作室和分页阅读仍未落地。
 
 ## 2. 总体结构
 
@@ -66,6 +66,7 @@ flowchart LR
 | 文件系统服务 | `src-tauri/src/fs/` | 路径与身份、扫描、读取、变更、删除、监听、原子替换和安全写 | 默认不跟随根内符号链接；平台差异由适配层收口 |
 | 窗口与菜单 | `src-tauri/src/window.rs`、`src-tauri/src/menu.rs` | 一目录一窗口、当前/新窗口决策、根会话协调、单实例转交、原生菜单、按窗口保存编辑菜单状态，以及系统关闭/菜单关闭/当前窗口根替换/应用退出的非阻塞结算意图 | 当前只结算每窗口一个文档，不承担页签集合门禁；coordinator mutex 不跨越前端等待；只有聚焦窗口真实 session 可消费的菜单项启用 |
 | 版本化状态 | `src-tauri/src/state.rs` | 最近工作区与根窗口会话的原子持久化、损坏备份和未知版本保护 | 不保存 Markdown 正文、打开偏好、账号或远端状态 |
+| 版本化窗口页签会话 | `src-tauri/src/window_session.rs`、`commands/window_session.rs`、`src/services/desktop/windowSession.ts` | 以独立 manifest/session 保存工作区相对路径、页签顺序、活动路径、模式、选择/锚点和最近关闭；提供 CAS、原子回滚、损坏隔离、未知版本保护、非敏感 launcher 摘要和 Rust 平台路径身份 | 不保存 Markdown、history、恢复正文、绝对路径、窗口像素或布局；完整读取/写入必须匹配当前窗口绑定与授权工作区，P2 不获得文件名 |
 | 版本化恢复 | `src-tauri/src/editor/recovery.rs`、`commands/editor.rs`、`src/services/desktop/recovery.ts` | app data 内最新单文档快照、活动脏会话保护、锁外大正文 I/O、并发读取租约、期限/条目/容量清理、损坏隔离和 IPC/TS 契约；P1/P2 已提供受控查询和恢复入口 | 不替代工作区 `.md`；恢复只进入 dirty session；正文读取与删除必须匹配已授权 workspace、snapshot id 与相对路径 |
 | 冲突覆盖与安全另存 | `src-tauri/src/editor/save_copy.rs`、`commands/editor.rs`、`src/services/desktop/editorSave.ts`、`src/features/editor/editorGateway.ts`、`src/features/editor/recovery/` | 生成冲突磁盘证据；签发绑定 workspace/path/revision/content hash 的一次性覆盖令牌；由 Rust 原生保存对话框签发单目标另存令牌；前端展示第二次确认和目标状态，成功后更新唯一 session | 令牌仅进程内、最多 32 项、5 分钟且确认即消费；前端不能提交绝对目标路径；工作区外目标不形成持久目录授权 |
 | 资源偏好、图片导入与目录移动风险 | `src-tauri/src/preferences.rs`、`src-tauri/src/editor/assets.rs`、`src-tauri/src/fs/mutate.rs`、`commands/editor.rs`、`commands/files.rs`、`src/services/desktop/assets.ts`、`files.ts`、`src/features/editor/assets/`、`src/features/editor/adapters/milkdown/workspaceImageNodeView.ts` | 按工作区保存/读取/重置资源目录；以当前授权根重新校验目录；通过 raw IPC 或 Rust 原生选择器导入 PNG/JPEG/GIF/WebP，校验签名和 20 MiB 上限后原子写入不覆盖的唯一资源名；P1 将工作区资源路径转换为当前文档相对链接，承接选择、剪贴板、拖放、缺失占位、重新定位和当前文档移动后的链接调整；目录移动前以有界检查提示可能影响未打开文档 | 偏好不包含正文；SVG 拒绝；原始图片不删除；上传/导入令牌仅进程内、最多 32 项、5 分钟且单次消费；插入成功后 confirm 保留，失败/取消只清理身份/hash 未变化的本次副本；目录风险检查不解析 Markdown、不声称引用命中、不批量改写其他文档，检查不完整时保守提示 |
@@ -109,6 +110,9 @@ flowchart LR
 - 当前窗口替换在结算通过后再完成窗口/工作区协调和持久状态提交，随后更新内存授权映射；失败时保留原窗口状态。
 - 新窗口创建若后续持久化失败，会关闭未提交窗口并释放目标授权，不留下第二个可写映射。
 - 最近记录或单个根会话恢复失败不得阻断其他记录和窗口；移除最近记录只修改辅助状态，不删除本地文件。
+- 根工作区提交前由窗口页签会话仓储创建 opaque `windowStateRef`，`plainroot-state-v1.json` 只保存该引用。页签 session 通过 revision/CAS 防止晚到元数据覆盖新顺序；manifest 提交失败必须回滚 session 文件，不能把旧有效会话与摘要拆成两个 revision。
+- 完整页签路径读取与新路径身份解析必须同时校验当前 WebView 窗口绑定、工作区授权和 Rust 根内路径。对外身份是 workspace 绑定的 SHA-256 opaque 值，不暴露 canonical root；Windows 大小写与扩展路径语义只在 Rust 平台层处理。
+- manifest 损坏时从校验通过的 v1 session 重建，单 session 损坏仅备份并隔离该项；未知版本原文件不覆盖。孤儿清理只处理 Plainroot 命名、普通文件且明确属于 v1 的记录，不跟随 symlink 或猜测删除未来版本。
 
 ## 5. 数据、配置与权限
 
@@ -116,6 +120,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | Markdown 内容 | 用户授权工作区 | 真实 `.md` 文件，单次内联读取/写入上限 64 MiB | 不随应用版本回滚；失败保持原文件或明确报告内容安全性 |
 | 应用状态 | 操作系统 `appDataDir()/plainroot-state-v1.json` | schema v1；最近工作区最多 100 条；文件上限 8 MiB | 损坏文件备份后回到安全默认；未知版本不覆盖；退出应用后可备份并删除 |
+| 窗口页签会话 | `appDataDir()/plainroot-window-sessions-v1/` | schema v1；manifest 上限 1 MiB/1000 工作区；单 session 上限 1 MiB；最近关闭最多 50 项；只含相对路径和视图元数据 | 私有原子文件 + CAS；双文件提交失败恢复旧 session；manifest 可从有效 v1 session 重建；单项损坏隔离；未知版本保留；移除最近记录只删元数据，不触碰 Markdown 或恢复快照 |
 | 安全写清理日志 | `appDataDir()/plainroot-safe-write-cleanup-v1.json` | 最多 32 个待清理临时路径；日志上限 64 KiB | 只重试历史授权根内且重新校验通过的 Plainroot 临时文件；不可再授权条目不占全局预算 |
 | 恢复快照 | `appDataDir()/plainroot-recovery-v1/` | schema v1；每文档最新一份；默认 7 天、32 项、正文总量 128 MiB；snapshot/manifest 为私有原子文件；大正文读写不持有全局 manifest 锁 | 活动脏会话最后快照不被自动清理；读取租约防止并发删除提前移走正文；容量/写入失败降级为仅内存安全且后续成功写可恢复；未知版本不覆盖；不读取或删除未授权工作区快照 |
 | 资源目录偏好 | `appDataDir()/plainroot-preferences-v1.json` | schema v1；按 `workspaceId` 保存 `assetDirectory`；默认 `assets/`；文件上限 1 MiB、最多 1000 个工作区 | 私有临时文件 + 原子替换；写失败保留磁盘和内存旧值；损坏文件备份后回默认；未知版本不覆盖；删除该文件只恢复默认，不删除已导入资源 |
@@ -135,7 +140,7 @@ flowchart LR
 
 ## 7. 测试与跨平台边界
 
-- 前端测试覆盖许可证策略、路径代数、文件树 reducer、fixture、React 页面/组件状态、统一编辑器壳、Milkdown/CodeMirror adapter、生产 Markdown 往返语料、恢复/冲突/另存交互、资源目录、文档相对图片路径、选择/剪贴板部分失败、缺失占位/重新定位、当前文档移动链接确认和目录图片移动风险确认，以及保存控制器的尺寸分级、单飞/立即追赶、快照限频、失败与结算；Rust 测试继续覆盖授权、路径、状态/恢复/偏好仓储、文件操作、安全写、监听、窗口事务、结算 intent、资源导入、受控图片读取和有界目录风险分类。契约总守卫要求每个 TypeScript 导出 interface 和字符串常量都能追溯到 Rust 字段或枚举 parity 断言。
+- 前端测试覆盖许可证策略、路径代数、文件树 reducer、页签纯状态模型、fixture、React 页面/组件状态、统一编辑器壳、Milkdown/CodeMirror adapter、生产 Markdown 往返语料、恢复/冲突/另存交互、资源目录、文档相对图片路径、选择/剪贴板部分失败、缺失占位/重新定位、当前文档移动链接确认和目录图片移动风险确认，以及保存控制器的尺寸分级、单飞/立即追赶、快照限频、失败与结算；Rust 测试继续覆盖授权、路径、状态/恢复/偏好/窗口页签会话仓储、文件操作、安全写、监听、窗口事务、结算 intent、资源导入、受控图片读取和有界目录风险分类。契约总守卫要求每个 TypeScript 导出 interface 和字符串常量都能追溯到 Rust 字段或枚举 parity 断言。
 - 所有文件系统测试必须使用带进程 ID、时间与原子序号的统一临时目录工厂；仅依赖时间戳的夹具会在并行测试中碰撞清理日志或临时文件，禁止新增。
 - `pnpm test:e2e` 使用独立 identifier、临时状态目录和每套件临时复制工作区，当前 9 条用例覆盖 P2/P1 真实 Tauri IPC、P2 1100/740 px 布局与焦点、P1 1100/1050/820/740 px 编辑 chrome、两模式编辑、WebView 文件输入到 Rust 图片上传、保存重开、外部修改内容安全、恢复和目录图片移动风险确认/取消。确定性业务流程重试为 0；只有驱动连接层可保留有界启动重试。
 - GitHub Actions 在 macOS/Windows 运行许可证、类型、前端/Rust、桌面 E2E 和未签名生产构建。提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 对应的 run `30082725332` 已在两个平台完整通过当前 9 条桌面套件、生产构建和 artifact 上传；该 WebView 自动化证据不替代 Windows 原生系统交互的人工验收。

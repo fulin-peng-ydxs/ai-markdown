@@ -20,6 +20,7 @@ pub mod menu;
 pub mod preferences;
 pub mod state;
 pub mod window;
+pub mod window_session;
 
 #[cfg(test)]
 mod contract_test;
@@ -121,6 +122,10 @@ pub fn run() {
             commands::workspace::get_workspace_workbench_snapshot,
             commands::workspace::remove_recent_workspace,
             commands::workspace::remove_workspace_session,
+            commands::window_session::resolve_workspace_tab_path,
+            commands::window_session::get_workspace_tab_session,
+            commands::window_session::save_workspace_tab_session,
+            commands::window_session::remove_workspace_tab_session,
             window::coordinate_workspace_open,
             window::create_plainroot_window,
             window::close_plainroot_window,
@@ -173,7 +178,7 @@ pub fn run() {
         ])
         .setup(|app| {
             let persistent_state = state::PersistentAppState::initialize_for_app(app.handle());
-            let migrated_state = match window::migrate_legacy_window_labels(&persistent_state) {
+            let mut migrated_state = match window::migrate_legacy_window_labels(&persistent_state) {
                 Ok(state) => state,
                 Err(error) => {
                     eprintln!(
@@ -183,6 +188,41 @@ pub fn run() {
                     persistent_state.snapshot().unwrap_or_default()
                 }
             };
+            let window_sessions =
+                window_session::WindowSessionRepository::initialize_for_app(app.handle());
+            if let Some(error) = window_sessions.current_error() {
+                eprintln!(
+                    "Plainroot window-session initialization failed: {}",
+                    error.message_key
+                );
+            } else {
+                let mut references = std::collections::HashMap::new();
+                for session in &migrated_state.workspace_sessions {
+                    match window_sessions.ensure_reference(&session.workspace_id) {
+                        Ok(summary) => {
+                            references
+                                .insert(session.workspace_id.clone(), summary.window_state_ref);
+                        }
+                        Err(error) => {
+                            eprintln!(
+                                "Plainroot window-session reference initialization failed: {}",
+                                error.message_key
+                            );
+                        }
+                    }
+                }
+                if !references.is_empty() {
+                    if let Ok(updated) = persistent_state.update(|current| {
+                        for session in &mut current.workspace_sessions {
+                            if let Some(reference) = references.get(&session.workspace_id) {
+                                session.window_state_ref = Some(reference.clone());
+                            }
+                        }
+                    }) {
+                        migrated_state = updated;
+                    }
+                }
+            }
             let cleanup_roots = migrated_state
                 .recent_workspaces
                 .iter()
@@ -199,6 +239,7 @@ pub fn run() {
             }
             app.manage(window_coordinator);
             app.manage(persistent_state);
+            app.manage(window_sessions);
             let operation_lock = app
                 .state::<fs::mutate::WorkspaceMutationService>()
                 .operation_lock();

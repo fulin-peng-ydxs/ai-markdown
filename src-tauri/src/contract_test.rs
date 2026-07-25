@@ -5,6 +5,7 @@ use serde::Serialize;
 const TYPESCRIPT_CONTRACTS: &str = include_str!("../../src/services/desktop/contracts.ts");
 const RUST_CONTRACT_ASSERTION_SOURCES: &[&str] = &[
     include_str!("commands/workspace.rs"),
+    include_str!("commands/window_session.rs"),
     include_str!("editor/assets.rs"),
     include_str!("editor/recovery.rs"),
     include_str!("editor/save_copy.rs"),
@@ -20,6 +21,7 @@ const RUST_CONTRACT_ASSERTION_SOURCES: &[&str] = &[
     include_str!("preferences.rs"),
     include_str!("state.rs"),
     include_str!("window.rs"),
+    include_str!("window_session.rs"),
 ];
 
 pub fn rust_fields(value: &impl Serialize) -> BTreeSet<String> {

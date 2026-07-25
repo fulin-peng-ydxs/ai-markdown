@@ -1,6 +1,6 @@
 # Plainroot
 
-Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成桌面底座验收；第二阶段 T18～T34 已完成单文档编辑阶段验收及目录图片移动风险、编辑工作台信息层级补强。当前具备受控工作区授权、文件扫描与安全写入、窗口协调、真实 P1/P2、统一 `DocumentSession`、Milkdown/CodeMirror 两种投影、自动/手动保存、恢复/冲突/另存、图片资源、目录图片移动风险提示、固定主操作工具栏，以及单一保存状态和当前路径的持续状态栏。第二阶段基线的 9/9 隔离桌面回归已在 macOS/Windows runner 通过；第三阶段 T35 仅建立尚未接入 P1 的纯页签模型并取得本地非桌面证据，仍没有可用多页签、大纲、工作区搜索、分页阅读或主题工作室。
+Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成桌面底座验收；第二阶段 T18～T34 已完成单文档编辑阶段验收及目录图片移动风险、编辑工作台信息层级补强。当前具备受控工作区授权、文件扫描与安全写入、窗口协调、真实 P1/P2、统一 `DocumentSession`、Milkdown/CodeMirror 两种投影、自动/手动保存、恢复/冲突/另存、图片资源、目录图片移动风险提示、固定主操作工具栏，以及单一保存状态和当前路径的持续状态栏。第二阶段基线的 9/9 隔离桌面回归已在 macOS/Windows runner 通过；第三阶段 T35～T36 已建立尚未接入 P1 的纯页签模型、内容无关窗口页签会话仓储和 Rust 平台路径身份契约并取得本地非桌面证据，仍没有可用多页签、大纲、工作区搜索、分页阅读或主题工作室。
 
 ## 工具链
 
@@ -61,6 +61,7 @@ pnpm tauri dev
 - 第二阶段验收：`agent-works/markdown-editor-desktop/stage-2-markdown-editing/t32-stage-acceptance.md`
 - 第三阶段页签与窗口生命周期计划：`agent-works/markdown-editor-desktop/stage-3-tab-window-lifecycle/plan.md`
 - T35 页签模型与整改证据：`agent-works/markdown-editor-desktop/stage-3-tab-window-lifecycle/t35-tab-state-model.md`
+- T36 窗口页签会话仓储证据：`agent-works/markdown-editor-desktop/stage-3-tab-window-lifecycle/t36-window-session-store.md`
 - 当前桌面底座架构：`agent-works/markdown-editor-desktop/architecture/desktop-foundation.md`
 - Markdown 文档编辑架构：`agent-works/markdown-editor-desktop/architecture/markdown-document-editing.md`
 - 视觉与交互规范：`DESIGN.md`

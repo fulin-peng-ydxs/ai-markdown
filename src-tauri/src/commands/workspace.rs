@@ -22,6 +22,7 @@ use crate::state::{
     WorkspaceRegistry, MAX_RECENT_WORKSPACES,
 };
 use crate::window::WorkspaceWindowCoordinator;
+use crate::window_session::{WindowSessionRepository, WindowTabSessionSummary};
 
 const MAX_PENDING_SELECTIONS: usize = 32;
 const PENDING_SELECTION_LIFETIME: Duration = Duration::from_secs(10 * 60);
@@ -74,6 +75,7 @@ pub enum WorkspaceSelectionOutcome {
 pub struct WorkspaceLauncherSnapshot {
     pub recent_workspaces: Vec<RecentWorkspace>,
     pub workspace_sessions: Vec<crate::state::WorkspaceSessionRoot>,
+    pub window_session_summaries: Vec<WindowTabSessionSummary>,
     pub active_workspace_ids: Vec<WorkspaceId>,
     pub current_workspace_id: Option<WorkspaceId>,
     pub window_label: String,
@@ -446,14 +448,36 @@ pub fn get_workspace_launcher_snapshot<R: Runtime>(
     window: WebviewWindow<R>,
     coordinator: State<'_, WorkspaceWindowCoordinator>,
     state: State<'_, PersistentAppState>,
+    window_sessions: State<'_, WindowSessionRepository>,
 ) -> Result<WorkspaceLauncherSnapshot, DesktopError> {
     if let Some(error) = state.current_error() {
         return Err(error);
     }
     let snapshot = state.snapshot()?;
+    let workspace_sessions = snapshot.workspace_sessions;
+    let window_session_summaries = match window_sessions.summaries() {
+        Ok(summaries) => summaries,
+        Err(error) => workspace_sessions
+            .iter()
+            .filter_map(|session| {
+                session
+                    .window_state_ref
+                    .as_ref()
+                    .map(|window_state_ref| WindowTabSessionSummary {
+                        workspace_id: session.workspace_id.clone(),
+                        window_state_ref: window_state_ref.clone(),
+                        revision: 0,
+                        tab_count: 0,
+                        updated_at: session.last_active_at,
+                        issue: Some(error.clone()),
+                    })
+            })
+            .collect(),
+    };
     Ok(WorkspaceLauncherSnapshot {
         recent_workspaces: snapshot.recent_workspaces,
-        workspace_sessions: snapshot.workspace_sessions,
+        workspace_sessions,
+        window_session_summaries,
         active_workspace_ids: coordinator.active_workspace_ids()?,
         current_workspace_id: coordinator.workspace_for_window(window.label())?,
         window_label: window.label().to_owned(),
@@ -480,8 +504,13 @@ pub fn remove_recent_workspace(
     workspace_id: WorkspaceId,
     coordinator: State<'_, WorkspaceWindowCoordinator>,
     state: State<'_, PersistentAppState>,
+    window_sessions: State<'_, WindowSessionRepository>,
 ) -> Result<bool, DesktopError> {
-    coordinator.discard_recent_workspace(&workspace_id, &state)
+    let removed = coordinator.discard_recent_workspace(&workspace_id, &state)?;
+    if removed {
+        window_sessions.remove(&workspace_id)?;
+    }
+    Ok(removed)
 }
 
 #[tauri::command]
@@ -768,6 +797,7 @@ mod tests {
                 window_state_ref: None,
                 last_active_at: 10,
             }],
+            window_session_summaries: Vec::new(),
             active_workspace_ids: vec![workspace_id.clone()],
             current_workspace_id: Some(workspace_id),
             window_label: "plainroot-window-1".to_owned(),

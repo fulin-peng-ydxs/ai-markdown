@@ -29,6 +29,7 @@ const snapshot: WorkspaceLauncherSnapshot = {
     { workspaceId: "workspace-b", windowLabel: "window-2", windowStateRef: null, lastActiveAt: 30 },
     { workspaceId: "workspace-c", windowLabel: "window-3", windowStateRef: null, lastActiveAt: 10 },
   ],
+  windowSessionSummaries: [],
   activeWorkspaceIds: ["workspace-a"],
   currentWorkspaceId: null,
   windowLabel: "window-1",

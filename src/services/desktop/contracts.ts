@@ -50,6 +50,14 @@ export const DESKTOP_ERROR_CODES = [
   "state_backup_failed",
   "unsupported_state_version",
   "invalid_state_data",
+  "window_session_unavailable",
+  "window_session_read_failed",
+  "window_session_write_failed",
+  "window_session_unsupported_version",
+  "window_session_not_found",
+  "window_session_corrupt",
+  "window_session_revision_conflict",
+  "window_session_capacity_exceeded",
   "dialog_unavailable",
   "unsupported_markdown_file",
   "selection_not_found",
@@ -437,6 +445,125 @@ export interface WorkspaceSessionRoot {
   lastActiveAt: number;
 }
 
+export const WINDOW_TAB_EDITOR_MODES = [
+  "visual",
+  "source",
+] as const;
+
+export type WindowTabEditorMode =
+  (typeof WINDOW_TAB_EDITOR_MODES)[number];
+
+export const WINDOW_TAB_SELECTION_KINDS = [
+  "visual",
+  "source",
+] as const;
+
+export type WindowTabSelection =
+  | {
+      kind: (typeof WINDOW_TAB_SELECTION_KINDS)[0];
+      from: number;
+      to: number;
+    }
+  | {
+      kind: (typeof WINDOW_TAB_SELECTION_KINDS)[1];
+      anchor: number;
+      head: number;
+    };
+
+export const WINDOW_TAB_ANCHOR_KINDS = [
+  "semantic",
+  "source",
+] as const;
+
+export type WindowTabAnchor =
+  | {
+      kind: (typeof WINDOW_TAB_ANCHOR_KINDS)[0];
+      blockId: string | null;
+      fallbackOffset: number;
+      scrollTop: number;
+    }
+  | {
+      kind: (typeof WINDOW_TAB_ANCHOR_KINDS)[1];
+      offset: number;
+      scrollTop: number;
+    };
+
+export interface WindowTabViewState {
+  mode: WindowTabEditorMode;
+  selection: WindowTabSelection;
+  anchor: WindowTabAnchor;
+}
+
+export interface PersistedWindowTab {
+  relativePath: WorkspaceRelativePath;
+  view: WindowTabViewState;
+  lastActivatedAt: number;
+}
+
+export interface PersistedRecentlyClosedTab {
+  relativePath: WorkspaceRelativePath;
+  view: WindowTabViewState;
+  closedAt: number;
+}
+
+export interface WindowTabSessionSnapshot {
+  tabs: PersistedWindowTab[];
+  activeRelativePath: WorkspaceRelativePath | null;
+  recentlyClosed: PersistedRecentlyClosedTab[];
+  updatedAt: number;
+}
+
+export interface WorkspaceTabPathContract {
+  relativePath: WorkspaceRelativePath;
+  identity: string;
+}
+
+export interface ResolvedWindowTab {
+  path: WorkspaceTabPathContract;
+  view: WindowTabViewState;
+  lastActivatedAt: number;
+}
+
+export interface ResolvedRecentlyClosedTab {
+  path: WorkspaceTabPathContract;
+  view: WindowTabViewState;
+  closedAt: number;
+}
+
+export interface WindowTabSessionPathIssue {
+  relativePath: WorkspaceRelativePath;
+  error: DesktopError;
+}
+
+export interface WindowTabSession {
+  schemaVersion: 1;
+  workspaceId: WorkspaceId;
+  windowStateRef: string;
+  revision: number;
+  tabs: ResolvedWindowTab[];
+  activeRelativePath: WorkspaceRelativePath | null;
+  recentlyClosed: ResolvedRecentlyClosedTab[];
+  updatedAt: number;
+  issues: WindowTabSessionPathIssue[];
+}
+
+export interface WindowTabSessionSaveResult {
+  workspaceId: WorkspaceId;
+  windowStateRef: string;
+  revision: number;
+  tabCount: number;
+  updatedAt: number;
+}
+
+export interface WindowTabSessionSummary {
+  workspaceId: WorkspaceId;
+  windowStateRef: string;
+  revision: number;
+  tabCount: number;
+  updatedAt: number;
+  issue: DesktopError | null;
+}
+
 export interface PlainrootStateV1 {
   schemaVersion: 1;
   recentWorkspaces: RecentWorkspace[];
@@ -587,6 +714,7 @@ export interface SecondInstanceOpenRequest {
 export interface WorkspaceLauncherSnapshot {
   recentWorkspaces: RecentWorkspace[];
   workspaceSessions: WorkspaceSessionRoot[];
+  windowSessionSummaries: WindowTabSessionSummary[];
   activeWorkspaceIds: WorkspaceId[];
   currentWorkspaceId: WorkspaceId | null;
   windowLabel: string;

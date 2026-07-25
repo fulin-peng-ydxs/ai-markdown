@@ -56,6 +56,21 @@ export function desktopErrorMessage(error: DesktopError): string {
       return "无法读取本机的最近工作区和窗口会话。Markdown 文件没有受到影响。";
     case "state_write_failed":
       return "无法更新本机工作区记录。Markdown 文件没有受到影响，请重试。";
+    case "window_session_unavailable":
+    case "window_session_read_failed":
+      return "无法读取该窗口的页签会话。Markdown 文件没有受到影响，可以继续从文件树打开文档。";
+    case "window_session_write_failed":
+      return "页签会话没有保存，当前窗口中的文档仍保持不变，请重试。";
+    case "window_session_unsupported_version":
+      return "页签会话来自不受支持的新版本。Plainroot 已保留原文件，没有覆盖或删除。";
+    case "window_session_not_found":
+      return "这份页签会话已经不存在，可以从文件树重新打开文档。";
+    case "window_session_corrupt":
+      return "页签会话校验失败，Plainroot 已隔离损坏记录，没有载入其中的路径。";
+    case "window_session_revision_conflict":
+      return "页签顺序或视图状态已被更新，请合并最新会话后重试。";
+    case "window_session_capacity_exceeded":
+      return "页签会话元数据超过安全上限，当前窗口仍可继续使用，但本次会话没有保存。";
     case "dialog_unavailable":
       return "系统文件选择器当前不可用。请稍后重试。";
     case "scan_not_found":

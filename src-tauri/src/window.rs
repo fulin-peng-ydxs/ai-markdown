@@ -14,6 +14,7 @@ use crate::state::{
     PersistentAppState, PlainrootStateV1, RecentWorkspace, WorkspaceAvailability,
     WorkspaceSessionRoot, MAX_RECENT_WORKSPACES,
 };
+use crate::window_session::WindowSessionRepository;
 
 pub const APP_NAME: &str = "Plainroot";
 pub const DEFAULT_WINDOW_WIDTH: f64 = 1100.0;
@@ -164,6 +165,7 @@ struct WorkspaceOpenContext<'a, R: Runtime> {
     source_window_label: &'a str,
     access: &'a WorkspaceAccessService,
     persistent_state: &'a PersistentAppState,
+    window_sessions: Option<&'a WindowSessionRepository>,
     opened_at: u64,
 }
 
@@ -312,6 +314,7 @@ impl WorkspaceWindowCoordinator {
             source_window_label,
             access,
             persistent_state,
+            window_sessions,
             opened_at,
         } = context;
         let workspace = access.workspace(workspace_id)?;
@@ -365,6 +368,7 @@ impl WorkspaceWindowCoordinator {
                 }
                 if let Err(error) = persist_workspace_binding(
                     persistent_state,
+                    window_sessions,
                     &workspace,
                     source_window_label,
                     opened_at,
@@ -424,6 +428,7 @@ impl WorkspaceWindowCoordinator {
 
                 if let Err(error) = persist_workspace_binding(
                     persistent_state,
+                    window_sessions,
                     &workspace,
                     window.label(),
                     opened_at,
@@ -976,6 +981,8 @@ pub fn migrate_legacy_window_labels(
 }
 
 #[tauri::command]
+// Tauri command parameters mirror the public IPC contract plus managed services.
+#[allow(clippy::too_many_arguments)]
 pub fn coordinate_workspace_open<R: Runtime>(
     window: WebviewWindow<R>,
     workspace_id: WorkspaceId,
@@ -984,6 +991,7 @@ pub fn coordinate_workspace_open<R: Runtime>(
     settlement: State<'_, WindowSettlementCoordinator>,
     access: State<'_, WorkspaceAccessService>,
     persistent_state: State<'_, PersistentAppState>,
+    window_sessions: State<'_, WindowSessionRepository>,
 ) -> Result<WorkspaceOpenOutcome, DesktopError> {
     if disposition == Some(WorkspaceOpenDisposition::CurrentWindow) {
         let current_workspace_id = coordinator.workspace_for_window(window.label())?;
@@ -1009,6 +1017,7 @@ pub fn coordinate_workspace_open<R: Runtime>(
             source_window_label: window.label(),
             access: &access,
             persistent_state: &persistent_state,
+            window_sessions: Some(&window_sessions),
             opened_at: unix_timestamp_millis(),
         },
         &workspace_id,
@@ -1049,6 +1058,8 @@ pub fn close_plainroot_window<R: Runtime>(
 }
 
 #[tauri::command]
+// Tauri command parameters mirror the public IPC contract plus managed services.
+#[allow(clippy::too_many_arguments)]
 pub fn resolve_window_settlement<R: Runtime>(
     window: WebviewWindow<R>,
     intent_id: String,
@@ -1057,6 +1068,7 @@ pub fn resolve_window_settlement<R: Runtime>(
     settlement: State<'_, WindowSettlementCoordinator>,
     access: State<'_, WorkspaceAccessService>,
     persistent_state: State<'_, PersistentAppState>,
+    window_sessions: State<'_, WindowSessionRepository>,
 ) -> Result<WindowSettlementResolution, DesktopError> {
     settlement.resolve(
         WorkspaceOpenContext {
@@ -1064,6 +1076,7 @@ pub fn resolve_window_settlement<R: Runtime>(
             source_window_label: window.label(),
             access: &access,
             persistent_state: &persistent_state,
+            window_sessions: Some(&window_sessions),
             opened_at: unix_timestamp_millis(),
         },
         &intent_id,
@@ -1081,10 +1094,15 @@ pub fn take_second_instance_open_requests(
 
 fn persist_workspace_binding(
     state: &PersistentAppState,
+    window_sessions: Option<&WindowSessionRepository>,
     workspace: &WorkspaceDescriptor,
     window_label: &str,
     opened_at: u64,
 ) -> Result<PlainrootStateV1, DesktopError> {
+    let window_state_ref = window_sessions
+        .map(|repository| repository.ensure_reference(workspace.id()))
+        .transpose()?
+        .map(|summary| summary.window_state_ref);
     state.update(|current| {
         let recent = RecentWorkspace {
             workspace_id: workspace.id().clone(),
@@ -1108,7 +1126,7 @@ fn persist_workspace_binding(
         current.workspace_sessions.push(WorkspaceSessionRoot {
             workspace_id: workspace.id().clone(),
             window_label: window_label.to_owned(),
-            window_state_ref: None,
+            window_state_ref,
             last_active_at: opened_at,
         });
         current
@@ -1195,6 +1213,7 @@ mod tests {
     use crate::fs::WorkspaceId;
     use crate::state::{PersistentAppState, WorkspaceSessionRoot};
     use crate::test_support::TestDirectory;
+    use crate::window_session::WindowSessionRepository;
 
     fn authorize_root(
         access: &WorkspaceAccessService,
@@ -1234,6 +1253,7 @@ mod tests {
             source_window_label,
             access,
             persistent_state,
+            window_sessions: None,
             opened_at,
         }
     }
@@ -1329,6 +1349,49 @@ mod tests {
         let snapshot = persistent.snapshot().unwrap();
         assert_eq!(snapshot.workspace_sessions.len(), 1);
         assert_eq!(snapshot.recent_workspaces.len(), 1);
+    }
+
+    #[test]
+    fn committed_workspace_binding_persists_a_real_window_session_reference() {
+        let root = TestDirectory::create("window-session-binding");
+        let app_data = TestDirectory::create("window-session-binding-data");
+        let app = mock_app();
+        create_initial_window(app.handle());
+        let access = WorkspaceAccessService::default();
+        let workspace = authorize_root(&access, root.path());
+        let persistent = PersistentAppState::initialize_at(app_data.path().join("state.json"));
+        let window_sessions = WindowSessionRepository::initialize_at(app_data.path());
+        let coordinator = WorkspaceWindowCoordinator::default();
+
+        coordinator
+            .coordinate_open(
+                WorkspaceOpenContext {
+                    app: app.handle(),
+                    source_window_label: INITIAL_WINDOW_LABEL,
+                    access: &access,
+                    persistent_state: &persistent,
+                    window_sessions: Some(&window_sessions),
+                    opened_at: 10,
+                },
+                workspace.id(),
+                None,
+            )
+            .unwrap();
+
+        let root_session = persistent
+            .snapshot()
+            .unwrap()
+            .workspace_sessions
+            .into_iter()
+            .next()
+            .unwrap();
+        let summary = window_sessions.summaries().unwrap().remove(0);
+        assert_eq!(
+            root_session.window_state_ref.as_deref(),
+            Some(summary.window_state_ref.as_str())
+        );
+        assert_eq!(summary.workspace_id, *workspace.id());
+        assert_eq!(summary.revision, 0);
     }
 
     #[test]
