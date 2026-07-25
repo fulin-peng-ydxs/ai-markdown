@@ -2,9 +2,9 @@
 
 ## 1. 文档定位
 
-本文描述 Plainroot 当前已经落地的单文档编辑模块，包括统一内容模型、排版/源码投影、保存与恢复、外部冲突、另存副本、图片资源、窗口结算和菜单状态。产品范围与验收口径以 `../requirement.md` 为准，第二阶段任务状态与证据以 `../stage-2-markdown-editing/plan.md` 和 `../stage-2-markdown-editing/t32-stage-acceptance.md` 为准；代码、清单、配置和自动化测试是实现事实源。
+本文描述 Plainroot 当前已经落地的单文档编辑模块，包括统一内容模型、排版/源码投影、保存与恢复、外部冲突、另存副本、图片资源、窗口结算和菜单状态；同时登记第三阶段 T35 已落地但尚未接入生产页面的纯页签集合模型。产品范围与验收口径以 `../requirement.md` 为准，第二阶段任务状态与证据以 `../stage-2-markdown-editing/plan.md` 和 `../stage-2-markdown-editing/t32-stage-acceptance.md` 为准，第三阶段当前进度见 `../stage-3-tab-window-lifecycle/plan.md`；代码、清单、配置和自动化测试是实现事实源。
 
-`desktop-foundation.md` 负责工作区授权、文件系统、窗口和应用状态等跨模块底座概览；本文是 Markdown 文档编辑子系统的专项事实源。多页签容器、大纲、工作区搜索、分页阅读、主题工作室和完整布局持久化不属于本文所述的已完成能力。
+`desktop-foundation.md` 负责工作区授权、文件系统、窗口和应用状态等跨模块底座概览；本文是 Markdown 文档编辑子系统的专项事实源。T35 只建立可测试的页签状态契约，不代表多页签容器已经可见或可持久化；大纲、工作区搜索、分页阅读、主题工作室和完整布局持久化也不属于本文所述的已完成能力。
 
 ## 2. 模块边界
 
@@ -68,6 +68,16 @@ flowchart LR
 - mixed 换行文档默认进入源码模式；CodeMirror 的 LF 内部视图通过 raw projection 映射回原始 CRLF、CR 或 mixed 文本。
 - 排版编辑在创建 Milkdown 前执行双门槛：Markdown 不超过 2 MiB，且非空内容行不超过 2000。超出门槛安全降级到源码，不改变文件服务 64 MiB 上限。
 - 排版与源码 adapter 都必须单调推进本地 `editVersion`，拒绝同一 generation 的较低版本投影覆盖新输入。
+
+### 3.4 页签集合模型
+
+`src/features/tabs/` 已建立第三阶段的纯页签状态边界：
+
+- `WorkspaceTabDescriptor` 只保存窗口内 `tabId`、工作区相对路径、派生显示信息、加载状态、视图恢复元数据和最后活动时间，不保存 Markdown、history 或保存控制器。
+- `DocumentSession` 与 `DocumentSaveController` 位于独立 runtime map；集合只暴露一个活动页签投影，editor adapter 不进入页签 DTO 或恢复描述。
+- reducer 使用有序 ID、唯一路径索引、活动项、最近关闭和 revision 表达唯一打开、聚焦、排序、关闭/恢复、陈旧 load generation 拒绝和待持久化状态，并提供不变量校验。
+- 页签主状态与 `AsyncStatePanel` 共同消费 `src/components/asyncState.ts`，遵循 DESIGN 的统一优先级与 assertive/polite 契约，不建立私有状态顺序。
+- 当前 P1 仍消费单个 `DocumentSession`；页签 runtime manager、磁盘会话仓储、页签栏和全页签结算尚未接入，分别由 T36 以后任务承接。
 
 ## 4. 保存、恢复和冲突
 
@@ -155,10 +165,11 @@ UTF-8 BOM 与单一 LF/CRLF/CR 优先沿用原文件；mixed 或不支持编码�
 
 - `pnpm test` 统一执行 Node 独立回归、全部 Vitest 和 Rust 非桌面服务门禁。
 - `pnpm test:editor` 覆盖 session、history、两种 adapter、保存控制器、恢复/冲突/资源组件和页面集成。
+- `pnpm test:tabs` 覆盖纯页签状态机、状态投影、恢复边界与活动 runtime 唯一性；`pnpm test:tabs:performance` 输出 100 个轻量描述的打开、索引和切换基线。
 - `pnpm test:roundtrip` 使用生产 adapter 验证 CommonMark/GFM、图片、受支持 HTML 与 source-only 语料。
 - Rust 契约测试登记所有 TypeScript 导出 interface 和字符串枚举/tag，防止 Rust↔TypeScript 字段漂移。
 - `pnpm test:e2e` 使用独立 identifier、临时状态目录和每套件复制的临时工作区，当前本地 9 条真桌面用例覆盖 P1/P2、两种模式、图片、保存重开、外部修改、恢复和目录图片移动风险确认/取消。
-- 远端 GitHub Actions run `30082725332` 已在提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 上完成 macOS/Windows 双绿；当前 23 个 Vitest 文件/176 项、9/9 桌面 E2E、Rust 门禁、未签名生产构建和 artifact 上传均已纳入该矩阵。
+- 远端 GitHub Actions run `30082725332` 已在提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 上完成 macOS/Windows 双绿；该矩阵覆盖 23 个 Vitest 文件/176 项、9/9 桌面 E2E、Rust 门禁、未签名生产构建和 artifact 上传。T35 本地新增后为 24 个 Vitest 文件/188 项，尚未推送，不能沿用该远端运行宣称第三阶段双平台通过。
 
 ## 9. 已知边界
 
@@ -169,4 +180,4 @@ UTF-8 BOM 与单一 LF/CRLF/CR 优先沿用原文件；mixed 或不支持编码�
 - 当前文档移动后的自动改写只覆盖内联图片语法；引用式图片定义不在改写范围。
 - JPEG/WebP 签名校验采用保守完整信封，少数带尾随数据的合法文件可能被拒绝；前后端 WebP 预检严格度仍应继续保持一致。
 - 强制终止发生在“资源已落盘、Markdown 尚未确认插入”之间时可能留下孤立资源；缺少持久证据时不猜测删除用户文件。
-- 多页签、大纲、工作区搜索、分页阅读、主题预设和完整响应式布局仍属于后续阶段。
+- T35 页签集合模型尚无 P1、持久化或桌面 E2E 消费者；多页签产品能力仍未完成。大纲、工作区搜索、分页阅读、主题预设和完整响应式布局仍属于后续阶段。

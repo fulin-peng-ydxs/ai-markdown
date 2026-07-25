@@ -19,6 +19,8 @@ pnpm typecheck
 pnpm test
 pnpm build
 pnpm test:editor
+pnpm test:tabs
+pnpm test:tabs:performance
 pnpm test:roundtrip
 pnpm test:rust
 pnpm test:ui

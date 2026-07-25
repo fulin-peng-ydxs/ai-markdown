@@ -212,7 +212,7 @@ Key Characteristics：
 |---|---|---|---|
 | `focusContainment` | `src/components/focusContainment.ts` | `AppDialog`、P1 窄窗文件树抽屉 | 可聚焦元素筛选、进入焦点、Tab/Shift+Tab 圈定和安全焦点恢复；不持有页面业务状态 |
 | `AppDialog` | `src/components/AppDialog.tsx` | P1/P2 打开流程、文件操作、永久删除、恢复/冲突/另存 | 原生 dialog、共享焦点圈定、Esc/遮罩关闭、关闭门禁、焦点返回和统一动作区 |
-| `AsyncStatePanel` | `src/components/AsyncStatePanel.tsx` | 根启动状态、P1/P2 加载、错误、阻塞与恢复 | 类型化状态与优先级、可见非颜色标签、自动 tone/role/aria-live、说明和恢复动作 |
+| `AsyncStatePanel` | `src/components/AsyncStatePanel.tsx`、`src/components/asyncState.ts` | 根启动状态、P1/P2 加载、错误、阻塞与恢复；页签状态模型复用纯状态契约 | 类型化状态与公共优先级、可见非颜色标签、自动 tone/role/aria-live、说明和恢复动作；非视觉消费者不得复制第二套优先级 |
 | `WorkspaceLauncher` | `src/features/launcher/WorkspaceLauncher.tsx` | P2 | 本地打开主入口、最近记录、授权、窗口决策、根会话恢复和恢复快照的非阻塞入口；恢复正文由 P1 消费 |
 | `WorkspaceWorkbench` | `src/features/workbench/WorkspaceWorkbench.tsx` | P1 | 当前根工作区壳、真实文件操作、单文档编辑会话、自动/手动保存、恢复载入、冲突/另存、外部删除保护、窗口结算与窄窗目录抽屉 |
 | `WorkspaceTree` | `src/features/workbench/WorkspaceTree.tsx` | P1 | 渐进目录节点、磁盘提交后更新、只读标识、异步刷新期间也稳定的单一 Tab 停靠点，以及上下/首尾/父子方向键导航 |

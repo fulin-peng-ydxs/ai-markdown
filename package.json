@@ -21,6 +21,8 @@
     "test:roundtrip": "vitest run src/features/editor/roundtripCorpus.test.ts",
     "test:document-session": "vitest run src/features/editor/documentHistory.test.ts src/features/editor/markdownCompatibility.test.ts src/features/editor/documentSession.test.ts",
     "test:document-session:performance": "node --experimental-strip-types scripts/document-history-report.mjs",
+    "test:tabs": "vitest run src/features/tabs",
+    "test:tabs:performance": "vitest bench --run src/features/tabs/tabReducer.bench.ts",
     "test:rust": "cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --no-default-features",
     "test:workspace-path": "node --test --experimental-strip-types scripts/workspace-path.test.mjs",
     "test:ui": "vitest run",
