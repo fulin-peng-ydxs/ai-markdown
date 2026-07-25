@@ -184,8 +184,8 @@ Key Characteristics：
 - 破坏性按钮使用具体动词，如“放弃并关闭”“移除记录”，不使用含糊“确定”。
 - 对话框支持 Esc、焦点圈定和关闭后焦点恢复；存在未保存草稿或破坏性结果时，Esc 行为必须与取消契约一致。
 - Toast 只报告已完成的轻量结果，不承载需要选择、重试或长期查看的错误。
-- 页面至少覆盖 ready、loading、empty、error；文件场景再按需覆盖 readonly、dirty、saving、conflict、missing 和 permission-denied，状态之间必须有明确优先级。
-- 同一区域并存多个状态时，公共状态契约按 `permission-denied > missing > conflict > error > unsupported > saving > loading > dirty > readonly > empty > ready` 选择主状态。权限、位置、冲突和错误使用 assertive alert，其余进度与稳定状态使用 polite status；颜色之外必须显示明确文字标签。
+- 页面至少覆盖 ready、loading、empty、error；惰性恢复或尚未读取的文件使用 unloaded，不能误报为空文件；文件场景再按需覆盖 readonly、dirty、saving、conflict、missing 和 permission-denied，状态之间必须有明确优先级。
+- 同一区域并存多个状态时，公共状态契约按 `permission-denied > missing > conflict > error > unsupported > saving > loading > dirty > readonly > empty > unloaded > ready` 选择主状态。权限、位置、冲突和错误使用 assertive alert，其余进度与稳定状态使用 polite status；颜色之外必须显示明确文字标签。
 
 ### 文档画布与主题工作室
 

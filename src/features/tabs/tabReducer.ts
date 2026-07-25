@@ -1,18 +1,20 @@
-import type {
-  WorkspaceId,
-  WorkspaceRelativePath,
-} from "../../services/desktop/contracts";
+import type { WorkspaceId } from "../../services/desktop/contracts";
 import {
   createWorkspaceTabDescriptor,
   type RecentlyClosedWorkspaceTab,
   type WorkspaceTabDescriptor,
   type WorkspaceTabId,
   type WorkspaceTabLoadState,
+  type WorkspaceTabOpenRequest,
   type WorkspaceTabProjection,
   type WorkspaceTabRecoveryDescriptor,
   type WorkspaceTabRuntime,
   type WorkspaceTabViewState,
 } from "./tabTypes";
+import {
+  isValidWorkspaceTabPath,
+  type WorkspaceTabPathIdentity,
+} from "./tabPath";
 
 export const RECENTLY_CLOSED_TAB_LIMIT = 50;
 
@@ -21,23 +23,26 @@ export interface WorkspaceTabCollection {
   orderedTabIds: readonly WorkspaceTabId[];
   activeTabId: WorkspaceTabId | null;
   tabsById: ReadonlyMap<WorkspaceTabId, WorkspaceTabDescriptor>;
-  pathIndex: ReadonlyMap<WorkspaceRelativePath, WorkspaceTabId>;
+  pathIndex: ReadonlyMap<WorkspaceTabPathIdentity, WorkspaceTabId>;
   recentlyClosed: readonly RecentlyClosedWorkspaceTab[];
+  nextIncarnation: number;
   revision: number;
   persistedRevision: number;
 }
 
 export type WorkspaceTabAction =
-  | { type: "open"; tab: WorkspaceTabDescriptor }
+  | { type: "open"; tab: WorkspaceTabOpenRequest }
   | { type: "activate"; tabId: WorkspaceTabId; activatedAt: number }
   | {
       type: "begin_load";
       tabId: WorkspaceTabId;
+      incarnation: number;
       generation: number;
     }
   | {
       type: "resolve_load";
       tabId: WorkspaceTabId;
+      incarnation: number;
       generation: number;
       outcome: Exclude<WorkspaceTabLoadState, { kind: "idle" | "loading" }>;
     }
@@ -50,7 +55,7 @@ export type WorkspaceTabAction =
     }
   | {
       type: "restore_closed";
-      relativePath: WorkspaceRelativePath;
+      pathIdentity: WorkspaceTabPathIdentity;
       tabId: WorkspaceTabId;
       activatedAt: number;
     }
@@ -66,6 +71,7 @@ export function createWorkspaceTabCollection(
     tabsById: new Map(),
     pathIndex: new Map(),
     recentlyClosed: [],
+    nextIncarnation: 1,
     revision: 0,
     persistedRevision: 0,
   };
@@ -81,7 +87,7 @@ export function reduceWorkspaceTabs(
     case "activate":
       return activateTab(state, action.tabId, action.activatedAt);
     case "begin_load":
-      return updateLoadState(state, action.tabId, {
+      return updateLoadState(state, action.tabId, action.incarnation, {
         kind: "loading",
         generation: action.generation,
       });
@@ -89,6 +95,7 @@ export function reduceWorkspaceTabs(
       return resolveLoadState(
         state,
         action.tabId,
+        action.incarnation,
         action.generation,
         action.outcome,
       );
@@ -99,7 +106,7 @@ export function reduceWorkspaceTabs(
     case "restore_closed":
       return restoreClosedTab(
         state,
-        action.relativePath,
+        action.pathIdentity,
         action.tabId,
         action.activatedAt,
       );
@@ -114,10 +121,14 @@ export function selectActiveWorkspaceTabProjection(
 ): WorkspaceTabProjection | null {
   if (!state.activeTabId) return null;
   const tab = state.tabsById.get(state.activeTabId);
-  if (!tab) return null;
+  if (!tab || tab.tabId !== state.activeTabId) return null;
+  const runtime = runtimes.get(state.activeTabId) ?? null;
   return {
     tab,
-    runtime: runtimes.get(tab.tabId) ?? null,
+    runtime:
+      runtime?.incarnation === tab.incarnation
+        ? runtime
+        : null,
   };
 }
 
@@ -128,7 +139,9 @@ export function toWorkspaceTabRecoveryDescriptors(
   return state.orderedTabIds.flatMap((tabId) => {
     const tab = state.tabsById.get(tabId);
     if (!tab) return [];
-    const session = runtimes.get(tabId)?.session;
+    const runtime = runtimes.get(tabId);
+    const session =
+      runtime?.incarnation === tab.incarnation ? runtime.session : null;
     const view =
       session?.status === "ready"
         ? {
@@ -158,28 +171,57 @@ export function validateWorkspaceTabCollection(
 ): readonly string[] {
   const issues: string[] = [];
   const ordered = new Set(state.orderedTabIds);
+  const incarnations = new Set<number>();
   if (ordered.size !== state.orderedTabIds.length) {
     issues.push("ordered tab ids must be unique");
   }
   if (ordered.size !== state.tabsById.size) {
     issues.push("ordered tab ids must match the tab map");
   }
-  for (const tabId of state.orderedTabIds) {
-    const tab = state.tabsById.get(tabId);
-    if (!tab) {
-      issues.push(`missing tab descriptor: ${tabId}`);
-      continue;
+  for (const [mapTabId, tab] of state.tabsById) {
+    if (mapTabId !== tab.tabId) {
+      issues.push(`tab map key mismatch: ${mapTabId}`);
+    }
+    if (!ordered.has(mapTabId)) {
+      issues.push(`tab is missing from order: ${mapTabId}`);
     }
     if (tab.workspaceId !== state.workspaceId) {
-      issues.push(`tab belongs to another workspace: ${tabId}`);
+      issues.push(`tab belongs to another workspace: ${mapTabId}`);
     }
-    if (state.pathIndex.get(tab.relativePath) !== tabId) {
+    if (state.pathIndex.get(tab.pathIdentity) !== mapTabId) {
       issues.push(`path index mismatch: ${tab.relativePath}`);
     }
+    if (
+      !isValidWorkspaceTabPath({
+        relativePath: tab.relativePath,
+        identity: tab.pathIdentity,
+      })
+    ) {
+      issues.push(`tab path is invalid: ${mapTabId}`);
+    }
+    if (incarnations.has(tab.incarnation)) {
+      issues.push(`tab incarnation is duplicated: ${tab.incarnation}`);
+    }
+    incarnations.add(tab.incarnation);
+    if (
+      tab.incarnation < 1 ||
+      tab.incarnation >= state.nextIncarnation
+    ) {
+      issues.push(`tab incarnation is outside the collection: ${mapTabId}`);
+    }
   }
-  for (const [path, tabId] of state.pathIndex) {
-    if (state.tabsById.get(tabId)?.relativePath !== path) {
-      issues.push(`tab map mismatch: ${path}`);
+  for (const tabId of state.orderedTabIds) {
+    if (!state.tabsById.has(tabId)) {
+      issues.push(`missing tab descriptor: ${tabId}`);
+    }
+  }
+  if (state.pathIndex.size !== state.tabsById.size) {
+    issues.push("path index must match the tab map size");
+  }
+  for (const [identity, tabId] of state.pathIndex) {
+    const tab = state.tabsById.get(tabId);
+    if (!tab || tab.pathIdentity !== identity) {
+      issues.push(`tab map mismatch: ${identity}`);
     }
   }
   if (state.orderedTabIds.length === 0 && state.activeTabId !== null) {
@@ -187,12 +229,33 @@ export function validateWorkspaceTabCollection(
   }
   if (
     state.orderedTabIds.length > 0 &&
-    (!state.activeTabId || !state.tabsById.has(state.activeTabId))
+    (!state.activeTabId || !ordered.has(state.activeTabId))
   ) {
     issues.push("non-empty collection must have a valid active tab");
   }
   if (state.recentlyClosed.length > RECENTLY_CLOSED_TAB_LIMIT) {
     issues.push("recently closed tabs exceed the retention limit");
+  }
+  const recentIdentities = new Set<WorkspaceTabPathIdentity>();
+  for (const recent of state.recentlyClosed) {
+    if (recent.workspaceId !== state.workspaceId) {
+      issues.push(
+        `recent tab belongs to another workspace: ${recent.relativePath}`,
+      );
+    }
+    if (recentIdentities.has(recent.pathIdentity)) {
+      issues.push(`recent tab path is duplicated: ${recent.relativePath}`);
+    }
+    recentIdentities.add(recent.pathIdentity);
+    if (state.pathIndex.has(recent.pathIdentity)) {
+      issues.push(`open tab remains in recently closed: ${recent.relativePath}`);
+    }
+  }
+  if (
+    !Number.isSafeInteger(state.nextIncarnation) ||
+    state.nextIncarnation < 1
+  ) {
+    issues.push("next tab incarnation must be a positive integer");
   }
   if (
     state.persistedRevision < 0 ||
@@ -205,16 +268,16 @@ export function validateWorkspaceTabCollection(
 
 function openTab(
   state: WorkspaceTabCollection,
-  tab: WorkspaceTabDescriptor,
+  request: WorkspaceTabOpenRequest,
 ): WorkspaceTabCollection {
-  if (tab.workspaceId !== state.workspaceId) {
+  if (request.workspaceId !== state.workspaceId) {
     throw new Error("Cannot open a tab from another workspace");
   }
-  const existingId = state.pathIndex.get(tab.relativePath);
+  const existingId = state.pathIndex.get(request.path.identity);
   if (existingId) {
-    const activated = activateTab(state, existingId, tab.lastActivatedAt);
+    const activated = activateTab(state, existingId, request.lastActivatedAt);
     const recentlyClosed = activated.recentlyClosed.filter(
-      (candidate) => candidate.relativePath !== tab.relativePath,
+      (candidate) => candidate.pathIdentity !== request.path.identity,
     );
     return recentlyClosed.length === activated.recentlyClosed.length
       ? activated
@@ -222,20 +285,29 @@ function openTab(
         ? changed(state, { recentlyClosed })
         : { ...activated, recentlyClosed };
   }
-  if (state.tabsById.has(tab.tabId)) {
-    throw new Error(`Workspace tab id already exists: ${tab.tabId}`);
+  if (state.tabsById.has(request.tabId)) {
+    throw new Error(`Workspace tab id already exists: ${request.tabId}`);
   }
+  if (
+    !Number.isSafeInteger(state.nextIncarnation) ||
+    state.nextIncarnation < 1 ||
+    state.nextIncarnation >= Number.MAX_SAFE_INTEGER
+  ) {
+    throw new Error("Workspace tab incarnation sequence is exhausted");
+  }
+  const tab = createWorkspaceTabDescriptor(request, state.nextIncarnation);
   const tabsById = new Map(state.tabsById);
   const pathIndex = new Map(state.pathIndex);
   tabsById.set(tab.tabId, tab);
-  pathIndex.set(tab.relativePath, tab.tabId);
+  pathIndex.set(tab.pathIdentity, tab.tabId);
   return changed(state, {
     orderedTabIds: [...state.orderedTabIds, tab.tabId],
     activeTabId: tab.tabId,
     tabsById,
     pathIndex,
+    nextIncarnation: state.nextIncarnation + 1,
     recentlyClosed: state.recentlyClosed.filter(
-      (candidate) => candidate.relativePath !== tab.relativePath,
+      (candidate) => candidate.pathIdentity !== tab.pathIdentity,
     ),
   });
 }
@@ -261,10 +333,17 @@ function activateTab(
 function updateLoadState(
   state: WorkspaceTabCollection,
   tabId: WorkspaceTabId,
+  incarnation: number,
   loadState: WorkspaceTabLoadState,
 ): WorkspaceTabCollection {
   const tab = state.tabsById.get(tabId);
-  if (!tab || loadState.generation <= tab.loadState.generation) return state;
+  if (
+    !tab ||
+    tab.incarnation !== incarnation ||
+    loadState.generation <= tab.loadState.generation
+  ) {
+    return state;
+  }
   const tabsById = new Map(state.tabsById);
   tabsById.set(tabId, { ...tab, loadState });
   return changed(state, { tabsById });
@@ -273,6 +352,7 @@ function updateLoadState(
 function resolveLoadState(
   state: WorkspaceTabCollection,
   tabId: WorkspaceTabId,
+  incarnation: number,
   generation: number,
   outcome: Exclude<
     WorkspaceTabLoadState,
@@ -282,6 +362,7 @@ function resolveLoadState(
   const tab = state.tabsById.get(tabId);
   if (
     !tab ||
+    tab.incarnation !== incarnation ||
     tab.loadState.kind !== "loading" ||
     tab.loadState.generation !== generation ||
     outcome.generation !== generation
@@ -326,7 +407,7 @@ function closeTab(
   const tabsById = new Map(state.tabsById);
   const pathIndex = new Map(state.pathIndex);
   tabsById.delete(tabId);
-  pathIndex.delete(tab.relativePath);
+  pathIndex.delete(tab.pathIdentity);
   const nextActive =
     state.activeTabId === tabId
       ? orderedTabIds[
@@ -336,6 +417,7 @@ function closeTab(
   const closed: RecentlyClosedWorkspaceTab = {
     workspaceId: tab.workspaceId,
     relativePath: tab.relativePath,
+    pathIdentity: tab.pathIdentity,
     displayName: tab.displayName,
     parentHint: tab.parentHint,
     view,
@@ -344,7 +426,7 @@ function closeTab(
   const recentlyClosed = [
     closed,
     ...state.recentlyClosed.filter(
-      (candidate) => candidate.relativePath !== tab.relativePath,
+      (candidate) => candidate.pathIdentity !== tab.pathIdentity,
     ),
   ].slice(0, RECENTLY_CLOSED_TAB_LIMIT);
   return changed(state, {
@@ -358,24 +440,24 @@ function closeTab(
 
 function restoreClosedTab(
   state: WorkspaceTabCollection,
-  relativePath: WorkspaceRelativePath,
+  pathIdentity: WorkspaceTabPathIdentity,
   tabId: WorkspaceTabId,
   activatedAt: number,
 ): WorkspaceTabCollection {
   const closed = state.recentlyClosed.find(
-    (candidate) => candidate.relativePath === relativePath,
+    (candidate) => candidate.pathIdentity === pathIdentity,
   );
   if (!closed) return state;
-  return openTab(
-    state,
-    createWorkspaceTabDescriptor({
-      tabId,
-      workspaceId: state.workspaceId,
-      relativePath,
-      restoredView: closed.view,
-      lastActivatedAt: activatedAt,
-    }),
-  );
+  return openTab(state, {
+    tabId,
+    workspaceId: state.workspaceId,
+    path: {
+      relativePath: closed.relativePath,
+      identity: closed.pathIdentity,
+    },
+    restoredView: closed.view,
+    lastActivatedAt: activatedAt,
+  });
 }
 
 function markPersisted(

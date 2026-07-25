@@ -15,12 +15,12 @@
 - T1 已建立并验证技术基线：Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以当前清单和锁文件为准。
 - Markdown 内容事实源始终是用户授权目录中的真实 `.md` 文件；首版不建立云端账号、在线协作、插件市场或私有内容数据库。
 - 第一阶段 T1～T17 已建立并验证系统选择器、最近记录、根目录决策、渐进文件树、文件 CRUD/删除/定位、窄窗目录抽屉、多窗口协调和隔离 P1/P2 桌面测试等底座。第二阶段 T18～T34 又建立单一 `DocumentSession`、两种编辑 adapter、自动/手动保存与窗口结算、恢复/冲突/另存、受控图片链路、目录移动风险提示、原生编辑菜单、固定主操作工具栏和单一保存/路径状态栏。第三阶段分支 `codex/plainroot-stage-3` 的 T35 已建立纯页签集合模型、公共状态投影和轻量性能门禁；P1 尚未消费多页签，T36 及后续任务仍未实施。当前计划见 `agent-works/markdown-editor-desktop/stage-3-tab-window-lifecycle/plan.md`。
-- 当前 HEAD 的非桌面门禁和 9/9 隔离桌面 E2E 已在 macOS/Windows runner 通过。系统 IME、峰值内存、原生系统输入以及 Windows 选择器、回收站、Explorer、菜单和辅助技术仍无完整人工证据；当前完成状态不得表述为多页签、大纲、工作区搜索、分页阅读、主题工作室或完整产品完成。
+- 第二阶段基线提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 的非桌面门禁和 9/9 隔离桌面 E2E 已在 macOS/Windows runner 通过；第三阶段 T35 当前仅取得 macOS 本地非桌面证据，尚未推送或取得远端 CI。系统 IME、峰值内存、原生系统输入以及 Windows 选择器、回收站、Explorer、菜单和辅助技术仍无完整人工证据；当前完成状态不得表述为多页签、大纲、工作区搜索、分页阅读、主题工作室或完整产品完成。
 
 ## 当前与目标代码边界
 
 - `agent-works/markdown-editor-desktop/`：本产品的需求、计划、原型和后续开发留痕；同一产品能力继续复用该目录或其语义明确的阶段子目录。
-- `src/`、`src-tauri/`：已建立 P1/P2、共享状态/弹层/焦点组件、工作区树与路径工具、单文档 `DocumentSession`、两种编辑 adapter、保存控制器、恢复/冲突/另存组件、图片资源链、目录移动风险检查、固定主操作工具栏、单一保存/路径状态栏和每窗口原生编辑菜单状态。`src/features/tabs/` 已提供不含正文/history 的轻量页签描述、纯 reducer、活动 runtime 投影和状态/性能测试，但尚无生产页面、仓储或 IPC 消费者；当前 P1 仍是单文档，不得宣称多页签已可用。
+- `src/`、`src-tauri/`：已建立 P1/P2、共享状态/弹层/焦点组件、工作区树与路径工具、单文档 `DocumentSession`、两种编辑 adapter、保存控制器、恢复/冲突/另存组件、图片资源链、目录移动风险检查、固定主操作工具栏、单一保存/路径状态栏和每窗口原生编辑菜单状态。`src/features/tabs/` 已提供不含正文/history 的轻量页签描述、Rust 规范化路径与不透明平台路径身份边界、不可复用 incarnation、纯 reducer、活动 runtime 投影和轻量模型门禁，但尚无生产页面、仓储或 IPC 消费者；真实 adapter 单挂载与 heap/RSS 门禁由 T37 承接，当前 P1 仍是单文档，不得宣称多页签已可用。
 - `tests/`：已建立脱敏工作区 fixture、Node 临时目录工厂和隔离的 P1/P2 Tauri E2E；桌面套件在每次运行时复制独立临时工作区，业务流程不靠重试掩盖确定性失败。`.github/workflows/ci.yml` 已在提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 上跑通 macOS/Windows 的 9 条桌面套件、非桌面门禁、未签名生产构建和 artifact 上传。自动化证据不替代 Windows 原生系统交互的人工验收。
 - 前端只负责视图、用户意图和可观察状态；不得直接拼接任意绝对路径执行磁盘写操作。
 - Rust 命令层集中负责授权根、路径规范化、越界检查、文件扫描与 CRUD、安全写入、回收站和窗口协调。
@@ -67,10 +67,10 @@
 
 ## 命令与验证状态
 
-- 2026-07-25 已在 macOS arm64 实际验证 T35 本地基线：180 个 Rust 测试通过（另 1 项手动性能探针忽略）、188 个 Vitest、30 个 Node 独立回归、前端生产构建和许可证 727/508/0。页签专项 12/12 通过；100 个轻量页签打开/索引和切换性能探针通过。T35 没有可见页面或 IPC 消费者，因此未重跑桌面 E2E，远端 9/9 双平台证据仍只覆盖第二阶段代码。
+- 2026-07-25 已在 macOS arm64 实际验证 T35 本地基线：180 个 Rust 测试通过（另 1 项手动性能探针忽略）、198 个 Vitest、30 个 Node 独立回归、前端生产构建、Rust fmt/全 feature Clippy 和许可证 727/508/0。页签专项 22/22 通过；100 个轻量页签打开/索引和切换 benchmark 仅作为本机报告，不是 adapter/heap 门禁。T35 没有可见页面或 IPC 消费者，因此未重跑桌面 E2E，远端 9/9 双平台证据仍只覆盖第二阶段代码。
 - `pnpm test:e2e` 每次使用独立临时状态目录与临时复制工作区，真实 macOS Tauri/WebKit 9/9 通过：P2 IPC、1100/740 px 启动页布局与入口焦点、P1 工作区打开及 1100/1050/820/740 px 编辑 chrome、排版/源码编辑、WebView 文件输入到 Rust 图片上传、保存重开、外部修改内容安全、恢复仓储、显式恢复和含图片目录移动前的风险确认/取消。默认生产前端产物和 release 二进制确认不含 WDIO、fixture 或 E2E 命令。T17 的生产 `.app` 原生多窗口、Finder、系统废纸篓、监听和第二实例人工证据仍有效；这些 macOS 证据不替代 Windows 原生人工验收。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。T16 已在 GitHub `windows-latest` 上验证锁定的 Node/Rust 工具链、Windows 编译、测试、WebView2 E2E 和未签名生产构建；原生系统交互仍保留人工未验证状态。
-- 当前自动化测试在既有底座、编辑器、恢复/冲突/资源、菜单与页签模型链路上共 180 个 Rust 测试通过（另 1 项手动性能探针忽略）、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、188 个 React UI/状态/编辑器/页签测试、1 个 fixture 测试、4 个许可证策略测试和 9 个桌面 E2E。`pnpm test` 统一执行 Node、Vitest 与无桌面 feature 的 Rust 服务门禁；`test:tabs` 与 `test:tabs:performance` 可单独定位页签模型。GitHub Actions run `30082725332` 已在 macOS/Windows 完整通过第二阶段的 9 条桌面门禁、生产构建和 artifact 上传，尚未覆盖 T35 本地提交。许可证扫描为 727 个 Node 包、508 个 Rust 包、0 个阻断项。Windows 原生系统 UI 仍未人工验证。
+- 当前自动化测试在既有底座、编辑器、恢复/冲突/资源、菜单与页签模型链路上共 180 个 Rust 测试通过（另 1 项手动性能探针忽略）、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、198 个 React UI/状态/编辑器/页签测试、1 个 fixture 测试、4 个许可证策略测试和 9 个桌面 E2E。`pnpm test` 统一执行 Node、Vitest 与无桌面 feature 的 Rust 服务门禁；`test:tabs` 是可失败页签模型门禁，`test:tabs:performance` 仅输出本机 benchmark。GitHub Actions run `30082725332` 已在 macOS/Windows 完整通过第二阶段的 9 条桌面门禁、生产构建和 artifact 上传，尚未覆盖 T35 本地提交。许可证扫描为 727 个 Node 包、508 个 Rust 包、0 个阻断项。Windows 原生系统 UI 仍未人工验证。
 
 ## 文档、协作与 Git
 

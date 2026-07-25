@@ -20,6 +20,10 @@ import type {
 } from "../editor/editorAdapter";
 import type { DocumentSaveController } from "../editor/save/DocumentSaveController";
 import { parentPath } from "../workbench/workspacePath";
+import type {
+  WorkspaceTabPath,
+  WorkspaceTabPathIdentity,
+} from "./tabPath";
 
 export type WorkspaceTabId = string;
 
@@ -59,8 +63,10 @@ export interface WorkspaceTabViewState {
 
 export interface WorkspaceTabDescriptor {
   tabId: WorkspaceTabId;
+  incarnation: number;
   workspaceId: WorkspaceId;
   relativePath: WorkspaceRelativePath;
+  pathIdentity: WorkspaceTabPathIdentity;
   displayName: string;
   parentHint: WorkspaceRelativePath | null;
   loadState: WorkspaceTabLoadState;
@@ -74,6 +80,7 @@ export interface WorkspaceTabDescriptor {
  * here, so a collection can expose at most one mounted editor projection.
  */
 export interface WorkspaceTabRuntime {
+  incarnation: number;
   session: DocumentSessionState;
   saveController: DocumentSaveController | null;
 }
@@ -86,6 +93,7 @@ export interface WorkspaceTabProjection {
 export interface RecentlyClosedWorkspaceTab {
   workspaceId: WorkspaceId;
   relativePath: WorkspaceRelativePath;
+  pathIdentity: WorkspaceTabPathIdentity;
   displayName: string;
   parentHint: WorkspaceRelativePath | null;
   view: WorkspaceTabViewState | null;
@@ -103,29 +111,36 @@ export interface WorkspaceTabStatus {
   presentation: AsyncStatePresentation;
 }
 
-export function createWorkspaceTabDescriptor(input: {
+export interface WorkspaceTabOpenRequest {
   tabId: WorkspaceTabId;
   workspaceId: WorkspaceId;
-  relativePath: WorkspaceRelativePath;
+  path: WorkspaceTabPath;
   lastActivatedAt: number;
   restoredView?: WorkspaceTabViewState | null;
-}): WorkspaceTabDescriptor {
+}
+
+export function createWorkspaceTabDescriptor(
+  input: WorkspaceTabOpenRequest,
+  incarnation: number,
+): WorkspaceTabDescriptor {
   if (!input.tabId.trim()) {
     throw new Error("Workspace tab id must not be empty");
   }
-  if (!input.relativePath.trim()) {
-    throw new Error("Workspace tab path must not be empty");
+  if (!Number.isSafeInteger(incarnation) || incarnation < 1) {
+    throw new Error("Workspace tab incarnation must be a positive integer");
   }
-  const separator = input.relativePath.lastIndexOf("/");
+  const separator = input.path.relativePath.lastIndexOf("/");
   return {
     tabId: input.tabId,
+    incarnation,
     workspaceId: input.workspaceId,
-    relativePath: input.relativePath,
+    relativePath: input.path.relativePath,
+    pathIdentity: input.path.identity,
     displayName:
       separator < 0
-        ? input.relativePath
-        : input.relativePath.slice(separator + 1),
-    parentHint: parentPath(input.relativePath),
+        ? input.path.relativePath
+        : input.path.relativePath.slice(separator + 1),
+    parentHint: parentPath(input.path.relativePath),
     loadState: { kind: "idle", generation: 0 },
     restoredView: input.restoredView ?? null,
     lastActivatedAt: input.lastActivatedAt,
@@ -150,7 +165,7 @@ export function projectWorkspaceTabStatus(
 function loadStates(loadState: WorkspaceTabLoadState): AsyncState[] {
   switch (loadState.kind) {
     case "idle":
-      return ["empty"];
+      return ["unloaded"];
     case "loading":
       return ["loading"];
     case "ready":

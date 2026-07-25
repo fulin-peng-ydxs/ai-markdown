@@ -73,10 +73,11 @@ flowchart LR
 
 `src/features/tabs/` 已建立第三阶段的纯页签状态边界：
 
-- `WorkspaceTabDescriptor` 只保存窗口内 `tabId`、工作区相对路径、派生显示信息、加载状态、视图恢复元数据和最后活动时间，不保存 Markdown、history 或保存控制器。
-- `DocumentSession` 与 `DocumentSaveController` 位于独立 runtime map；集合只暴露一个活动页签投影，editor adapter 不进入页签 DTO 或恢复描述。
-- reducer 使用有序 ID、唯一路径索引、活动项、最近关闭和 revision 表达唯一打开、聚焦、排序、关闭/恢复、陈旧 load generation 拒绝和待持久化状态，并提供不变量校验。
-- 页签主状态与 `AsyncStatePanel` 共同消费 `src/components/asyncState.ts`，遵循 DESIGN 的统一优先级与 assertive/polite 契约，不建立私有状态顺序。
+- `WorkspaceTabDescriptor` 只保存窗口内 `tabId`、不可复用的 incarnation、Rust 规范化工作区相对路径及不透明平台路径身份、派生显示信息、加载状态、视图恢复元数据和最后活动时间，不保存 Markdown、history 或保存控制器。前端不得自行 lower-case 或把反斜杠转换成索引身份。
+- `DocumentSession` 与 `DocumentSaveController` 位于独立 runtime map；runtime 必须带与 descriptor 相同的 incarnation，集合只暴露一个匹配当前 incarnation 的活动页签投影，editor adapter 不进入页签 DTO 或恢复描述。
+- reducer 使用有序 ID、平台路径身份索引、活动项、最近关闭、单调 incarnation 和 revision 表达唯一打开、聚焦、排序、关闭/恢复、陈旧 load generation/incarnation 拒绝和待持久化状态，并双向校验 map key、descriptor、顺序、路径索引、活动项和最近关闭集合。
+- 页签主状态与 `AsyncStatePanel` 共同消费 `src/components/asyncState.ts`，遵循 DESIGN 的统一优先级与 assertive/polite 契约；尚未读取的惰性页签投影为 unloaded，不能误报为 empty。
+- T35 的可失败门禁只证明轻量 descriptor/runtime 引用、恢复 DTO 容量和纯 reducer 延迟；真实 Milkdown/CodeMirror 单挂载、切换生命周期与进程 heap/RSS 门禁属于 T37，且必须在 T38 可见页签开发前通过。
 - 当前 P1 仍消费单个 `DocumentSession`；页签 runtime manager、磁盘会话仓储、页签栏和全页签结算尚未接入，分别由 T36 以后任务承接。
 
 ## 4. 保存、恢复和冲突
@@ -169,7 +170,7 @@ UTF-8 BOM 与单一 LF/CRLF/CR 优先沿用原文件；mixed 或不支持编码�
 - `pnpm test:roundtrip` 使用生产 adapter 验证 CommonMark/GFM、图片、受支持 HTML 与 source-only 语料。
 - Rust 契约测试登记所有 TypeScript 导出 interface 和字符串枚举/tag，防止 Rust↔TypeScript 字段漂移。
 - `pnpm test:e2e` 使用独立 identifier、临时状态目录和每套件复制的临时工作区，当前本地 9 条真桌面用例覆盖 P1/P2、两种模式、图片、保存重开、外部修改、恢复和目录图片移动风险确认/取消。
-- 远端 GitHub Actions run `30082725332` 已在提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 上完成 macOS/Windows 双绿；该矩阵覆盖 23 个 Vitest 文件/176 项、9/9 桌面 E2E、Rust 门禁、未签名生产构建和 artifact 上传。T35 本地新增后为 24 个 Vitest 文件/188 项，尚未推送，不能沿用该远端运行宣称第三阶段双平台通过。
+- 远端 GitHub Actions run `30082725332` 已在提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 上完成 macOS/Windows 双绿；该矩阵覆盖 23 个 Vitest 文件/176 项、9/9 桌面 E2E、Rust 门禁、未签名生产构建和 artifact 上传。T35 本地整改后为 24 个 Vitest 文件/198 项，尚未推送，不能沿用该远端运行宣称第三阶段双平台通过。
 
 ## 9. 已知边界
 

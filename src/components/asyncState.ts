@@ -1,5 +1,6 @@
 export type AsyncState =
   | "ready"
+  | "unloaded"
   | "loading"
   | "empty"
   | "error"
@@ -21,6 +22,13 @@ export interface AsyncStatePresentation {
 
 const STATE_PRESENTATION: Readonly<Record<AsyncState, AsyncStatePresentation>> = {
   ready: { label: "已就绪", live: "polite", role: "status", tone: "success", priority: 10 },
+  unloaded: {
+    label: "等待打开",
+    live: "polite",
+    role: "status",
+    tone: "neutral",
+    priority: 15,
+  },
   empty: { label: "暂无内容", live: "polite", role: "status", tone: "neutral", priority: 20 },
   readonly: { label: "只读", live: "polite", role: "status", tone: "warning", priority: 40 },
   dirty: { label: "未保存", live: "polite", role: "status", tone: "warning", priority: 50 },

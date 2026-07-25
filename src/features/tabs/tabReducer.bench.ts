@@ -4,19 +4,27 @@ import {
   createWorkspaceTabCollection,
   reduceWorkspaceTabs,
 } from "./tabReducer";
-import { createWorkspaceTabDescriptor } from "./tabTypes";
+import { acceptWorkspaceTabPath } from "./tabPath";
+
+function openRequest(index: number) {
+  const relativePath = `section-${index}/note-${index}.md`;
+  return {
+    tabId: `tab-${index}`,
+    workspaceId: "workspace-performance",
+    path: acceptWorkspaceTabPath({
+      relativePath,
+      identity: `native:${relativePath}`,
+    }),
+    lastActivatedAt: index,
+  };
+}
 
 bench("open and index 100 lightweight workspace tabs", () => {
   let state = createWorkspaceTabCollection("workspace-performance");
   for (let index = 0; index < 100; index += 1) {
     state = reduceWorkspaceTabs(state, {
       type: "open",
-      tab: createWorkspaceTabDescriptor({
-        tabId: `tab-${index}`,
-        workspaceId: "workspace-performance",
-        relativePath: `section-${index}/note-${index}.md`,
-        lastActivatedAt: index,
-      }),
+      tab: openRequest(index),
     });
   }
   if (state.orderedTabIds.length !== 100) {
@@ -29,12 +37,7 @@ bench("switch among 100 lightweight workspace tabs", () => {
   for (let index = 0; index < 100; index += 1) {
     state = reduceWorkspaceTabs(state, {
       type: "open",
-      tab: createWorkspaceTabDescriptor({
-        tabId: `tab-${index}`,
-        workspaceId: "workspace-performance",
-        relativePath: `section-${index}/note-${index}.md`,
-        lastActivatedAt: index,
-      }),
+      tab: openRequest(index),
     });
   }
   const originalTabs = state.tabsById;

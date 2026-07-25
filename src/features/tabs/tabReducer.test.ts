@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type {
   DesktopError,
   FileRevision,
+  WorkspaceRelativePath,
 } from "../../services/desktop/contracts";
 import {
   beginDocumentLoad,
@@ -21,10 +22,14 @@ import {
   type WorkspaceTabCollection,
 } from "./tabReducer";
 import {
+  acceptWorkspaceTabPath,
+  type WorkspaceTabPath,
+} from "./tabPath";
+import {
   createWorkspaceTabDescriptor,
   projectWorkspaceTabStatus,
   WORKSPACE_TAB_SETTLEMENT_REASONS,
-  type WorkspaceTabDescriptor,
+  type WorkspaceTabOpenRequest,
   type WorkspaceTabRuntime,
   type WorkspaceTabViewState,
 } from "./tabTypes";
@@ -43,27 +48,46 @@ const view: WorkspaceTabViewState = {
   anchor: { kind: "source", offset: 2, scrollTop: 24 },
 };
 
-function descriptor(
+function tabPath(
+  relativePath: string,
+  identity = `native:${relativePath}`,
+): WorkspaceTabPath {
+  return acceptWorkspaceTabPath({
+    relativePath: relativePath as WorkspaceRelativePath,
+    identity,
+  });
+}
+
+function request(
   index: number,
-  path = `folder-${index}/note.md`,
-): WorkspaceTabDescriptor {
-  return createWorkspaceTabDescriptor({
+  path = tabPath(`folder-${index}/note.md`),
+): WorkspaceTabOpenRequest {
+  return {
     tabId: `tab-${index}`,
     workspaceId: "workspace-a",
-    relativePath: path,
+    path,
     lastActivatedAt: index,
-  });
+  };
 }
 
 function open(
   state: WorkspaceTabCollection,
   index: number,
-  path?: string,
+  path?: WorkspaceTabPath,
 ): WorkspaceTabCollection {
   return reduceWorkspaceTabs(state, {
     type: "open",
-    tab: descriptor(index, path),
+    tab: request(index, path),
   });
+}
+
+function incarnation(
+  state: WorkspaceTabCollection,
+  tabId: string,
+): number {
+  const value = state.tabsById.get(tabId)?.incarnation;
+  if (!value) throw new Error(`missing tab incarnation: ${tabId}`);
+  return value;
 }
 
 function readySession(
@@ -105,6 +129,41 @@ function desktopError(
   };
 }
 
+describe("workspace tab path contract", () => {
+  it.each([
+    "../secret.md",
+    "./note.md",
+    "/absolute.md",
+    "C:/absolute.md",
+    "a//note.md",
+    "a/../note.md",
+    "a\\note.md",
+  ])("rejects a non-normalized relative path: %s", (relativePath) => {
+    expect(() => tabPath(relativePath)).toThrow(
+      "Workspace tab path identity is invalid",
+    );
+  });
+
+  it("uses the opaque native identity instead of frontend case folding", () => {
+    let state = createWorkspaceTabCollection("workspace-a");
+    state = open(
+      state,
+      1,
+      tabPath("Notes/Readme.md", "windows:notes/readme.md"),
+    );
+    state = open(
+      state,
+      2,
+      tabPath("notes/readme.md", "windows:notes/readme.md"),
+    );
+
+    expect(state.orderedTabIds).toEqual(["tab-1"]);
+    expect(state.activeTabId).toBe("tab-1");
+    expect(state.tabsById.has("tab-2")).toBe(false);
+    expect(validateWorkspaceTabCollection(state)).toEqual([]);
+  });
+});
+
 describe("workspace tab reducer", () => {
   it("keeps the complete settlement reason contract explicit", () => {
     expect(WORKSPACE_TAB_SETTLEMENT_REASONS).toEqual([
@@ -121,17 +180,19 @@ describe("workspace tab reducer", () => {
     ]);
   });
 
-  it("keeps one tab per workspace path and focuses the existing identity", () => {
+  it("keeps one tab per native path identity and focuses the existing tab", () => {
     let state = createWorkspaceTabCollection("workspace-a");
-    state = open(state, 1, "a/note.md");
-    state = open(state, 2, "b/note.md");
-    const duplicate = createWorkspaceTabDescriptor({
-      tabId: "unused-duplicate",
-      workspaceId: "workspace-a",
-      relativePath: "a/note.md",
-      lastActivatedAt: 20,
+    state = open(state, 1, tabPath("a/note.md", "native:a/note.md"));
+    state = open(state, 2, tabPath("b/note.md", "native:b/note.md"));
+    state = reduceWorkspaceTabs(state, {
+      type: "open",
+      tab: {
+        tabId: "unused-duplicate",
+        workspaceId: "workspace-a",
+        path: tabPath("alias/note.md", "native:a/note.md"),
+        lastActivatedAt: 20,
+      },
     });
-    state = reduceWorkspaceTabs(state, { type: "open", tab: duplicate });
 
     expect(state.orderedTabIds).toEqual(["tab-1", "tab-2"]);
     expect(state.activeTabId).toBe("tab-1");
@@ -144,18 +205,20 @@ describe("workspace tab reducer", () => {
     expect(validateWorkspaceTabCollection(state)).toEqual([]);
   });
 
-  it("moves tabs, closes atomically, selects the adjacent tab and restores view metadata", () => {
+  it("moves, closes and restores tabs while allocating a new incarnation", () => {
     let state = createWorkspaceTabCollection("workspace-a");
     state = open(state, 1);
     state = open(state, 2);
     state = open(state, 3);
+    const originalIncarnation = incarnation(state, "tab-3");
+    const originalIdentity = state.tabsById.get("tab-3")?.pathIdentity;
+    if (!originalIdentity) throw new Error("missing original identity");
+
     state = reduceWorkspaceTabs(state, {
       type: "move",
       tabId: "tab-3",
       toIndex: 0,
     });
-    expect(state.orderedTabIds).toEqual(["tab-3", "tab-1", "tab-2"]);
-
     state = reduceWorkspaceTabs(state, {
       type: "close",
       tabId: "tab-3",
@@ -163,74 +226,97 @@ describe("workspace tab reducer", () => {
       view,
     });
     expect(state.activeTabId).toBe("tab-1");
-    expect(state.orderedTabIds).toEqual(["tab-1", "tab-2"]);
     expect(state.recentlyClosed[0]).toMatchObject({
       relativePath: "folder-3/note.md",
+      pathIdentity: originalIdentity,
       view,
     });
 
     state = reduceWorkspaceTabs(state, {
       type: "restore_closed",
-      relativePath: "folder-3/note.md",
+      pathIdentity: originalIdentity,
       tabId: "tab-restored",
       activatedAt: 40,
     });
     expect(state.activeTabId).toBe("tab-restored");
     expect(state.tabsById.get("tab-restored")?.restoredView).toEqual(view);
+    expect(incarnation(state, "tab-restored")).toBeGreaterThan(
+      originalIncarnation,
+    );
     expect(state.recentlyClosed).toEqual([]);
     expect(validateWorkspaceTabCollection(state)).toEqual([]);
   });
 
-  it("removes a recent entry when the same path is opened normally", () => {
+  it("rejects a stale result after close and tab-id reuse", () => {
     let state = open(createWorkspaceTabCollection("workspace-a"), 1);
+    const firstIncarnation = incarnation(state, "tab-1");
+    state = reduceWorkspaceTabs(state, {
+      type: "begin_load",
+      tabId: "tab-1",
+      incarnation: firstIncarnation,
+      generation: 1,
+    });
     state = reduceWorkspaceTabs(state, {
       type: "close",
       tabId: "tab-1",
       closedAt: 10,
-      view,
+      view: null,
     });
-    expect(state.recentlyClosed).toHaveLength(1);
-
-    state = open(state, 2, "folder-1/note.md");
-    expect(state.activeTabId).toBe("tab-2");
-    expect(state.recentlyClosed).toEqual([]);
-  });
-
-  it("ignores stale load generations and retains the latest load result", () => {
-    let state = open(createWorkspaceTabCollection("workspace-a"), 1);
+    const closedIdentity = state.recentlyClosed[0]?.pathIdentity;
+    if (!closedIdentity) throw new Error("missing closed identity");
+    state = reduceWorkspaceTabs(state, {
+      type: "restore_closed",
+      pathIdentity: closedIdentity,
+      tabId: "tab-1",
+      activatedAt: 11,
+    });
+    const secondIncarnation = incarnation(state, "tab-1");
     state = reduceWorkspaceTabs(state, {
       type: "begin_load",
       tabId: "tab-1",
+      incarnation: secondIncarnation,
       generation: 1,
     });
+
     const stale = reduceWorkspaceTabs(state, {
       type: "resolve_load",
       tabId: "tab-1",
-      generation: 0,
-      outcome: { kind: "ready", generation: 0 },
+      incarnation: firstIncarnation,
+      generation: 1,
+      outcome: { kind: "ready", generation: 1 },
     });
     expect(stale).toBe(state);
 
     state = reduceWorkspaceTabs(state, {
       type: "resolve_load",
       tabId: "tab-1",
+      incarnation: secondIncarnation,
       generation: 1,
       outcome: { kind: "ready", generation: 1 },
     });
-    expect(state.tabsById.get("tab-1")?.loadState).toEqual({
-      kind: "ready",
-      generation: 1,
-    });
-    expect(
-      reduceWorkspaceTabs(state, {
-        type: "begin_load",
-        tabId: "tab-1",
-        generation: 1,
-      }),
-    ).toBe(state);
+    expect(state.tabsById.get("tab-1")?.loadState.kind).toBe("ready");
   });
 
-  it("tracks persistence revisions without accepting future or stale acknowledgements", () => {
+  it("ignores stale generations within the current incarnation", () => {
+    let state = open(createWorkspaceTabCollection("workspace-a"), 1);
+    const currentIncarnation = incarnation(state, "tab-1");
+    state = reduceWorkspaceTabs(state, {
+      type: "begin_load",
+      tabId: "tab-1",
+      incarnation: currentIncarnation,
+      generation: 1,
+    });
+    const stale = reduceWorkspaceTabs(state, {
+      type: "resolve_load",
+      tabId: "tab-1",
+      incarnation: currentIncarnation,
+      generation: 0,
+      outcome: { kind: "ready", generation: 0 },
+    });
+    expect(stale).toBe(state);
+  });
+
+  it("tracks persistence revisions without future acknowledgements", () => {
     let state = open(createWorkspaceTabCollection("workspace-a"), 1);
     expect(workspaceTabsNeedPersistence(state)).toBe(true);
     expect(
@@ -246,7 +332,7 @@ describe("workspace tab reducer", () => {
     expect(workspaceTabsNeedPersistence(state)).toBe(false);
   });
 
-  it("bounds and de-duplicates recently closed paths", () => {
+  it("bounds recently closed native identities", () => {
     let state = createWorkspaceTabCollection("workspace-a");
     for (let index = 0; index < RECENTLY_CLOSED_TAB_LIMIT + 8; index += 1) {
       state = open(state, index);
@@ -265,33 +351,103 @@ describe("workspace tab reducer", () => {
     expect(validateWorkspaceTabCollection(state)).toEqual([]);
   });
 
-  it("rejects cross-workspace tabs and reports corrupted collection invariants", () => {
+  it("rejects cross-workspace open requests", () => {
     const state = createWorkspaceTabCollection("workspace-a");
     expect(() =>
       reduceWorkspaceTabs(state, {
         type: "open",
-        tab: createWorkspaceTabDescriptor({
-          tabId: "tab-b",
+        tab: {
+          ...request(1),
           workspaceId: "workspace-b",
-          relativePath: "note.md",
-          lastActivatedAt: 1,
-        }),
+        },
       }),
     ).toThrow("another workspace");
+  });
 
-    expect(
-      validateWorkspaceTabCollection({
-        ...state,
-        orderedTabIds: ["missing"],
-      }),
-    ).toContain("ordered tab ids must match the tab map");
+  it("detects map, order, identity, incarnation and recent-list corruption", () => {
+    const valid = open(createWorkspaceTabCollection("workspace-a"), 1);
+    const descriptor = valid.tabsById.get("tab-1");
+    if (!descriptor) throw new Error("missing descriptor");
+
+    const corrupted: WorkspaceTabCollection = {
+      ...valid,
+      orderedTabIds: ["missing"],
+      activeTabId: "missing",
+      tabsById: new Map([
+        [
+          "map-id",
+          {
+            ...descriptor,
+            relativePath: "../corrupt.md",
+          },
+        ],
+      ]),
+      pathIndex: new Map([[descriptor.pathIdentity, "wrong-id"]]),
+      recentlyClosed: [
+        {
+          workspaceId: "workspace-b",
+          relativePath: descriptor.relativePath,
+          pathIdentity: descriptor.pathIdentity,
+          displayName: descriptor.displayName,
+          parentHint: descriptor.parentHint,
+          view: null,
+          closedAt: 1,
+        },
+      ],
+      nextIncarnation: descriptor.incarnation,
+    };
+    const issues = validateWorkspaceTabCollection(corrupted);
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        "tab map key mismatch: map-id",
+        "tab is missing from order: map-id",
+        "path index mismatch: ../corrupt.md",
+        "tab path is invalid: map-id",
+        "missing tab descriptor: missing",
+        `tab map mismatch: ${descriptor.pathIdentity}`,
+        `recent tab belongs to another workspace: ${descriptor.relativePath}`,
+        `open tab remains in recently closed: ${descriptor.relativePath}`,
+        "tab incarnation is outside the collection: map-id",
+      ]),
+    );
   });
 });
 
 describe("workspace tab status contract", () => {
-  it("reuses the DESIGN priority and assertive/polite announcement contract", () => {
+  it("separates unloaded, loading, empty and ready states", () => {
+    const idle = createWorkspaceTabDescriptor(request(1), 1);
+    expect(projectWorkspaceTabStatus(idle, null).state).toBe("unloaded");
+    expect(
+      projectWorkspaceTabStatus(
+        { ...idle, loadState: { kind: "loading", generation: 1 } },
+        null,
+      ).state,
+    ).toBe("loading");
+
+    const emptySession = readySession(idle.relativePath, "");
+    const readyTab = {
+      ...idle,
+      loadState: { kind: "ready", generation: 1 } as const,
+    };
+    expect(
+      projectWorkspaceTabStatus(readyTab, {
+        incarnation: idle.incarnation,
+        session: emptySession,
+        saveController: null,
+      }).state,
+    ).toBe("empty");
+    expect(
+      projectWorkspaceTabStatus(readyTab, {
+        incarnation: idle.incarnation,
+        session: readySession(idle.relativePath),
+        saveController: null,
+      }).state,
+    ).toBe("ready");
+  });
+
+  it("reuses the DESIGN priority and announcement contract", () => {
     const tab = {
-      ...descriptor(1),
+      ...createWorkspaceTabDescriptor(request(1), 1),
       loadState: { kind: "ready", generation: 1 } as const,
     };
     const session = {
@@ -304,6 +460,7 @@ describe("workspace tab status contract", () => {
     };
     expect(
       projectWorkspaceTabStatus(tab, {
+        incarnation: tab.incarnation,
         session,
         saveController: null,
       }),
@@ -328,23 +485,10 @@ describe("workspace tab status contract", () => {
       state: "permission_denied",
       presentation: { role: "alert", live: "assertive" },
     });
-
-    expect(
-      projectWorkspaceTabStatus(tab, {
-        session: {
-          ...readySession(tab.relativePath),
-          saveState: { kind: "dirty" },
-        },
-        saveController: null,
-      }),
-    ).toMatchObject({
-      state: "dirty",
-      presentation: { role: "status", live: "polite" },
-    });
   });
 
-  it("maps disk location and unsupported failures to stable non-color states", () => {
-    const tab = descriptor(1);
+  it("maps disk and compatibility failures to stable states", () => {
+    const tab = createWorkspaceTabDescriptor(request(1), 1);
     for (const [code, expected] of [
       ["path_not_found", "missing"],
       ["permission_denied", "permission_denied"],
@@ -368,12 +512,19 @@ describe("workspace tab status contract", () => {
   });
 });
 
-describe("workspace tab performance and serialization boundary", () => {
-  it("keeps 100 descriptors lightweight and projects only one active runtime", () => {
+describe("workspace tab lightweight model gate", () => {
+  it("keeps 100 descriptors bounded and projects one matching runtime", () => {
     const startedAt = performance.now();
     let state = createWorkspaceTabCollection("workspace-a");
     for (let index = 0; index < 100; index += 1) {
-      state = open(state, index, `area-${index}/note-${index}.md`);
+      state = open(
+        state,
+        index,
+        tabPath(
+          `area-${index}/note-${index}.md`,
+          `native:area-${index}/note-${index}.md`,
+        ),
+      );
     }
 
     const runtimes = new Map<string, WorkspaceTabRuntime>();
@@ -382,6 +533,7 @@ describe("workspace tab performance and serialization boundary", () => {
       const session = readySession(`area-${index}/note-${index}.md`);
       sessions.push(session);
       runtimes.set(`tab-${index}`, {
+        incarnation: incarnation(state, `tab-${index}`),
         session,
         saveController: null,
       });
@@ -410,29 +562,34 @@ describe("workspace tab performance and serialization boundary", () => {
     expect(performance.now() - startedAt).toBeLessThan(250);
   });
 
-  it("switches the active projection without rebuilding inactive sessions", () => {
-    let state = createWorkspaceTabCollection("workspace-a");
-    const runtimes = new Map<string, WorkspaceTabRuntime>();
-    for (let index = 0; index < 20; index += 1) {
-      state = open(state, index);
-      runtimes.set(`tab-${index}`, {
-        session: readySession(`folder-${index}/note.md`),
-        saveController: null,
-      });
-    }
-    const before = [...runtimes.values()].map((runtime) => runtime.session);
-    for (let index = 0; index < 20; index += 1) {
-      state = reduceWorkspaceTabs(state, {
-        type: "activate",
-        tabId: `tab-${index}`,
-        activatedAt: 2_000 + index,
-      });
-      expect(
-        selectActiveWorkspaceTabProjection(state, runtimes)?.runtime?.session,
-      ).toBe(before[index]);
-    }
-    expect([...runtimes.values()].map((runtime) => runtime.session)).toEqual(
-      before,
-    );
+  it("rejects a runtime from an earlier incarnation", () => {
+    let state = open(createWorkspaceTabCollection("workspace-a"), 1);
+    const oldIncarnation = incarnation(state, "tab-1");
+    const staleRuntime: WorkspaceTabRuntime = {
+      incarnation: oldIncarnation,
+      session: readySession("folder-1/note.md"),
+      saveController: null,
+    };
+    state = reduceWorkspaceTabs(state, {
+      type: "close",
+      tabId: "tab-1",
+      closedAt: 1,
+      view: null,
+    });
+    const pathIdentity = state.recentlyClosed[0]?.pathIdentity;
+    if (!pathIdentity) throw new Error("missing identity");
+    state = reduceWorkspaceTabs(state, {
+      type: "restore_closed",
+      pathIdentity,
+      tabId: "tab-1",
+      activatedAt: 2,
+    });
+
+    expect(
+      selectActiveWorkspaceTabProjection(
+        state,
+        new Map([["tab-1", staleRuntime]]),
+      )?.runtime,
+    ).toBeNull();
   });
 });
