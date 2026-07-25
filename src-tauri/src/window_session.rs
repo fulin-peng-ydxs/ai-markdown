@@ -318,7 +318,7 @@ impl WindowSessionRepository {
             app_data.join(WINDOW_SESSION_DIRECTORY_NAME),
             fault,
         ));
-        let (manifest, status) = match store.load_or_initialize_manifest() {
+        let (mut manifest, mut status) = match store.load_or_initialize_manifest() {
             Ok(WindowSessionLoadOutcome::Ready(manifest)) => {
                 (manifest, WindowSessionRepositoryStatus::Ready)
             }
@@ -334,6 +334,16 @@ impl WindowSessionRepository {
                 WindowSessionRepositoryStatus::Unavailable(error),
             ),
         };
+        if matches!(
+            status,
+            WindowSessionRepositoryStatus::Ready | WindowSessionRepositoryStatus::RecoveredCorrupt
+        ) {
+            match store.reconcile_pending_session_commit(&mut manifest) {
+                Ok(true) => status = WindowSessionRepositoryStatus::Ready,
+                Ok(false) => {}
+                Err(error) => status = WindowSessionRepositoryStatus::Unavailable(error),
+            }
+        }
         let repository = Self {
             store: Some(store),
             inner: Arc::new(Mutex::new(WindowSessionInner {
@@ -513,6 +523,12 @@ impl WindowSessionRepository {
             ));
         }
         store.write_session_bytes(&current_entry, &session_bytes)?;
+        if store.fault == WindowSessionFault::AfterSessionReplaceBeforeManifest {
+            return Err(window_session_error(
+                DesktopErrorCode::WindowSessionWriteFailed,
+                true,
+            ));
+        }
 
         let tab_count = u32::try_from(stored.tabs.len()).map_err(|_| {
             window_session_error(DesktopErrorCode::WindowSessionCapacityExceeded, false)
@@ -656,17 +672,27 @@ pub(crate) fn resolve_window_tab_session(
     canonical_root: &Path,
 ) -> WindowTabSession {
     let mut issues = Vec::new();
+    let mut resolved_identities = HashSet::new();
     let tabs = stored
         .tabs
         .into_iter()
         .filter_map(|tab| {
             match resolve_window_tab_path(&stored.workspace_id, canonical_root, &tab.relative_path)
             {
-                Ok(path) => Some(ResolvedWindowTab {
-                    path,
-                    view: tab.view,
-                    last_activated_at: tab.last_activated_at,
-                }),
+                Ok(path) if resolved_identities.insert(path.identity.clone()) => {
+                    Some(ResolvedWindowTab {
+                        path,
+                        view: tab.view,
+                        last_activated_at: tab.last_activated_at,
+                    })
+                }
+                Ok(_) => {
+                    issues.push(WindowTabSessionPathIssue {
+                        relative_path: tab.relative_path,
+                        error: window_session_corrupt(),
+                    });
+                    None
+                }
                 Err(error) => {
                     issues.push(WindowTabSessionPathIssue {
                         relative_path: tab.relative_path,
@@ -683,11 +709,20 @@ pub(crate) fn resolve_window_tab_session(
         .filter_map(|tab| {
             match resolve_window_tab_path(&stored.workspace_id, canonical_root, &tab.relative_path)
             {
-                Ok(path) => Some(ResolvedRecentlyClosedTab {
-                    path,
-                    view: tab.view,
-                    closed_at: tab.closed_at,
-                }),
+                Ok(path) if resolved_identities.insert(path.identity.clone()) => {
+                    Some(ResolvedRecentlyClosedTab {
+                        path,
+                        view: tab.view,
+                        closed_at: tab.closed_at,
+                    })
+                }
+                Ok(_) => {
+                    issues.push(WindowTabSessionPathIssue {
+                        relative_path: tab.relative_path,
+                        error: window_session_corrupt(),
+                    });
+                    None
+                }
                 Err(error) => {
                     issues.push(WindowTabSessionPathIssue {
                         relative_path: tab.relative_path,
@@ -718,6 +753,7 @@ pub(crate) fn resolve_window_tab_session(
 enum WindowSessionFault {
     None,
     BeforeSessionReplace,
+    AfterSessionReplaceBeforeManifest,
     BeforeManifestReplace,
 }
 
@@ -862,6 +898,49 @@ impl WindowSessionStore {
             &bytes,
             self.fault == WindowSessionFault::BeforeManifestReplace,
         )
+    }
+
+    fn reconcile_pending_session_commit(
+        &self,
+        manifest: &mut WindowSessionManifestV1,
+    ) -> Result<bool, DesktopError> {
+        let mut candidate = manifest.clone();
+        let mut changed = false;
+        for entry in &mut candidate.entries {
+            let Some(bytes) =
+                read_bounded_optional(&self.session_path(entry), MAX_WINDOW_SESSION_BYTES)
+                    .ok()
+                    .flatten()
+            else {
+                continue;
+            };
+            let session = match decode_session_bytes(&bytes) {
+                Ok(session) => session,
+                Err(_) => continue,
+            };
+            let Some(pending_revision) = entry.revision.checked_add(1) else {
+                continue;
+            };
+            if session.workspace_id != entry.workspace_id
+                || session.window_state_ref != entry.window_state_ref
+                || session.revision != pending_revision
+            {
+                continue;
+            }
+            entry.revision = session.revision;
+            entry.tab_count = u32::try_from(session.tabs.len()).map_err(|_| {
+                window_session_error(DesktopErrorCode::WindowSessionCapacityExceeded, false)
+            })?;
+            entry.updated_at = session.updated_at;
+            changed = true;
+        }
+        if !changed {
+            return Ok(false);
+        }
+        candidate.validate()?;
+        self.save_manifest(&candidate)?;
+        *manifest = candidate;
+        Ok(true)
     }
 
     fn session_path(&self, entry: &WindowSessionManifestEntry) -> PathBuf {
@@ -1326,7 +1405,10 @@ mod tests {
     use std::sync::{Arc, Barrier};
     use std::thread;
 
-    use crate::contract_test::{assert_interface_matches, typescript_string_constant_values};
+    use crate::contract_test::{
+        assert_interface_matches, assert_type_alias_matches_variants,
+        typescript_string_constant_values,
+    };
     use crate::error::DesktopErrorCode;
     use crate::fs::{WorkspaceId, WorkspaceRelativePath};
     use crate::test_support::TestDirectory;
@@ -1584,6 +1666,38 @@ mod tests {
     }
 
     #[test]
+    fn restart_rolls_forward_a_session_committed_before_its_manifest() {
+        let app_data = TestDirectory::create("window-session-crash-recovery");
+        let workspace_id = workspace_id("workspace-a");
+        let repository = WindowSessionRepository::initialize_at(app_data.path());
+        let summary = repository.ensure_reference(&workspace_id).unwrap();
+        repository
+            .save(&workspace_id, None, 0, snapshot())
+            .expect("baseline should save");
+        drop(repository);
+
+        let interrupted = WindowSessionRepository::initialize_with_fault(
+            app_data.path().to_path_buf(),
+            WindowSessionFault::AfterSessionReplaceBeforeManifest,
+        );
+        let mut changed = snapshot();
+        changed.updated_at = 99;
+        let error = interrupted
+            .save(&workspace_id, Some(&summary.window_state_ref), 1, changed)
+            .unwrap_err();
+        assert_eq!(error.code, DesktopErrorCode::WindowSessionWriteFailed);
+        drop(interrupted);
+
+        let recovered = WindowSessionRepository::initialize_at(app_data.path());
+        let stored = recovered
+            .stored_session(&workspace_id, Some(&summary.window_state_ref))
+            .unwrap();
+        assert_eq!(stored.revision, 2);
+        assert_eq!(stored.updated_at, 99);
+        assert_eq!(recovered.summaries().unwrap()[0].revision, 2);
+    }
+
+    #[test]
     fn unknown_versions_are_preserved_and_corrupt_sessions_are_backed_up() {
         let app_data = TestDirectory::create("window-session-version");
         let workspace_id = workspace_id("workspace-a");
@@ -1629,6 +1743,9 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), original_unknown);
 
         fs::write(&path, "{invalid").unwrap();
+        drop(repository);
+        let repository = WindowSessionRepository::initialize_at(app_data.path());
+        assert!(repository.current_error().is_none());
         let corrupt = repository.stored_session(&workspace_id, None).unwrap_err();
         assert_eq!(corrupt.code, DesktopErrorCode::WindowSessionCorrupt);
         assert!(!path.exists());
@@ -1723,6 +1840,30 @@ mod tests {
     }
 
     #[test]
+    fn failed_metadata_removal_can_be_retried_after_the_recent_record_is_gone() {
+        let app_data = TestDirectory::create("window-session-remove-retry");
+        let workspace_id = workspace_id("workspace-a");
+        let repository = WindowSessionRepository::initialize_at(app_data.path());
+        repository.ensure_reference(&workspace_id).unwrap();
+        repository.save(&workspace_id, None, 0, snapshot()).unwrap();
+        drop(repository);
+
+        let failing = WindowSessionRepository::initialize_with_fault(
+            app_data.path().to_path_buf(),
+            WindowSessionFault::BeforeManifestReplace,
+        );
+        assert_eq!(
+            failing.remove(&workspace_id).unwrap_err().code,
+            DesktopErrorCode::WindowSessionWriteFailed
+        );
+        drop(failing);
+
+        let retry = WindowSessionRepository::initialize_at(app_data.path());
+        assert!(retry.remove(&workspace_id).unwrap());
+        assert!(retry.summaries().unwrap().is_empty());
+    }
+
+    #[test]
     fn orphan_cleanup_only_removes_plainroot_regular_session_files() {
         let app_data = TestDirectory::create("window-session-orphans");
         let repository = WindowSessionRepository::initialize_at(app_data.path());
@@ -1808,6 +1949,44 @@ mod tests {
         assert_eq!(unsupported.code, DesktopErrorCode::UnsupportedMarkdownFile);
     }
 
+    #[cfg(any(target_os = "macos", windows))]
+    #[test]
+    fn resolution_isolates_case_aliases_with_the_same_native_identity() {
+        let workspace = TestDirectory::create("window-session-case-alias");
+        create_workspace(&workspace);
+        let workspace_id = workspace_id("workspace-a");
+        let stored = super::StoredWindowTabSessionV1 {
+            schema_version: super::WINDOW_SESSION_SCHEMA_VERSION,
+            workspace_id,
+            window_state_ref: format!("{}{}", super::WINDOW_STATE_REF_PREFIX, "a".repeat(32)),
+            revision: 1,
+            tabs: vec![
+                PersistedWindowTab {
+                    relative_path: path("notes/a.md"),
+                    view: view(WindowTabEditorMode::Visual),
+                    last_activated_at: 2,
+                },
+                PersistedWindowTab {
+                    relative_path: path("notes/A.md"),
+                    view: view(WindowTabEditorMode::Source),
+                    last_activated_at: 1,
+                },
+            ],
+            active_relative_path: Some(path("notes/a.md")),
+            recently_closed: Vec::new(),
+            updated_at: 3,
+        };
+        let resolved =
+            resolve_window_tab_session(stored, &fs::canonicalize(workspace.path()).unwrap());
+
+        assert_eq!(resolved.tabs.len(), 1);
+        assert_eq!(resolved.issues.len(), 1);
+        assert_eq!(
+            resolved.issues[0].error.code,
+            DesktopErrorCode::WindowSessionCorrupt
+        );
+    }
+
     #[test]
     fn contracts_match_typescript_and_enum_values() {
         let workspace_id = workspace_id("workspace-a");
@@ -1884,6 +2063,27 @@ mod tests {
         assert_interface_matches("WindowTabSession", &session);
         assert_interface_matches("WindowTabSessionSaveResult", &saved);
         assert_interface_matches("WindowTabSessionSummary", &summary);
+        assert_type_alias_matches_variants(
+            "WindowTabSelection",
+            &[
+                WindowTabSelection::Visual { from: 1, to: 2 },
+                WindowTabSelection::Source { anchor: 3, head: 4 },
+            ],
+        );
+        assert_type_alias_matches_variants(
+            "WindowTabAnchor",
+            &[
+                WindowTabAnchor::Semantic {
+                    block_id: Some("heading:intro".to_owned()),
+                    fallback_offset: 5,
+                    scroll_top: 6,
+                },
+                WindowTabAnchor::Source {
+                    offset: 7,
+                    scroll_top: 8,
+                },
+            ],
+        );
 
         let rust_modes = WindowTabEditorMode::ALL
             .iter()

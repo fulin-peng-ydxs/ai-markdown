@@ -46,7 +46,7 @@
 ### 2.1 工程与验证基线
 
 - 当前技术基线为 Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以清单和锁文件为准。
-- 2026-07-25 已在 T36 当前本地提交前状态重新执行完整非桌面门禁：Node 独立回归 30/30、Vitest 24 个文件 200/200、Rust 197 项通过且 1 项手动性能探针忽略；页签专项 24/24、类型检查、生产构建、Rust fmt/全 feature Clippy 和许可证 727/508/0 同步通过。T32 验收记录中的 176 Rust/173 Vitest 仅是 T32 当时的历史快照。当前 9 条隔离桌面 E2E 的最新远端证据仍为 GitHub Actions run `30082725332` 在 macOS/Windows 完整通过，尚未覆盖第三阶段本地提交。
+- 2026-07-25 已在 T36 当前本地提交前状态重新执行完整非桌面门禁：Node 独立回归 30/30、Vitest 24 个文件 200/200、Rust 200 项通过且 1 项手动性能探针忽略；页签专项 24/24、类型检查、生产构建、Rust fmt/全 feature Clippy 和许可证 727/508/0 同步通过。T32 验收记录中的 176 Rust/173 Vitest 仅是 T32 当时的历史快照。当前 9 条隔离桌面 E2E 的最新远端证据仍为 GitHub Actions run `30082725332` 在 macOS/Windows 完整通过，尚未覆盖第三阶段本地提交。
 - 第三阶段不得删除、降低或用重试掩盖上述基线。新增页签测试必须加入统一 `pnpm test`、真实桌面 E2E 和双平台 CI。
 - 当前依赖已能实现页签状态、拖动、菜单、持久化和测试；计划不预设新增运行时依赖。若实现前确认必须引入拖拽或状态库，先补许可证、包体、复用理由和回滚方案，再修改清单。
 
@@ -216,7 +216,7 @@ plainroot-window-sessions-v1/
   - `activeRelativePath`；
   - 最近关闭项：相对路径、模式、选择/锚点、关闭时间。
 - 正文、history patch、恢复快照正文、绝对 canonical root、窗口像素位置和三栏布局不得进入该文件。
-- 写入使用私有同目录临时文件、`sync_all`、平台原子替换和父目录尽力同步；旧有效文件在提交失败时保持不变。
+- 写入使用私有同目录临时文件、`sync_all`、平台原子替换和父目录尽力同步；进程内 manifest 提交失败会恢复旧 session，若进程在 session 替换后、manifest 替换前终止，下一次初始化只接受同 workspace/ref 且恰好领先一个 revision 的已校验 session，并前滚 manifest。
 - session 更新使用仓储 revision/CAS 拒绝陈旧异步写；前端同一窗口串行合并后重试，不能让晚到视图状态覆盖更新后的页签顺序。
 - manifest 初始边界为 1 MiB/1000 个工作区，单 session 为 1 MiB，最近关闭最多 50 项；超限返回稳定错误并保留运行时页签，不静默截断打开项。
 - 损坏单 session 备份并隔离，不阻断其他工作区；未知 schema 原文件不覆盖。孤儿只删除符合 Plainroot opaque 命名且未被 manifest/root session 引用的普通文件。
@@ -414,12 +414,12 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 - 验证方式：临时 app data 下的原子故障、CAS、损坏/未知版本、容量、并发、跨工作区、移除记录和 parity 测试；Rust fmt/Clippy/all-features。
 - 完成标准：会话元数据可安全保存/读取/删除，正文不出现在 JSON，`windowStateRef` 不再是悬空字段；T37 不需要从前端路径文本自行推导 path identity。
 - 实际落地情况：已新增 `src-tauri/src/window_session.rs` 与 `commands/window_session.rs`，在 `appDataDir()/plainroot-window-sessions-v1/` 建立 1 MiB manifest、1 MiB 单会话、1000 工作区和最近关闭 50 项边界。manifest 保存 workspace→opaque ref、revision、页签数和更新时间；session 只保存工作区相对路径、模式、选择/锚点、顺序、活动路径与最近关闭，不包含 Markdown、history、恢复正文、绝对路径、窗口像素或布局。
-  - 写入使用私有同目录临时文件、`sync_all`、平台原子替换和父目录尽力同步；session 与 manifest 两次提交之间若 manifest 失败，会恢复旧 session 字节或移除未提交新文件。CAS revision 拒绝陈旧写，容量超限不截断运行时页签。
+  - 写入使用私有同目录临时文件、`sync_all`、平台原子替换和父目录尽力同步；session 与 manifest 两次提交之间若进程内 manifest 写失败，会恢复旧 session 字节或移除未提交新文件；若进程在中间终止，重启仅对同 workspace/ref 且恰好领先一个 revision 的已校验 session 前滚 manifest，避免误判损坏。CAS revision 拒绝陈旧写，容量超限不截断运行时页签。
   - manifest 损坏先备份，再从文件名与内容均校验通过的 v1 session 重建；单 session 损坏只备份隔离该文件，未知 manifest/session schema 原文件不覆盖。启动孤儿清理只删除命名匹配且明确为 v1 的普通文件，不跟随 symlink，也不删除未来版本文件。
-  - 新增 `resolve/get/save/remove` 四个 IPC。完整路径元数据必须同时通过当前窗口↔workspace 绑定和授权注册校验；P2 launcher 只获得 workspace、opaque ref、revision、页签数、更新时间和 issue，不暴露文件名。Rust 对打开/恢复路径重新解析授权根并返回 `workspace-path-v1-<sha256>` 不透明身份；失效单项进入 issues，不阻断同会话其他路径。
-  - 根工作区成功绑定前先确保仓储引用，`WorkspaceSessionRoot.windowStateRef` 不再固定为 `null`；启动时也为既有根会话补齐真实引用。显式关闭/移除根恢复仍保留最后页签会话，移除最近记录同步删除页签元数据，不修改 `.md` 或恢复快照。
-  - Rust↔TypeScript 新增 editor mode、selection/anchor、snapshot/session/summary/path identity DTO 和 8 个稳定错误码，全部进入总 parity 守卫；前端新增薄 `windowSession.ts` gateway，T37 无需自行 lower-case 或推导平台路径身份。
-  - 专项测试覆盖 revision 0 空会话、CAS 并发单提交、跨工作区 ref、窗口未绑定拒绝、原子 session/manifest 故障回滚、损坏/未知版本、manifest 重建、容量、孤儿清理、移除不碰 Markdown、路径哈希不泄绝对根和单项失效隔离。统一门禁为 Vitest 200/200、Rust 197 通过且 1 项既有手动探针忽略、Node 30/30；类型、构建、fmt、全 feature Clippy 与许可证 727/508/0 通过。未执行桌面 E2E，因为 T36 没有 P1/P2 可见交互消费者；远端双平台证据仍只覆盖第二阶段。证据见 `t36-window-session-store.md`。
+  - 新增 `resolve/get/save/remove` 四个 IPC。完整路径元数据必须同时通过当前窗口↔workspace 绑定和授权注册校验；P2 launcher 只获得 workspace、opaque ref、revision、页签数、更新时间和 issue，不暴露文件名。Rust 对打开/恢复路径重新解析授权根并返回 `workspace-path-v1-<sha256>` 不透明身份；失效项及解析后 identity 重复项进入 issues，不阻断同会话其他路径。
+  - 根工作区成功绑定前先确保仓储引用，`WorkspaceSessionRoot.windowStateRef` 不再固定为 `null`；启动时也为既有根会话补齐真实引用。显式关闭/移除根恢复仍保留最后页签会话；移除最近记录每次都重试页签元数据清理，因此跨仓储部分失败后再次调用仍可收口，不修改 `.md` 或恢复快照。
+  - Rust↔TypeScript 新增 editor mode、selection/anchor、snapshot/session/summary/path identity DTO 和 8 个稳定错误码，interface、枚举/tag 及 selection/anchor 联合类型内层字段均进入 parity 守卫；前端新增薄 `windowSession.ts` gateway，T37 无需自行 lower-case 或推导平台路径身份。
+  - 专项测试覆盖 revision 0 空会话、CAS 并发单提交、跨工作区 ref、窗口未绑定拒绝、原子 session/manifest 故障回滚、崩溃中间态重启前滚、损坏/未知版本、manifest 重建、容量、孤儿清理、移除部分失败重试、移除不碰 Markdown、路径哈希不泄绝对根、解析后 identity 去重和单项失效隔离。统一门禁为 Vitest 200/200、Rust 200 通过且 1 项既有手动探针忽略、Node 30/30；类型、构建、fmt、全 feature Clippy 与许可证 727/508/0 通过。未执行桌面 E2E，因为 T36 没有 P1/P2 可见交互消费者；远端双平台证据仍只覆盖第二阶段。证据见 `t36-window-session-store.md`。
 
 ### 6.3 任务 T37：每页签 DocumentSession/SaveController 管理器
 

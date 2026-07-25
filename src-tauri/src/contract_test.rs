@@ -75,6 +75,28 @@ pub fn assert_interface_matches(interface_name: &str, value: &impl Serialize) {
     );
 }
 
+pub fn assert_type_alias_matches_variants<T: Serialize>(type_name: &str, values: &[T]) {
+    let marker = format!("export type {type_name} =");
+    let body = TYPESCRIPT_CONTRACTS
+        .split_once(&marker)
+        .unwrap_or_else(|| panic!("missing TypeScript type alias {type_name}"))
+        .1
+        .split_once(";\n\n")
+        .expect("TypeScript type alias should end with a semicolon");
+    let typescript_fields = body
+        .0
+        .lines()
+        .filter_map(|line| line.trim().split_once(':').map(|(name, _)| name))
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    let rust_variant_fields = values.iter().flat_map(rust_fields).collect::<BTreeSet<_>>();
+
+    assert_eq!(
+        rust_variant_fields, typescript_fields,
+        "Rust tagged variants and TypeScript {type_name} fields drifted"
+    );
+}
+
 fn typescript_export_names(prefix: &str) -> BTreeSet<String> {
     TYPESCRIPT_CONTRACTS
         .lines()

@@ -506,11 +506,11 @@ pub fn remove_recent_workspace(
     state: State<'_, PersistentAppState>,
     window_sessions: State<'_, WindowSessionRepository>,
 ) -> Result<bool, DesktopError> {
-    let removed = coordinator.discard_recent_workspace(&workspace_id, &state)?;
-    if removed {
-        window_sessions.remove(&workspace_id)?;
-    }
-    Ok(removed)
+    let state_removed = coordinator.discard_recent_workspace(&workspace_id, &state)?;
+    // Always retry metadata cleanup: a previous command may have committed the recent-record
+    // removal before the independent window-session manifest write failed.
+    let session_removed = window_sessions.remove(&workspace_id)?;
+    Ok(state_removed || session_removed)
 }
 
 #[tauri::command]

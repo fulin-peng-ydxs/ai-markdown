@@ -40,12 +40,13 @@ session 和 manifest 都使用：
 4. 既有平台原子替换适配层；
 5. 父目录尽力同步。
 
-保存先校验 manifest revision，再写 session，最后原子提交 manifest。若第二步后的 manifest 提交失败，仓储会恢复旧 session 字节；首次保存则移除未提交新文件。因此错误返回不会留下“新 session + 旧 manifest”的半提交状态。
+保存先校验 manifest revision，再写 session，最后原子提交 manifest。若进程仍存活且第二步后的 manifest 提交失败，仓储会恢复旧 session 字节；首次保存则移除未提交新文件。若进程恰在 session 原子替换后、manifest 替换前硬终止，下一次初始化只接受 workspace/ref 一致、完整校验通过且恰好领先 manifest 一个 revision 的 session，并把 manifest 前滚到该 revision；其他 revision 不一致仍按损坏处理。这样不会把已完整落盘的新 session 误判损坏，也不会让 manifest 永久指向缺失文件。
 
 其他安全行为：
 
 - stale `expectedRevision` 返回 `window_session_revision_conflict`；
 - 同一 revision 的并发保存经仓储互斥与 CAS 保证只有一次提交成功；
+- 进程内 manifest 故障回滚旧 session，硬终止中间态在重启时按单 revision 前滚；
 - manifest 损坏先备份，再从文件名、schema、workspace/ref、路径和视图均验证通过的 v1 session 重建；
 - 单 session 损坏只备份并隔离该项，不阻断其他工作区；
 - 未知 manifest/session schema 原文件不覆盖；
@@ -74,7 +75,7 @@ Rust 对当前平台解析后的文件身份计算：
 workspace-path-v1-sha256(workspaceId + nativeCanonicalIdentity)
 ```
 
-前端只比较 opaque identity，不自行 lower-case，也看不到绝对 canonical root。恢复中缺失或无权限的单项进入 `issues`，其他有效页签继续返回。
+前端只比较 opaque identity，不自行 lower-case，也看不到绝对 canonical root。恢复解析后 Rust 再按 opaque identity 去重；macOS/Windows 上不同大小写文本若解析为同一文件，只保留一个有效页签，别名项进入 `issues`。缺失、无权限或重复 identity 的单项不阻断其他有效页签。
 
 P2 launcher snapshot 新增 `windowSessionSummaries`，只包含 workspace、opaque ref、revision、页签数、更新时间和可选的已知错误；摘要直接读取 manifest 与进程内已知 issue，不逐份读取最多 1000 个 session 文件。完整 session 在授权读取时发现的损坏或未知版本会回写为已知 issue；未授权启动页不获得页签文件名或相对路径。
 
@@ -87,7 +88,7 @@ Rust/TypeScript 共同新增：
 - resolved path、resolved tab、单项 issue、完整 session、save result、summary；
 - 8 个稳定 window-session 错误码和用户可理解的安全文案。
 
-所有导出 interface 与字符串常量进入现有总 parity 守卫。前端新增 `src/services/desktop/windowSession.ts` 薄 gateway，不承担路径推导、权限判断或磁盘成功声明。
+所有导出 interface、字符串常量以及 `WindowTabSelection`/`WindowTabAnchor` 各变体的内层字段集合进入 parity 守卫。前端新增 `src/services/desktop/windowSession.ts` 薄 gateway，不承担路径推导、权限判断或磁盘成功声明。
 
 ## 3. 自动化验证
 
@@ -101,6 +102,7 @@ Rust 专项覆盖：
 - 同一 revision 并发保存只提交一次；
 - session replace 前故障保持旧 revision；
 - manifest replace 前故障回滚 session；
+- session 已替换、manifest 未替换的硬终止中间态在重启时前滚恢复；
 - 未知版本保留且不能被后续保存覆盖；
 - 单 session 损坏备份隔离；
 - manifest 损坏从有效 v1 session 重建并保留未知版本文件；
@@ -108,13 +110,15 @@ Rust 专项覆盖：
 - 缺失路径单项隔离；
 - orphan 只清理 Plainroot v1 普通文件；
 - 删除元数据不触碰工作区 Markdown；
+- 最近记录已删除但页签 manifest 删除失败时，第二次调用仍会重试并清理元数据；
 - path identity 稳定且不泄露绝对根；
+- macOS/Windows 大小写别名解析为同一 identity 时隔离重复项；
 - 根工作区提交后 `windowStateRef` 与 manifest 真实一致；
-- Rust/TypeScript 字段和 enum/tag parity。
+- Rust/TypeScript interface、enum/tag 和联合类型内层字段 parity。
 
 ### 3.2 本地结果
 
-- `pnpm test`：Node 独立回归 30/30；Vitest 24 个文件 200/200；Rust 197 项通过，另 1 项既有手动性能探针忽略。
+- `pnpm test`：Node 独立回归 30/30；Vitest 24 个文件 200/200；Rust 200 项通过，另 1 项既有手动性能探针忽略。
 - `pnpm typecheck`：通过。
 - `pnpm build`：通过。
 - `cargo fmt --check`：通过。
