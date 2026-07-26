@@ -365,6 +365,41 @@ describe("WorkspaceTabManager", () => {
     });
   });
 
+  it("moves tabs through the manager without rebuilding their runtimes", async () => {
+    const { manager } = managerFixture();
+    const first = await openReady(manager, "one.md");
+    const second = await openReady(manager, "two.md");
+    const firstRuntime = manager.snapshot().runtimes.get(first);
+
+    expect(manager.move(first, 1)).toBe(true);
+    expect(manager.snapshot().collection.orderedTabIds).toEqual([second, first]);
+    expect(manager.snapshot().runtimes.get(first)).toBe(firstRuntime);
+    expect(manager.move("missing-tab", 0)).toBe(false);
+  });
+
+  it("captures the active view before closing and stores it for reopen", async () => {
+    let projected: ReadyDocumentSession | null = null;
+    const fixture = managerFixture({
+      captureActiveProjection: () => projected,
+    });
+    const first = await openReady(fixture.manager, "one.md");
+    const firstSession = fixture.manager.snapshot().activeRuntime
+      ?.session as ReadyDocumentSession;
+    projected = {
+      ...firstSession,
+      mode: "source",
+      selection: { kind: "source", anchor: 5, head: 5 },
+      anchor: { kind: "source", offset: 5, scrollTop: 33 },
+    };
+
+    expect(await fixture.manager.close(first)).toEqual({ status: "settled" });
+    expect(fixture.manager.snapshot().collection.recentlyClosed[0]?.view).toEqual({
+      mode: "source",
+      selection: { kind: "source", anchor: 5, head: 5 },
+      anchor: { kind: "source", offset: 5, scrollTop: 33 },
+    });
+  });
+
   it("records actual adapter mounts with a maximum of one active projection", async () => {
     const { manager } = managerFixture();
     const first = await openReady(manager, "one.md");

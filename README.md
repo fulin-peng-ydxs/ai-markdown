@@ -1,6 +1,6 @@
 # Plainroot
 
-Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成桌面底座验收；第二阶段 T18～T34 已完成单文档编辑阶段验收及目录图片移动风险、编辑工作台信息层级补强。当前具备受控工作区授权、文件扫描与安全写入、窗口协调、真实 P1/P2、统一 `DocumentSession`、Milkdown/CodeMirror 两种投影、自动/手动保存、恢复/冲突/另存、图片资源、目录图片移动风险提示、固定主操作工具栏，以及单一保存状态和当前路径的持续状态栏。第二阶段基线的 9/9 隔离桌面回归已在 macOS/Windows runner 通过；第三阶段 T35～T37 已建立页签模型、内容无关窗口会话仓储、Rust 平台路径身份和 P1 多 session runtime，当前通过文件树切换可保留各文档独立历史/模式并只挂载活动 editor。可见页签栏、持久恢复和完整批量结算尚未实现，因此仍不能表述为可用多页签或第三阶段完成。
+Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成桌面底座验收；第二阶段 T18～T34 已完成单文档编辑阶段验收及目录图片移动风险、编辑工作台信息层级补强。当前具备受控工作区授权、文件扫描与安全写入、窗口协调、真实 P1/P2、统一 `DocumentSession`、Milkdown/CodeMirror 两种投影、自动/手动保存、恢复/冲突/另存、图片资源、目录图片移动风险提示、固定主操作工具栏，以及单一保存状态和当前路径的持续状态栏。第二阶段基线的 9/9 隔离桌面回归已在 macOS/Windows runner 通过；第三阶段 T35～T38 已建立页签模型、内容无关窗口会话仓储、Rust 平台路径身份、P1 多 session runtime 和可见页签条，当前可在同一窗口切换、单项关闭、排序和从溢出列表定位文档，同时只挂载活动 editor。最近关闭、顺序持久化、启动恢复和完整批量结算尚未实现，因此仍不能表述为完整 R13 或第三阶段完成。
 
 ## 工具链
 
@@ -45,7 +45,7 @@ pnpm tauri build --bundles app
 
 `pnpm test:tabs` 包含可失败的页签身份、状态、容量、序列化和 runtime manager 门禁；`pnpm test:tabs:performance` 只输出当前机器的纯 reducer 基准样本。真实单 editor adapter 与进程 RSS 门禁由隔离的 Tauri/WebKit E2E 承载。
 
-`pnpm test:e2e` 会构建独立 identifier/capability 的测试版本，以临时状态目录和每套件独立复制的工作区启动 embedded WebDriver。当前本地 10 条用例覆盖 P2/P1 真 IPC、P2 1100/740 px 布局与焦点、P1 1100/1050/820/740 px 编辑 chrome、三文档 runtime 的单 adapter/RSS 门禁、两模式编辑、图片输入/上传、保存重开、外部修改、恢复，以及含图片目录移动前的风险确认与取消零副作用；确定性业务流程不启用测试重试。测试 feature 默认关闭，生产前端产物和 release 二进制均不包含 WDIO、fixture 或 E2E 命令。提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 对应的 GitHub Actions run `30082725332` 已在 macOS/Windows runner 完成第二阶段 9/9 套件；T35～T37 尚未推送或取得远端双平台证据。
+`pnpm test:e2e` 会构建独立 identifier/capability 的测试版本，以临时状态目录和每套件独立复制的工作区启动 embedded WebDriver。当前本地 10 条用例覆盖 P2/P1 真 IPC、P2 1100/740 px 布局与焦点、P1 1100/1050/820/740 px 编辑 chrome、三文档可见页签切换、溢出菜单焦点返回、单 adapter/RSS 门禁、两模式编辑、图片输入/上传、保存重开、外部修改、恢复，以及含图片目录移动前的风险确认与取消零副作用；确定性业务流程不启用测试重试。测试 feature 默认关闭，生产前端产物和 release 二进制均不包含 WDIO、fixture 或 E2E 命令。提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 对应的 GitHub Actions run `30082725332` 已在 macOS/Windows runner 完成第二阶段 9/9 套件；T35～T38 尚未推送或取得远端双平台证据。
 
 开发模式在依赖安装完成后运行：
 

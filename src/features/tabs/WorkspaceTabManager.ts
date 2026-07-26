@@ -201,6 +201,13 @@ export class WorkspaceTabManager {
     return true;
   }
 
+  move(tabId: WorkspaceTabId, toIndex: number): boolean {
+    if (this.destroyed || !this.collection.tabsById.has(tabId)) return false;
+    const previous = this.collection;
+    this.dispatch({ type: "move", tabId, toIndex });
+    return this.collection !== previous;
+  }
+
   updateSession(
     tabId: WorkspaceTabId,
     incarnation: number,
@@ -246,13 +253,16 @@ export class WorkspaceTabManager {
 
   async close(
     tabId: WorkspaceTabId,
-    view: WorkspaceTabViewState | null = null,
+    view?: WorkspaceTabViewState | null,
     closedAt = this.now(),
     settlementAlreadySatisfied = false,
   ): Promise<WorkspaceTabSettlementResult> {
     const tab = this.collection.tabsById.get(tabId);
     if (!tab || this.destroyed) return { status: "settled" };
+    if (this.collection.activeTabId === tabId) this.captureCurrentProjection();
     const runtime = this.runtimes.get(tabId);
+    const closingView =
+      view === undefined ? viewFromSession(runtime?.session ?? null) : view;
     if (runtime) {
       if (!settlementAlreadySatisfied) {
         const outcome = await runtime.saveController.settle();
@@ -268,7 +278,7 @@ export class WorkspaceTabManager {
       type: "close",
       tabId,
       closedAt,
-      view,
+      view: closingView,
     });
     return { status: "settled" };
   }
@@ -493,6 +503,18 @@ function loadOutcome(
     return { kind: "permission_denied", generation, error };
   }
   return { kind: "error", generation, error };
+}
+
+function viewFromSession(
+  session: DocumentSessionState | null,
+): WorkspaceTabViewState | null {
+  return session?.status === "ready"
+    ? {
+        mode: session.mode,
+        selection: session.selection,
+        anchor: session.anchor,
+      }
+    : null;
 }
 
 function managerError(

@@ -68,6 +68,8 @@ import {
   WorkspaceTabManager,
   type WorkspaceTabManagerSnapshot,
 } from "../tabs/WorkspaceTabManager";
+import { WorkspaceTabBar } from "../tabs/WorkspaceTabBar";
+import type { WorkspaceTabId } from "../tabs/tabTypes";
 import type { WorkspaceTabSessionGateway } from "../tabs/tabSessionGateway";
 import { WorkspaceTree } from "./WorkspaceTree";
 import { isSameOrInside, parentPath, replacePrefix } from "./workspacePath";
@@ -140,6 +142,12 @@ export function WorkspaceWorkbench({
   const tabManagerRef = useRef<WorkspaceTabManager | null>(null);
   const tabManagerSubscriptionRef = useRef<(() => void) | null>(null);
   const tabManagerSnapshotRef = useRef<WorkspaceTabManagerSnapshot | null>(null);
+  const [tabSnapshot, setTabSnapshot] =
+    useState<WorkspaceTabManagerSnapshot | null>(null);
+  const [closingTabIds, setClosingTabIds] = useState<Set<WorkspaceTabId>>(
+    new Set(),
+  );
+  const closingTabIdsRef = useRef(new Set<WorkspaceTabId>());
   const [pageError, setPageError] = useState<DesktopError | null>(null);
   const [operation, setOperation] = useState<PendingOperation | null>(null);
   const [operationError, setOperationError] = useState<DesktopError | null>(null);
@@ -189,7 +197,7 @@ export function WorkspaceWorkbench({
   const mutationProcessing = tree.mutation?.status === "processing";
   const activeDocumentPath =
     documentState.status === "empty" ? null : documentState.relativePath;
-  const activeTab = tabManagerSnapshotRef.current?.activeTab ?? null;
+  const activeTab = tabSnapshot?.activeTab ?? null;
   const editorMenuState = useMemo<EditorMenuState>(() => {
     if (documentState.status !== "ready") {
       return {
@@ -377,6 +385,8 @@ export function WorkspaceWorkbench({
     setSelectedPath(null);
     setDocumentMetrics(null);
     setSavedCopyEvidence(null);
+    closingTabIdsRef.current.clear();
+    setClosingTabIds(new Set());
     tabManagerSubscriptionRef.current?.();
     tabManagerSubscriptionRef.current = null;
     const previousManager = tabManagerRef.current;
@@ -391,6 +401,7 @@ export function WorkspaceWorkbench({
     tabManagerSubscriptionRef.current = manager.subscribe((snapshot) => {
       if (!mountedRef.current || generation !== generationRef.current) return;
       tabManagerSnapshotRef.current = snapshot;
+      setTabSnapshot(snapshot);
       const nextDocument =
         snapshot.activeRuntime?.session ??
         createEmptyDocumentSession(documentStateRef.current.generation + 1);
@@ -598,6 +609,23 @@ export function WorkspaceWorkbench({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [drawerOpen]);
 
+  function syncActiveTabChrome(
+    path: WorkspaceRelativePath | null,
+    generation = generationRef.current,
+  ) {
+    setSelectedPath(path);
+    void gateway.setTitle(path).catch((reason) => {
+      if (
+        mountedRef.current &&
+        generation === generationRef.current &&
+        (tabManagerRef.current?.snapshot().activeTab?.relativePath ?? null) ===
+          path
+      ) {
+        setPageError(normalizeDesktopError(reason, "window_title_failed"));
+      }
+    });
+  }
+
   async function openMarkdown(
     path: WorkspaceRelativePath,
     targetWorkspace = workspace,
@@ -623,7 +651,7 @@ export function WorkspaceWorkbench({
       setPageError(opened.error);
       return;
     }
-    setSelectedPath(path);
+    syncActiveTabChrome(path, generation);
     let resolved = manager.snapshot().runtimes.get(opened.tabId)?.session;
     if (
       overrideMarkdown !== undefined &&
@@ -642,22 +670,46 @@ export function WorkspaceWorkbench({
       if (adjusted.status === "applied") resolved = adjusted.session;
     }
     if (resolved) manager.updateActiveSession(resolved);
-    if (
-      resolved &&
-      resolved.status !== "empty" &&
-      resolved.relativePath === path &&
-      manager.snapshot().activeTab?.relativePath === path
-    ) {
-      void gateway.setTitle(path).catch((reason) => {
-        if (
-          mountedRef.current &&
-          generation === generationRef.current &&
-          tabManagerRef.current?.snapshot().activeTab?.relativePath === path
-        ) {
-          setPageError(normalizeDesktopError(reason, "window_title_failed"));
-        }
-      });
+  }
+
+  function activateWorkspaceTab(tabId: WorkspaceTabId) {
+    const manager = tabManagerRef.current;
+    if (!manager?.activate(tabId)) return;
+    syncActiveTabChrome(manager.snapshot().activeTab?.relativePath ?? null);
+  }
+
+  async function closeWorkspaceTab(tabId: WorkspaceTabId) {
+    const manager = tabManagerRef.current;
+    if (!manager || closingTabIdsRef.current.has(tabId)) return;
+    closingTabIdsRef.current.add(tabId);
+    setClosingTabIds(new Set(closingTabIdsRef.current));
+    try {
+      const result = await manager.close(tabId);
+      if (!mountedRef.current) return;
+      if (result.status === "blocked") {
+        manager.activate(tabId);
+        syncActiveTabChrome(manager.snapshot().activeTab?.relativePath ?? null);
+        setLifecycleNotice(
+          closeBlockedMessage(
+            result.outcome?.status === "blocked"
+              ? result.outcome.reason
+              : "failed",
+          ),
+        );
+        return;
+      }
+      syncActiveTabChrome(manager.snapshot().activeTab?.relativePath ?? null);
+      setLifecycleNotice("页签已安全关闭。");
+    } finally {
+      if (mountedRef.current) {
+        closingTabIdsRef.current.delete(tabId);
+        setClosingTabIds(new Set(closingTabIdsRef.current));
+      }
     }
+  }
+
+  function moveWorkspaceTab(tabId: WorkspaceTabId, toIndex: number) {
+    tabManagerRef.current?.move(tabId, toIndex);
   }
 
   async function settleCurrentDocument(): Promise<DocumentSaveOutcome> {
@@ -833,7 +885,7 @@ export function WorkspaceWorkbench({
     const manager = tabManagerRef.current;
     const active = manager?.snapshot().activeTab;
     if (manager && active) {
-      await manager.close(active.tabId, active.restoredView, Date.now(), true);
+      await manager.close(active.tabId, undefined, Date.now(), true);
     }
     setSelectedPath(null);
     setSavedCopyEvidence(null);
@@ -1107,7 +1159,7 @@ export function WorkspaceWorkbench({
     if (openDocumentPath && isSameOrInside(openDocumentPath, result.relativePath)) {
       const manager = tabManagerRef.current;
       const active = manager?.snapshot().activeTab;
-      if (manager && active) void manager.close(active.tabId, active.restoredView);
+      if (manager && active) void manager.close(active.tabId);
       void gateway.setTitle(null).catch(() => undefined);
     }
   }
@@ -1303,6 +1355,14 @@ export function WorkspaceWorkbench({
         ) : null}
       </header>
 
+      <WorkspaceTabBar
+        closingTabIds={closingTabIds}
+        onActivate={activateWorkspaceTab}
+        onClose={closeWorkspaceTab}
+        onMove={moveWorkspaceTab}
+        snapshot={tabSnapshot}
+      />
+
       {pageError ? (
         <div className="workbench__page-error">
           <AsyncStatePanel
@@ -1357,7 +1417,11 @@ export function WorkspaceWorkbench({
           </div>
         </aside>
 
-        <section className="workbench__document" aria-label="文档编辑区">
+        <section
+          aria-label="文档编辑区"
+          className="workbench__document"
+          id="workspace-document-panel"
+        >
           {documentState.status === "ready" &&
           documentState.saveState.kind === "save_failed" &&
           documentState.saveState.error.code === "path_not_found" ? (
@@ -1703,6 +1767,21 @@ function settlementMessage(result: Extract<DocumentSaveOutcome, { status: "block
       return "当前文档无法写入，窗口保持打开。";
     case "stale":
       return "文档仍在变化，窗口保持打开，请再次保存。";
+  }
+}
+
+function closeBlockedMessage(
+  reason: "readonly" | "conflict" | "failed" | "stale",
+): string {
+  switch (reason) {
+    case "readonly":
+      return "页签未关闭：文档只读且仍有本地修改，请先另存副本。";
+    case "conflict":
+      return "页签未关闭：磁盘内容已变化，请先处理冲突或另存副本。";
+    case "stale":
+      return "页签未关闭：保存状态仍在变化，请稍后重试。";
+    case "failed":
+      return "页签未关闭：保存没有完成，当前内容仍保留在页签或恢复副本中。";
   }
 }
 

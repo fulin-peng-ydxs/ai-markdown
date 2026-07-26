@@ -4,7 +4,7 @@
 
 本文描述 Plainroot 当前已经落地的桌面底座模块、数据流、权限边界和运行约束。产品范围与最终验收以 `../requirement.md` 为准，各阶段任务状态与验证证据以对应阶段目录的 `plan.md` 为准；Markdown 统一会话、两种编辑投影、保存/恢复/冲突与图片资源的详细架构以 `markdown-document-editing.md` 为专项事实源；代码、清单、配置和自动化测试是实现事实源。
 
-当前架构覆盖 P2 工作区启动页、P1 编辑工作台、本地文件与窗口底座，并概览每页签 `DocumentSession` runtime、保存/恢复、资源、菜单和内容无关页签会话仓储与底座之间的边界。编辑子系统的内部状态机和数据流由专项文档维护。P1 已通过文件树消费非视觉多 session runtime，但可见页签栏、持久恢复、完整批量结算、大纲、全文搜索、主题工作室和分页阅读仍未落地。
+当前架构覆盖 P2 工作区启动页、P1 编辑工作台、本地文件与窗口底座，并概览每页签 `DocumentSession` runtime、可见页签交互、保存/恢复、资源、菜单和内容无关页签会话仓储与底座之间的边界。编辑子系统的内部状态机和数据流由专项文档维护。P1 已消费多 session runtime 与可见页签栏，但最近关闭、顺序持久化、启动恢复、完整批量结算、大纲、全文搜索、主题工作室和分页阅读仍未落地。
 
 ## 2. 总体结构
 
@@ -52,7 +52,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | 根应用与页面路由 | `src/App.tsx` | 根据当前窗口工作区快照在 P2 与 P1 间切换；根启动错误交给可恢复页面状态处理 | 不维护第二套同源错误面，不伪造工作区或编辑状态 |
 | P2 工作区启动页 | `src/features/launcher/` | 文件夹/Markdown 选择、授权范围确认、最近记录、失效重授权、根窗口恢复、恢复快照入口和打开方式决策 | 不在启动页直接写恢复正文；先打开并授权对应工作区，由 P1 消费快照；不删除本地目录 |
-| P1 编辑工作台 | `src/features/workbench/`、`src/features/tabs/WorkspaceTabManager.ts` | 渐进文件树、按 Rust 路径身份唯一打开/聚焦文档、每文档独立 session/history/save controller、单一活动排版/源码 editor、格式栏、持续状态栏、恢复/冲突/另存、受控图片、文件 CRUD、监听、工作区切换、原生菜单状态投影和全 runtime 结算意图消费 | 不包含可见页签栏、持久页签恢复、完整批量决策、大纲、工作区搜索或虚假磁盘成功状态 |
+| P1 编辑工作台 | `src/features/workbench/`、`src/features/tabs/` | 渐进文件树、按 Rust 路径身份唯一打开/聚焦文档、每文档独立 session/history/save controller、单一活动排版/源码 editor、可见 tablist、单项关闭、当前窗口排序、溢出定位、格式栏、持续状态栏、恢复/冲突/另存、受控图片、文件 CRUD、监听、工作区切换、原生菜单状态投影和全 runtime 结算意图消费 | 不包含最近关闭入口、顺序持久化、启动页签恢复、完整批量决策、大纲、工作区搜索或虚假磁盘成功状态 |
 | 共享前端组件 | `src/components/` | `AppDialog`、`AsyncStatePanel` 与 `focusContainment` 统一对话框、状态优先级和焦点生命周期 | 页面业务状态保持在各自 feature；仅在第二个同职责消费者出现后抽取 |
 | 统一编辑器壳与文档会话 | `src/features/editor/DocumentEditorShell.tsx`、`documentSession.ts`、`remarkMarkdownParser.ts` | P1 唯一正文与历史；切换前提交当前 Markdown/选择/锚点；源码回排版按 AST、尺寸与结构复杂度重评估；统一格式/history/find/image 命令、资源目录弹层、选择/粘贴/拖放编排和非颜色状态反馈 | 不直接保存磁盘、不持有第二份正文；陈旧解析、图片导入或保存结果不能改写新 session；磁盘与恢复生命周期由保存控制器消费 |
 | 保存与恢复控制器 | `src/features/editor/save/DocumentSaveController.ts` | 以单一 session 为输入，按 UTF-8 尺寸分级调度自动保存和恢复快照；手动保存复用同一写入链；保存/快照分别单飞；保存中编辑追赶最终 revision；把 dirty/clean/conflict/content safety 投影为窗口结算结果 | 不直接拼绝对路径或另建写入实现；只有 Rust safe-write 成功才清洁 session；恢复快照不是磁盘提交；可见选择由 recovery 组件消费 |

@@ -613,16 +613,62 @@ describe("WorkspaceWorkbench", () => {
 
     await user.click(screen.getByRole("treeitem", { name: /second\.md/ }));
     await screen.findByText("Second");
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
     expect(
       rendered.container.querySelectorAll(".cm-editor, .milkdown"),
     ).toHaveLength(1);
 
-    await user.click(screen.getByRole("treeitem", { name: /note\.md/ }));
+    await user.click(screen.getByRole("tab", { name: /note\.md/ }));
     await waitFor(() =>
       expect(rendered.container.querySelectorAll(".cm-editor")).toHaveLength(1),
     );
     expect(await screen.findByText("First")).toBeTruthy();
     expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it("closes a clean tab from the visible tab strip and activates its neighbor", async () => {
+    const api = gateway({
+      pollScan: vi.fn().mockResolvedValue({
+        scanId: "scan-1",
+        processed: 2,
+        entries: [note, secondNote],
+        issues: [],
+        complete: true,
+        cancelled: false,
+      }),
+      read: vi.fn().mockImplementation(async (_workspaceId, path) => ({
+        relativePath: path,
+        status: "ready",
+        content: path === "note.md" ? "# First" : "# Second",
+        revision: {
+          modifiedAt: 1,
+          size: 8,
+          contentHash: `hash:${path}`,
+          encoding: "utf8",
+          lineEnding: "lf",
+        },
+      })),
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByText("First");
+    await user.click(screen.getByRole("treeitem", { name: /second\.md/ }));
+    await screen.findByText("Second");
+    await user.click(screen.getByRole("button", { name: "关闭 second.md" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("tab", { name: /second\.md/ })).toBeNull(),
+    );
+    expect(screen.getByRole("tab", { name: /note\.md/ }).getAttribute("aria-selected")).toBe("true");
+    expect(await screen.findByText("First")).toBeTruthy();
   });
 
   it("opens a dense Markdown document directly in source mode without stale visual content", async () => {
@@ -950,7 +996,11 @@ describe("WorkspaceWorkbench", () => {
       expect(screen.queryByRole("dialog")).toBeNull(),
     );
     expect(await screen.findByText(/恢复后的内容/)).toBeTruthy();
-    expect(screen.getAllByText("未保存")).toHaveLength(1);
+    expect(
+      screen
+        .getAllByText("未保存")
+        .some((node) => node.closest(".document-save-status")),
+    ).toBe(true);
     expect(api.saveGateway.write).not.toHaveBeenCalled();
   });
 

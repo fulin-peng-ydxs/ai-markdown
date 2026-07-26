@@ -357,14 +357,76 @@ describe("Plainroot desktop shell", () => {
     }
     await $('[role="treeitem"][data-tree-path="note.md"]').click();
     await $('[aria-label="Markdown 排版编辑区"]').waitForDisplayed();
+    const tabList = await $('[role="tablist"][aria-label="打开的文档"]');
+    await tabList.waitForDisplayed();
+    assert.equal(
+      await tabList.$$('[role="tab"]').length,
+      3,
+      "three open documents must render as three real tabs",
+    );
+    assert.equal(
+      await tabList.$('[role="tab"][aria-selected="true"] strong').getText(),
+      "note.md",
+    );
+
+    await tabList.$$('button[role="tab"]')[1].click();
+    await browser.waitUntil(
+      async () =>
+        (await tabList
+          .$('[role="tab"][aria-selected="true"] strong')
+          .getText()) === "tab-two.md",
+      {
+        timeout: 10_000,
+        timeoutMsg: "clicking the visible tab did not activate its document",
+      },
+    );
+
+    const overflowTrigger = await $('button[aria-label="所有页签"]');
+    await overflowTrigger.click();
+    const overflowMenu = await $('[role="menu"][aria-label="所有打开的页签"]');
+    await overflowMenu.waitForDisplayed();
+    assert.equal(
+      await overflowMenu.$$('[role="menuitem"]').length,
+      3,
+      "overflow menu must expose every open tab",
+    );
+    await browser.keys("Escape");
+    await overflowMenu.waitForDisplayed({ reverse: true });
+    assert.equal(
+      await browser.execute(
+        () => document.activeElement?.getAttribute("aria-label"),
+      ),
+      "所有页签",
+      "Escape must restore focus to the overflow trigger",
+    );
+
+    for (const width of [1100, 820, 740]) {
+      await resizeApp(width, 720);
+      const tabLayout = await browser.execute(() => {
+        const bar = document.querySelector(".workspace-tab-bar");
+        const viewport = document.querySelector(".workspace-tab-bar__viewport");
+        if (!(bar instanceof HTMLElement) || !(viewport instanceof HTMLElement)) {
+          throw new Error("tab chrome is not available");
+        }
+        return {
+          rootOverflow: document.documentElement.scrollWidth > window.innerWidth,
+          barVisible: bar.getBoundingClientRect().height > 0,
+          viewportOwnsOverflow: getComputedStyle(viewport).overflowX === "auto",
+        };
+      });
+      assert.equal(tabLayout.rootOverflow, false);
+      assert.equal(tabLayout.barVisible, true);
+      assert.equal(tabLayout.viewportOwnsOverflow, true);
+    }
+    await resizeApp(1100, 720);
     const baseline = await runtimeMemorySnapshot();
 
     const paths = ["note.md", ...extraPaths];
     for (let round = 0; round < 12; round += 1) {
       for (const relativePath of paths) {
-        await $(
-          `[role="treeitem"][data-tree-path="${relativePath}"]`,
-        ).click();
+        await tabList
+          .$(`button[role="tab"][title^="${relativePath} ·"]`)
+          .click();
         await browser.waitUntil(
           async () =>
             (await browser.execute(
@@ -401,7 +463,7 @@ describe("Plainroot desktop shell", () => {
         `tab runtime JS heap grew beyond 64 MiB: ${JSON.stringify({ baseline, after, heapDelta })}`,
       );
     }
-    await $('[role="treeitem"][data-tree-path="note.md"]').click();
+    await tabList.$('button[role="tab"][title^="note.md ·"]').click();
     await $('[aria-label="Markdown 排版编辑区"]').waitForDisplayed();
   });
 
