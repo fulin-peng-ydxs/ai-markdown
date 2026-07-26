@@ -215,9 +215,11 @@ Key Characteristics：
 | `AsyncStatePanel` | `src/components/AsyncStatePanel.tsx`、`src/components/asyncState.ts` | 根启动状态、P1/P2 加载、错误、阻塞与恢复；页签状态模型复用纯状态契约 | 类型化状态与公共优先级、可见非颜色标签、自动 tone/role/aria-live、说明和恢复动作；非视觉消费者不得复制第二套优先级 |
 | `WorkspaceLauncher` | `src/features/launcher/WorkspaceLauncher.tsx` | P2 | 本地打开主入口、最近记录、授权、窗口决策、根会话恢复和恢复快照的非阻塞入口；恢复正文由 P1 消费 |
 | `WorkspaceWorkbench` | `src/features/workbench/WorkspaceWorkbench.tsx` | P1 | 当前根工作区壳、真实文件操作、活动文档编辑投影、自动/手动保存、恢复载入、冲突/另存、外部删除保护、窗口结算与窄窗目录抽屉 |
-| `WorkspaceTabManager` | `src/features/tabs/WorkspaceTabManager.ts` | P1 文件树与可见页签切换 | 非视觉多文档 runtime：按 Rust opaque 路径身份唯一打开/聚焦，每页签独立持有 session/history/save controller，切换/关闭前提交活动 adapter 投影且任意时刻只允许一个真实 editor adapter；不承担页签视觉、持久恢复或批量决策 UI |
-| `WorkspaceTabBar` | `src/features/tabs/WorkspaceTabBar.tsx` | P1 | 消费 manager 快照投影真实 tablist、活动项、同名路径提示和非颜色状态；提供 roving tabindex、鼠标/键盘激活、单项关闭与当前窗口排序，页签 viewport 独立横向滚动；不保存顺序或实现批量结算 |
-| `TabMenu` | `src/features/tabs/TabMenu.tsx` | `TabOverflowMenu`、`TabContextMenu` | 共享 menu 语义、可聚焦项筛选、方向键/首尾遍历、Esc/Tab/外部点击关闭和焦点返回；溢出定位与页签动作由薄消费者分别配置，不在菜单内复制页签状态 |
+| `WorkspaceTabManager` | `src/features/tabs/WorkspaceTabManager.ts` | P1 文件树、可见页签切换与最近关闭 | 非视觉多文档 runtime：按 Rust opaque 路径身份唯一打开/聚焦和重新校验最近关闭项，每页签独立持有 session/history/save controller，切换/关闭前提交活动 adapter 投影且任意时刻只允许一个真实 editor adapter；不承担页签视觉、启动持久恢复或批量决策 UI |
+| `WorkspaceTabBar` | `src/features/tabs/WorkspaceTabBar.tsx` | P1 | 消费 manager 快照投影真实 tablist、活动项、同名路径提示和非颜色状态；提供 roving tabindex、鼠标/键盘激活、单项关闭、当前窗口排序与最近关闭入口，页签 viewport 独立横向滚动；不实现批量结算 |
+| `TabMenu` | `src/features/tabs/TabMenu.tsx` | `TabOverflowMenu`、`TabContextMenu` | 共享 menu/分区语义、可聚焦项筛选、方向键/首尾遍历、Esc/Tab/外部点击关闭和焦点返回；溢出定位、最近关闭与页签动作由薄消费者分别配置，不在菜单内复制页签状态 |
+| `WorkspaceTabSessionPersistence` | `src/features/tabs/tabSessionPersistence.ts` | P1 | 将当前轻量页签投影以防抖、revision/CAS 写入既有 Rust 会话仓储；不保存正文/history，不覆盖尚未由启动恢复消费的既有非空会话 |
+| `tabPathImpact` | `src/features/tabs/tabPathImpact.ts` | P1 文件/目录重命名、移动与删除预检 | 纯函数收集受影响打开页签、目标路径和已加载文档图片链接改写预案；不执行磁盘写入或 runtime 提交 |
 | `WorkspaceTree` | `src/features/workbench/WorkspaceTree.tsx` | P1 | 渐进目录节点、磁盘提交后更新、只读标识、异步刷新期间也稳定的单一 Tab 停靠点，以及上下/首尾/父子方向键导航 |
 | `PermanentDeleteDialog` | `src/features/workbench/PermanentDeleteDialog.tsx` | P1 永久删除流程 | 复用 `AppDialog` 承载删除提案、显式不可逆确认、提交门禁、阶段化错误反馈与安全取消 |
 | `workspacePath` | `src/features/workbench/workspacePath.ts` | `workspaceTreeState`、`WorkspaceWorkbench` | 工作区相对路径的父级计算、同路径/子路径边界判断和前缀重映射；根目录键仍由树状态层适配 |
@@ -315,7 +317,7 @@ Iteration Guide：
 
 ## 10. Known Gaps
 
-- P2、P1 工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；T17 已完成页面私有颜色/渐变收口，并让 `AppDialog` 与 P1 窄窗抽屉共同消费 `focusContainment`。P1 文件树 reducer 与工作台页面共同消费 `workspacePath`，避免重命名/移动后的树状态与页面选择状态使用两套路径规则。P1 已真实消费 `DocumentEditorShell`、Milkdown/CodeMirror adapter、生产 Remark/GFM 兼容性解析器、统一格式栏、`SaveStatus` 和持续 `DocumentStatusBar`；两种 editor chunk 按模式延迟加载，加载回退复用 `AsyncStatePanel`。自动/手动保存和窗口结算已接入真实 session/磁盘结果；P1/P2 已接入受控恢复入口，P1 已提供冲突二次确认、另存副本和外部删除保护，全部消费真实 session、快照与一次性令牌。T28 已接入资源目录、系统选择器/粘贴/拖放图片输入、文档相对链接、缺失占位/重新定位与移动链接调整；T29 已让原生菜单和状态栏由当前聚焦窗口的同一 session 驱动，T34 又把保存状态收敛为状态栏单一位置、恢复当前文档路径，并让工具栏只滚动模式/格式区而固定保存与查找主操作。T37 已让 P1 消费 `WorkspaceTabManager`，保留每文档独立 session/history/mode 且只挂载活动 editor；T38 已接入真实 `WorkspaceTabBar` 与共享 `TabMenu`，提供可见页签、非颜色状态、当前窗口排序、单项关闭、溢出定位和键盘/焦点契约。最近关闭、顺序持久化、批量结算和启动恢复仍未实现。`PathStatus`、`DesktopWindowStatus` 未形成两个同职责消费者，因此未登记为空组件。P1 的大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
+- P2、P1 工作台壳与共享 `AppDialog`、`AsyncStatePanel` 已落地并消费 `src/styles/tokens.css`；T17 已完成页面私有颜色/渐变收口，并让 `AppDialog` 与 P1 窄窗抽屉共同消费 `focusContainment`。P1 文件树 reducer 与工作台页面共同消费 `workspacePath`，避免重命名/移动后的树状态与页面选择状态使用两套路径规则。P1 已真实消费 `DocumentEditorShell`、Milkdown/CodeMirror adapter、生产 Remark/GFM 兼容性解析器、统一格式栏、`SaveStatus` 和持续 `DocumentStatusBar`；两种 editor chunk 按模式延迟加载，加载回退复用 `AsyncStatePanel`。自动/手动保存和窗口结算已接入真实 session/磁盘结果；P1/P2 已接入受控恢复入口，P1 已提供冲突二次确认、另存副本和外部删除保护，全部消费真实 session、快照与一次性令牌。T28 已接入资源目录、系统选择器/粘贴/拖放图片输入、文档相对链接、缺失占位/重新定位与移动链接调整；T29 已让原生菜单和状态栏由当前聚焦窗口的同一 session 驱动，T34 又把保存状态收敛为状态栏单一位置、恢复当前文档路径，并让工具栏只滚动模式/格式区而固定保存与查找主操作。T37 已让 P1 消费 `WorkspaceTabManager`，保留每文档独立 session/history/mode 且只挂载活动 editor；T38 已接入真实 `WorkspaceTabBar` 与共享 `TabMenu`，提供可见页签、非颜色状态、当前窗口排序、单项关闭、溢出定位和键盘/焦点契约；T39 已让溢出菜单消费最近关闭、把当前顺序/活动项/最近项写入 Rust 会话仓储，并在文件树破坏性操作前生成全部打开页签与图片链接影响预案。已有非空会话的启动恢复、批量结算和磁盘成功后的多 runtime 原子重映射仍未实现。`PathStatus`、`DesktopWindowStatus` 未形成两个同职责消费者，因此未登记为空组件。P1 的大纲、可调布局与阅读区域，以及 P3 仍未实现，暗色令牌和完整主题能力也未建立，当前仍不能表述为完整代码级设计系统。
 - 暗色主题尚无完整原型和 token；不得简单反转当前亮色值。R7/R15 阶段需补全明暗语义、派生状态和跨窗口预览测试。
 - `17px / 1.76`、约 `760–820px` 正文宽度及 `252/220px` 侧栏是 alpha 校准基线，仍需在不同 DPI、中英文长文和 Windows 字体渲染下验证。
 - 自定义主题“明暗两套调色板必须同时通过才允许保存”仍是待主题阶段确认的非阻塞决策；确认前不要写成用户已最终决定。

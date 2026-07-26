@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -60,6 +60,26 @@ function gateway(overrides: Partial<WorkspaceWorkbenchGateway> = {}): WorkspaceW
       async (_workspaceId, relativePath: string) => ({
         relativePath,
         identity: `native:${relativePath}`,
+      }),
+    ),
+    getTabSession: vi.fn().mockResolvedValue({
+      schemaVersion: 1,
+      workspaceId: "workspace-a",
+      windowStateRef: "window-session-a",
+      revision: 0,
+      tabs: [],
+      activeRelativePath: null,
+      recentlyClosed: [],
+      updatedAt: 0,
+      issues: [],
+    }),
+    saveTabSession: vi.fn().mockImplementation(
+      async (_workspaceId, windowStateRef, expectedRevision, snapshot) => ({
+        workspaceId: "workspace-a",
+        windowStateRef: windowStateRef ?? "window-session-a",
+        revision: expectedRevision + 1,
+        tabCount: snapshot.tabs.length,
+        updatedAt: snapshot.updatedAt,
       }),
     ),
     scan: vi.fn().mockImplementation(
@@ -669,6 +689,218 @@ describe("WorkspaceWorkbench", () => {
     );
     expect(screen.getByRole("tab", { name: /note\.md/ }).getAttribute("aria-selected")).toBe("true");
     expect(await screen.findByText("First")).toBeTruthy();
+  });
+
+  it("reopens a recently closed tab through the overflow menu", async () => {
+    const read = vi.fn().mockImplementation(async (_workspaceId, path) => ({
+      relativePath: path,
+      status: "ready",
+      content: path === "note.md" ? "# First" : "# Second",
+      revision: {
+        modifiedAt: 1,
+        size: 8,
+        contentHash: `hash:${path}`,
+        encoding: "utf8",
+        lineEnding: "lf",
+      },
+    }));
+    const api = gateway({
+      pollScan: vi.fn().mockResolvedValue({
+        scanId: "scan-1",
+        processed: 2,
+        entries: [note, secondNote],
+        issues: [],
+        complete: true,
+        cancelled: false,
+      }),
+      read,
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByText("First");
+    await user.click(screen.getByRole("treeitem", { name: /second\.md/ }));
+    await screen.findByText("Second");
+    await user.click(screen.getByRole("button", { name: "关闭 second.md" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("tab", { name: /second\.md/ })).toBeNull(),
+    );
+
+    await user.click(screen.getByRole("button", { name: "所有页签" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: /重新打开 second\.md/ }),
+    );
+
+    expect(await screen.findByRole("tab", { name: /second\.md/ })).toBeTruthy();
+    expect(await screen.findByText("Second")).toBeTruthy();
+    expect(read).toHaveBeenCalledTimes(3);
+  });
+
+  it("persists the dropped tab order through the revisioned session gateway", async () => {
+    const api = gateway({
+      pollScan: vi.fn().mockResolvedValue({
+        scanId: "scan-1",
+        processed: 2,
+        entries: [note, secondNote],
+        issues: [],
+        complete: true,
+        cancelled: false,
+      }),
+      read: vi.fn().mockImplementation(async (_workspaceId, path) => ({
+        relativePath: path,
+        status: "ready",
+        content: `# ${path}`,
+        revision: {
+          modifiedAt: 1,
+          size: 8,
+          contentHash: `hash:${path}`,
+          encoding: "utf8",
+          lineEnding: "lf",
+        },
+      })),
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByRole("heading", { name: "note.md" });
+    await user.click(screen.getByRole("treeitem", { name: /second\.md/ }));
+    await screen.findByRole("heading", { name: "second.md" });
+    const tabs = screen.getAllByRole("tab");
+    const data = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: "",
+      setData: (type: string, value: string) => data.set(type, value),
+      getData: (type: string) => data.get(type) ?? "",
+    };
+
+    fireEvent.dragStart(tabs[0]!, { dataTransfer });
+    fireEvent.dragOver(tabs[1]!, { dataTransfer });
+    fireEvent.drop(tabs[1]!, { dataTransfer });
+
+    await waitFor(
+      () => {
+        expect(api.saveTabSession).toHaveBeenCalled();
+        const calls = vi.mocked(api.saveTabSession).mock.calls;
+        const persisted = calls.at(-1)?.[3];
+        expect(persisted?.tabs.map((tab) => tab.relativePath)).toEqual([
+          "second.md",
+          "note.md",
+        ]);
+      },
+      { timeout: 1_500 },
+    );
+  });
+
+  it("blocks a directory move before disk when multiple open tabs are affected", async () => {
+    const firstGuide: FsEntry = {
+      ...note,
+      relativePath: "guides/a.md",
+      name: "a.md",
+    };
+    const secondGuide: FsEntry = {
+      ...note,
+      relativePath: "guides/b.md",
+      name: "b.md",
+    };
+    const api = gateway({
+      scan: vi.fn().mockImplementation((_workspaceId, directory) =>
+        Promise.resolve({
+          scanId: directory ? "scan-guides" : "scan-root",
+          workspaceId: workspace.id,
+          directory,
+        }),
+      ),
+      pollScan: vi.fn().mockImplementation((scanId) =>
+        Promise.resolve({
+          scanId,
+          processed: scanId === "scan-root" ? 1 : 2,
+          entries:
+            scanId === "scan-root"
+              ? [folder]
+              : [firstGuide, secondGuide],
+          issues: [],
+          complete: true,
+          cancelled: false,
+        }),
+      ),
+      read: vi.fn().mockImplementation(async (_workspaceId, path) => ({
+        relativePath: path,
+        status: "ready",
+        content: `# ${path}`,
+        revision: {
+          modifiedAt: 1,
+          size: 8,
+          contentHash: `hash:${path}`,
+          encoding: "utf8",
+          lineEnding: "lf",
+        },
+      })),
+      move: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    const folderRow = await screen.findByRole("treeitem", { name: /guides/ });
+    await user.click(folderRow);
+    await user.click(await screen.findByRole("treeitem", { name: /a\.md/ }));
+    await screen.findByRole("heading", { name: "guides/a.md" });
+    await user.click(screen.getByRole("treeitem", { name: /b\.md/ }));
+    await screen.findByRole("heading", { name: "guides/b.md" });
+    await user.click(folderRow);
+    await user.click(screen.getByRole("button", { name: "移动" }));
+    const target = screen.getByLabelText("目标文件夹（留空表示根目录）");
+    await user.clear(target);
+    await user.type(target, "archive");
+    await user.click(screen.getByRole("button", { name: "提交到磁盘" }));
+
+    expect(
+      await screen.findByText(/影响 2 个已打开页签/),
+    ).toBeTruthy();
+    expect(api.move).not.toHaveBeenCalled();
+  });
+
+  it("does not rename an open tab before T40 can atomically remap its runtime", async () => {
+    const api = gateway({ rename: vi.fn() });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByRole("heading", { name: "真实文档" });
+    await user.click(screen.getByRole("button", { name: "重命名" }));
+    const input = screen.getByLabelText("新名称");
+    await user.clear(input);
+    await user.type(input, "renamed.md");
+    await user.click(screen.getByRole("button", { name: "提交到磁盘" }));
+
+    expect(
+      await screen.findByText(/影响 1 个已打开页签/),
+    ).toBeTruthy();
+    expect(api.rename).not.toHaveBeenCalled();
   });
 
   it("opens a dense Markdown document directly in source mode without stale visual content", async () => {

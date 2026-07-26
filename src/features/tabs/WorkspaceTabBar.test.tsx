@@ -121,7 +121,12 @@ function renderBar(snapshot = tabSnapshot(["guides/note.md", "drafts/note.md"], 
   const actions = {
     onActivate: vi.fn(),
     onClose: vi.fn(),
+    onDiscardRecent: vi.fn(),
     onMove: vi.fn(),
+    onReopen: vi.fn().mockResolvedValue({
+      status: "opened" as const,
+      tabId: "reopened-tab",
+    }),
   };
   render(<WorkspaceTabBar {...actions} snapshot={snapshot} />);
   return actions;
@@ -198,5 +203,58 @@ describe("WorkspaceTabBar", () => {
     fireEvent.dragOver(tabs[1]!, { dataTransfer });
     fireEvent.drop(tabs[1]!, { dataTransfer });
     expect(actions.onMove).toHaveBeenCalledWith("tab-0", 1);
+  });
+
+  it("reopens a recent tab and offers safe record removal after failure", async () => {
+    const snapshot = tabSnapshot(["open.md"]);
+    const recentPath = acceptWorkspaceTabPath({
+      relativePath: "missing.md",
+      identity: "native:missing.md",
+    });
+    const withRecent: WorkspaceTabManagerSnapshot = {
+      ...snapshot,
+      collection: {
+        ...snapshot.collection,
+        recentlyClosed: [{
+          workspaceId: "workspace-a",
+          relativePath: recentPath.relativePath,
+          pathIdentity: recentPath.identity,
+          displayName: "missing.md",
+          parentHint: null,
+          view: null,
+          closedAt: 10,
+        }],
+      },
+    };
+    const actions = renderBar(withRecent);
+    actions.onReopen.mockResolvedValueOnce({
+      status: "failed",
+      error: {
+        code: "path_not_found",
+        messageKey: "error.desktop.path_not_found",
+        pathHint: "missing.md",
+        contentSafe: true,
+        retryable: true,
+      },
+    });
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "所有页签" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: /重新打开 missing\.md/ }),
+    );
+    await waitFor(() =>
+      expect(actions.onReopen).toHaveBeenCalledWith(recentPath.identity),
+    );
+
+    await user.click(screen.getByRole("button", { name: "所有页签" }));
+    expect(
+      screen.getByRole("menuitem", { name: /重新打开 missing\.md/ })
+        .textContent,
+    ).toContain("原路径已经不存在");
+    await user.click(
+      screen.getByRole("menuitem", { name: /移除失效记录 missing\.md/ }),
+    );
+    expect(actions.onDiscardRecent).toHaveBeenCalledWith(recentPath.identity);
   });
 });

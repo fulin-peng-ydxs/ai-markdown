@@ -400,6 +400,68 @@ describe("WorkspaceTabManager", () => {
     });
   });
 
+  it("revalidates a recent path, preserves failed records and restores view on success", async () => {
+    let projected: ReadyDocumentSession | null = null;
+    const fixture = managerFixture({
+      captureActiveProjection: () => projected,
+    });
+    const tabId = await openReady(fixture.manager, "recent.md");
+    const current = fixture.manager.snapshot().activeRuntime
+      ?.session as ReadyDocumentSession;
+    projected = {
+      ...current,
+      mode: "source",
+      selection: { kind: "source", anchor: 4, head: 4 },
+      anchor: { kind: "source", offset: 4, scrollTop: 29 },
+    };
+    await fixture.manager.close(tabId);
+    const recent =
+      fixture.manager.snapshot().collection.recentlyClosed[0];
+    if (!recent) throw new Error("missing recent tab");
+
+    vi.mocked(fixture.gateway.resolvePath).mockRejectedValueOnce({
+      code: "path_not_found",
+      messageKey: "error.desktop.path_not_found",
+      pathHint: "recent.md",
+      contentSafe: true,
+      retryable: true,
+    });
+    expect(
+      await fixture.manager.reopenRecentlyClosed(recent.pathIdentity, {
+        writable: true,
+      }),
+    ).toMatchObject({ status: "failed", error: { code: "path_not_found" } });
+    expect(fixture.manager.snapshot().collection.recentlyClosed).toHaveLength(1);
+
+    const reopened = await fixture.manager.reopenRecentlyClosed(
+      recent.pathIdentity,
+      { writable: true },
+    );
+    expect(reopened.status).toBe("opened");
+    expect(fixture.manager.snapshot().collection.recentlyClosed).toHaveLength(0);
+    expect(fixture.manager.snapshot().activeRuntime?.session).toMatchObject({
+      status: "ready",
+      mode: "source",
+      selection: { anchor: 4, head: 4 },
+      anchor: { offset: 4, scrollTop: 29 },
+    });
+  });
+
+  it("discards only the recent record and marks serialized revisions", async () => {
+    const { manager } = managerFixture();
+    const tabId = await openReady(manager, "discard.md");
+    await manager.close(tabId);
+    const recent = manager.snapshot().collection.recentlyClosed[0];
+    if (!recent) throw new Error("missing recent tab");
+
+    expect(manager.discardRecentlyClosed(recent.pathIdentity)).toBe(true);
+    expect(manager.snapshot().collection.recentlyClosed).toEqual([]);
+    const revision = manager.snapshot().collection.revision;
+    expect(manager.markPersisted(revision)).toBe(true);
+    expect(manager.snapshot().collection.persistedRevision).toBe(revision);
+    expect(manager.markPersisted(revision)).toBe(false);
+  });
+
   it("records actual adapter mounts with a maximum of one active projection", async () => {
     const { manager } = managerFixture();
     const first = await openReady(manager, "one.md");

@@ -25,6 +25,7 @@ import {
   type WorkspaceTabCollection,
 } from "./tabReducer";
 import { acceptWorkspaceTabPath } from "./tabPath";
+import type { WorkspaceTabPathIdentity } from "./tabPath";
 import type { WorkspaceTabSessionGateway } from "./tabSessionGateway";
 import type {
   WorkspaceTabDescriptor,
@@ -205,6 +206,39 @@ export class WorkspaceTabManager {
     if (this.destroyed || !this.collection.tabsById.has(tabId)) return false;
     const previous = this.collection;
     this.dispatch({ type: "move", tabId, toIndex });
+    return this.collection !== previous;
+  }
+
+  async reopenRecentlyClosed(
+    pathIdentity: WorkspaceTabPathIdentity,
+    options: Omit<WorkspaceTabOpenOptions, "restoredView">,
+  ): Promise<WorkspaceTabOpenResult> {
+    const recent = this.collection.recentlyClosed.find(
+      (candidate) => candidate.pathIdentity === pathIdentity,
+    );
+    if (!recent) {
+      return {
+        status: "failed",
+        error: managerError("recent_tab_not_found", null),
+      };
+    }
+    return this.open(recent.relativePath, {
+      ...options,
+      restoredView: recent.view,
+    });
+  }
+
+  discardRecentlyClosed(pathIdentity: WorkspaceTabPathIdentity): boolean {
+    if (this.destroyed) return false;
+    const previous = this.collection;
+    this.dispatch({ type: "discard_closed", pathIdentity });
+    return this.collection !== previous;
+  }
+
+  markPersisted(revision: number): boolean {
+    if (this.destroyed) return false;
+    const previous = this.collection;
+    this.dispatch({ type: "mark_persisted", revision });
     return this.collection !== previous;
   }
 
@@ -414,7 +448,10 @@ export class WorkspaceTabManager {
     ) {
       return;
     }
-    const resolved = applyDocumentLoadOutcome(currentRuntime.session, outcome);
+    let resolved = applyDocumentLoadOutcome(currentRuntime.session, outcome);
+    if (resolved.status === "ready" && currentTab.restoredView) {
+      resolved = applyRestoredView(resolved, currentTab.restoredView);
+    }
     currentRuntime.session = resolved;
     currentRuntime.saveController.observe(
       resolved.status === "ready" ? resolved : null,
@@ -515,6 +552,24 @@ function viewFromSession(
         anchor: session.anchor,
       }
     : null;
+}
+
+function applyRestoredView(
+  session: ReadyDocumentSession,
+  view: WorkspaceTabViewState,
+): ReadyDocumentSession {
+  if (
+    view.mode === "visual" &&
+    session.compatibility.mode === "source-only"
+  ) {
+    return session;
+  }
+  return {
+    ...session,
+    mode: view.mode,
+    selection: view.selection,
+    anchor: view.anchor,
+  };
 }
 
 function managerError(

@@ -231,6 +231,18 @@
   cursor: pointer;
 }
 
+.workspace-tab-menu__entry {
+  display: contents;
+}
+
+.workspace-tab-menu__section {
+  margin-top: var(--space-xs);
+  padding: var(--space-sm) var(--space-sm) var(--space-xs);
+  color: var(--color-muted);
+  font: var(--font-ui-sm);
+  border-top: 1px solid var(--color-line);
+}
+
 .workspace-tab-menu__item:hover:not(:disabled),
 .workspace-tab-menu__item:focus-visible {
   background: var(--color-accent-soft);

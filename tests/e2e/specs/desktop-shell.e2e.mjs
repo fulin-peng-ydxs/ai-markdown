@@ -383,7 +383,7 @@ describe("Plainroot desktop shell", () => {
 
     const overflowTrigger = await $('button[aria-label="所有页签"]');
     await overflowTrigger.click();
-    const overflowMenu = await $('[role="menu"][aria-label="所有打开的页签"]');
+    const overflowMenu = await $('[role="menu"][aria-label="所有页签与最近关闭"]');
     await overflowMenu.waitForDisplayed();
     assert.equal(
       await overflowMenu.$$('[role="menuitem"]').length,
@@ -463,6 +463,50 @@ describe("Plainroot desktop shell", () => {
         `tab runtime JS heap grew beyond 64 MiB: ${JSON.stringify({ baseline, after, heapDelta })}`,
       );
     }
+    await tabList.$('button[role="tab"][title^="note.md ·"]').click();
+    await $('[aria-label="Markdown 排版编辑区"]').waitForDisplayed();
+
+    await tabList.$('button[role="tab"][title^="tab-three.md ·"]').click();
+    await $('button[aria-label="关闭 tab-three.md"]').click();
+    await browser.waitUntil(
+      async () => (await tabList.$$('[role="tab"]').length) === 2,
+      {
+        timeout: 10_000,
+        timeoutMsg: "closing a clean tab did not update the visible tab list",
+      },
+    );
+    await overflowTrigger.click();
+    const recentMenu = await $(
+      '[role="menu"][aria-label="所有页签与最近关闭"]',
+    );
+    await recentMenu.waitForDisplayed();
+    await recentMenu
+      .$('[role="menuitem"]')
+      .waitForDisplayed();
+    await recentMenu
+      .$('button*=重新打开 tab-three.md')
+      .click();
+    await browser.waitUntil(
+      async () =>
+        (await tabList.$$('[role="tab"]').length) === 3 &&
+        (await tabList
+          .$('[role="tab"][aria-selected="true"] strong')
+          .getText()) === "tab-three.md",
+      {
+        timeout: 10_000,
+        timeoutMsg: "recently closed tab did not revalidate and reopen",
+      },
+    );
+    await browser.pause(400);
+    const persistedTabs = await invoke("get_workspace_tab_session", {
+      workspaceId,
+      windowStateRef: null,
+    });
+    assert.deepEqual(
+      persistedTabs.tabs.map((tab) => tab.path.relativePath),
+      ["note.md", "tab-two.md", "tab-three.md"],
+    );
+    assert.equal(persistedTabs.recentlyClosed.length, 0);
     await tabList.$('button[role="tab"][title^="note.md ·"]').click();
     await $('[aria-label="Markdown 排版编辑区"]').waitForDisplayed();
   });

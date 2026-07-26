@@ -14,6 +14,7 @@ export interface TabMenuItem {
   description?: string;
   disabled?: boolean;
   destructive?: boolean;
+  sectionLabel?: string;
   onSelect(): void;
 }
 
@@ -90,22 +91,31 @@ export function TabMenu({
     >
       {childrenBeforeItems}
       {items.map((item) => (
-        <button
-          className="workspace-tab-menu__item"
-          data-destructive={item.destructive || undefined}
-          disabled={item.disabled}
-          key={item.id}
-          onClick={() => {
-            item.onSelect();
-            onRequestClose("selection");
-          }}
-          role="menuitem"
-          title={item.description}
-          type="button"
-        >
-          <span>{item.label}</span>
-          {item.description ? <small>{item.description}</small> : null}
-        </button>
+        <div className="workspace-tab-menu__entry" key={item.id} role="none">
+          {item.sectionLabel ? (
+            <div
+              className="workspace-tab-menu__section"
+              role="separator"
+            >
+              {item.sectionLabel}
+            </div>
+          ) : null}
+          <button
+            className="workspace-tab-menu__item"
+            data-destructive={item.destructive || undefined}
+            disabled={item.disabled}
+            onClick={() => {
+              item.onSelect();
+              onRequestClose("selection");
+            }}
+            role="menuitem"
+            title={item.description}
+            type="button"
+          >
+            <span>{item.label}</span>
+            {item.description ? <small>{item.description}</small> : null}
+          </button>
+        </div>
       ))}
     </div>
   );

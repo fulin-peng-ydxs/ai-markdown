@@ -66,9 +66,17 @@ import {
 import { PermanentDeleteDialog } from "./PermanentDeleteDialog";
 import {
   WorkspaceTabManager,
+  type WorkspaceTabOpenResult,
   type WorkspaceTabManagerSnapshot,
 } from "../tabs/WorkspaceTabManager";
 import { WorkspaceTabBar } from "../tabs/WorkspaceTabBar";
+import {
+  analyzeWorkspaceTabPathImpact,
+  type WorkspaceTabPathImpact,
+  type WorkspaceTabPathMutation,
+} from "../tabs/tabPathImpact";
+import type { WorkspaceTabPathIdentity } from "../tabs/tabPath";
+import { WorkspaceTabSessionPersistence } from "../tabs/tabSessionPersistence";
 import type { WorkspaceTabId } from "../tabs/tabTypes";
 import type { WorkspaceTabSessionGateway } from "../tabs/tabSessionGateway";
 import { WorkspaceTree } from "./WorkspaceTree";
@@ -141,6 +149,7 @@ export function WorkspaceWorkbench({
   const saveControllerRef = useRef<DocumentSaveController | null>(null);
   const tabManagerRef = useRef<WorkspaceTabManager | null>(null);
   const tabManagerSubscriptionRef = useRef<(() => void) | null>(null);
+  const tabPersistenceRef = useRef<WorkspaceTabSessionPersistence | null>(null);
   const tabManagerSnapshotRef = useRef<WorkspaceTabManagerSnapshot | null>(null);
   const [tabSnapshot, setTabSnapshot] =
     useState<WorkspaceTabManagerSnapshot | null>(null);
@@ -151,8 +160,10 @@ export function WorkspaceWorkbench({
   const [pageError, setPageError] = useState<DesktopError | null>(null);
   const [operation, setOperation] = useState<PendingOperation | null>(null);
   const [operationError, setOperationError] = useState<DesktopError | null>(null);
+  const [operationBlock, setOperationBlock] = useState<string | null>(null);
   const [operationInspecting, setOperationInspecting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<FsEntry | null>(null);
+  const [deleteBlock, setDeleteBlock] = useState<string | null>(null);
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<FsEntry | null>(null);
   const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
   const [decision, setDecision] = useState<PendingDecision | null>(null);
@@ -389,6 +400,8 @@ export function WorkspaceWorkbench({
     setClosingTabIds(new Set());
     tabManagerSubscriptionRef.current?.();
     tabManagerSubscriptionRef.current = null;
+    tabPersistenceRef.current?.dispose();
+    tabPersistenceRef.current = null;
     const previousManager = tabManagerRef.current;
     if (previousManager) void previousManager.destroy();
     const manager = new WorkspaceTabManager({
@@ -398,8 +411,25 @@ export function WorkspaceWorkbench({
         editorHandleRef.current?.commitProjection() ?? null,
     });
     tabManagerRef.current = manager;
+    const persistence = new WorkspaceTabSessionPersistence({
+      workspaceId: nextWorkspace.id,
+      gateway: {
+        get: gateway.getTabSession,
+        save: gateway.saveTabSession,
+      },
+      markPersisted: (revision) => {
+        manager.markPersisted(revision);
+      },
+      onError: (error) => {
+        if (mountedRef.current && generation === generationRef.current) {
+          setPageError(error);
+        }
+      },
+    });
+    tabPersistenceRef.current = persistence;
     tabManagerSubscriptionRef.current = manager.subscribe((snapshot) => {
       if (!mountedRef.current || generation !== generationRef.current) return;
+      persistence.observe(snapshot);
       tabManagerSnapshotRef.current = snapshot;
       setTabSnapshot(snapshot);
       const nextDocument =
@@ -409,6 +439,7 @@ export function WorkspaceWorkbench({
       setDocumentState(nextDocument);
       saveControllerRef.current = manager.activeSaveController();
     });
+    void persistence.initialize();
     setPageError(null);
     void gateway.setTitle(null).catch((reason) => {
       if (mountedRef.current && generation === generationRef.current) {
@@ -439,6 +470,8 @@ export function WorkspaceWorkbench({
       }
       tabManagerSubscriptionRef.current?.();
       tabManagerSubscriptionRef.current = null;
+      tabPersistenceRef.current?.dispose();
+      tabPersistenceRef.current = null;
       const manager = tabManagerRef.current;
       tabManagerRef.current = null;
       if (manager) void manager.destroy();
@@ -710,6 +743,39 @@ export function WorkspaceWorkbench({
 
   function moveWorkspaceTab(tabId: WorkspaceTabId, toIndex: number) {
     tabManagerRef.current?.move(tabId, toIndex);
+  }
+
+  async function reopenWorkspaceTab(
+    pathIdentity: WorkspaceTabPathIdentity,
+  ): Promise<WorkspaceTabOpenResult> {
+    const manager = tabManagerRef.current;
+    const recent = manager?.snapshot().collection.recentlyClosed.find(
+      (candidate) => candidate.pathIdentity === pathIdentity,
+    );
+    if (!manager || !recent) {
+      return {
+        status: "failed",
+        error: normalizeDesktopError(null, "path_not_found"),
+      };
+    }
+    const result = await manager.reopenRecentlyClosed(pathIdentity, {
+      writable:
+        workspace.writable &&
+        (treeRef.current.entries[recent.relativePath]?.writable ?? true),
+    });
+    if (result.status !== "failed") {
+      syncActiveTabChrome(
+        manager.snapshot().activeTab?.relativePath ?? null,
+      );
+      setLifecycleNotice("最近关闭的文档已重新打开。");
+    }
+    return result;
+  }
+
+  function discardRecentlyClosed(pathIdentity: WorkspaceTabPathIdentity) {
+    if (tabManagerRef.current?.discardRecentlyClosed(pathIdentity)) {
+      setLifecycleNotice("已移除最近关闭记录；本地文件没有删除。");
+    }
   }
 
   async function settleCurrentDocument(): Promise<DocumentSaveOutcome> {
@@ -986,6 +1052,7 @@ export function WorkspaceWorkbench({
       },
     };
     setOperationError(null);
+    setOperationBlock(null);
     setOperation(details[kind]);
   }
 
@@ -1025,6 +1092,16 @@ export function WorkspaceWorkbench({
       }
     }
     const currentDocument = documentStateRef.current;
+    const pathImpact = pathImpactForOperation(
+      tabManagerRef.current?.snapshot() ?? null,
+      operation,
+      selectedEntry,
+    );
+    if (pathImpact && pathImpact.affectedTabIds.length > 0) {
+      setOperationBlock(pathImpactBlockedMessage(pathImpact));
+      return;
+    }
+    setOperationBlock(null);
     const movedDocumentSnapshot =
       operation.kind === "move" &&
       selectedEntry &&
@@ -1118,6 +1195,18 @@ export function WorkspaceWorkbench({
   async function moveToTrash() {
     if (!deleteTarget || mutationInFlightRef.current) return;
     const target = deleteTarget;
+    const snapshot = tabManagerRef.current?.snapshot() ?? null;
+    const impact = snapshot
+      ? analyzeWorkspaceTabPathImpact(snapshot, {
+          kind: "delete",
+          sourcePath: target.relativePath,
+        })
+      : null;
+    if (impact && impact.affectedTabIds.length > 0) {
+      setDeleteBlock(pathImpactBlockedMessage(impact));
+      return;
+    }
+    setDeleteBlock(null);
     const currentDocument = documentStateRef.current;
     if (
       currentDocument.status === "ready" &&
@@ -1359,7 +1448,9 @@ export function WorkspaceWorkbench({
         closingTabIds={closingTabIds}
         onActivate={activateWorkspaceTab}
         onClose={closeWorkspaceTab}
+        onDiscardRecent={discardRecentlyClosed}
         onMove={moveWorkspaceTab}
+        onReopen={reopenWorkspaceTab}
         snapshot={tabSnapshot}
       />
 
@@ -1399,7 +1490,10 @@ export function WorkspaceWorkbench({
                 <button disabled={!selectedEntry.writable || operationProcessing} onClick={() => openOperation("rename")} type="button">重命名</button>
                 <button disabled={!selectedEntry.writable || operationProcessing} onClick={() => openOperation("move")} type="button">移动</button>
                 <button onClick={() => void revealSelected()} type="button">定位</button>
-                <button className="is-danger" disabled={!selectedEntry.writable || operationProcessing} onClick={() => setDeleteTarget(selectedEntry)} type="button">删除</button>
+                <button className="is-danger" disabled={!selectedEntry.writable || operationProcessing} onClick={() => {
+                  setDeleteBlock(null);
+                  setDeleteTarget(selectedEntry);
+                }} type="button">删除</button>
               </div>
             </div>
           ) : null}
@@ -1507,7 +1601,10 @@ export function WorkspaceWorkbench({
           >
             {operationDescription}
           </p>
-          <label>{operation?.label}<input autoFocus disabled={operationProcessing} onChange={(event) => setOperation((current) => current ? { ...current, value: event.target.value } : null)} value={operation?.value ?? ""} /></label>
+          <label>{operation?.label}<input autoFocus disabled={operationProcessing} onChange={(event) => {
+            setOperationBlock(null);
+            setOperation((current) => current ? { ...current, value: event.target.value } : null);
+          }} value={operation?.value ?? ""} /></label>
           {operation?.kind === "move" &&
           (operation.localImageCount ?? 0) > 0 ? (
             <label>
@@ -1529,6 +1626,7 @@ export function WorkspaceWorkbench({
             </label>
           ) : null}
           {operationError ? <p aria-live="assertive" className="workbench-dialog-copy__error">{desktopErrorMessage(operationError)}</p> : null}
+          {operationBlock ? <p aria-live="assertive" className="workbench-dialog-copy__error">{operationBlock}</p> : null}
         </div>
       </AppDialog>
 
@@ -1540,7 +1638,7 @@ export function WorkspaceWorkbench({
         onRequestClose={() => setDeleteTarget(null)}
         open={Boolean(deleteTarget)}
       >
-        <div className="workbench-dialog-copy"><h2 id="trash-title">删除“{deleteTarget?.name}”？</h2><p id="trash-description">Plainroot 会先请求系统废纸篓或回收站。系统能力不可用时，才会另行询问是否永久删除。</p></div>
+        <div className="workbench-dialog-copy"><h2 id="trash-title">删除“{deleteTarget?.name}”？</h2><p id="trash-description">Plainroot 会先请求系统废纸篓或回收站。系统能力不可用时，才会另行询问是否永久删除。</p>{deleteBlock ? <p aria-live="assertive" className="workbench-dialog-copy__error">{deleteBlock}</p> : null}</div>
       </AppDialog>
 
       {permanentDeleteTarget ? (
@@ -1662,7 +1760,7 @@ function DocumentView({
   onSessionChange(session: ReadyDocumentSession): void;
 }) {
   if (state.status === "empty") {
-    return <div className="workbench__document-empty"><span aria-hidden="true">M↓</span><h1>选择一份 Markdown 文档</h1><p>文档会在当前窗口打开；页签将在后续阶段接入。</p></div>;
+    return <div className="workbench__document-empty"><span aria-hidden="true">M↓</span><h1>选择一份 Markdown 文档</h1><p>文档会在当前窗口的新页签中打开；也可以从“所有页签”重新打开最近关闭的文档。</p></div>;
   }
   if (state.status === "loading") {
     return <AsyncStatePanel description={state.relativePath} state="loading" title="正在读取文档" />;
@@ -1716,6 +1814,50 @@ function workbenchMenuActionAvailable(
     case "view.source":
       return state.mode !== "source";
   }
+}
+
+function pathImpactForOperation(
+  snapshot: WorkspaceTabManagerSnapshot | null,
+  operation: PendingOperation,
+  selectedEntry: FsEntry | null,
+): WorkspaceTabPathImpact | null {
+  if (
+    !snapshot ||
+    !selectedEntry ||
+    (operation.kind !== "rename" && operation.kind !== "move")
+  ) {
+    return null;
+  }
+  const targetPath =
+    operation.kind === "rename"
+      ? joinWorkspacePath(
+          parentPath(selectedEntry.relativePath),
+          operation.value.trim(),
+        )
+      : joinWorkspacePath(
+          operation.value.trim() || null,
+          selectedEntry.name,
+        );
+  const mutation: WorkspaceTabPathMutation = {
+    kind: operation.kind,
+    sourcePath: selectedEntry.relativePath,
+    targetPath,
+  };
+  return analyzeWorkspaceTabPathImpact(snapshot, mutation);
+}
+
+function joinWorkspacePath(
+  parent: WorkspaceRelativePath | null,
+  name: string,
+): WorkspaceRelativePath {
+  return (parent ? `${parent}/${name}` : name) as WorkspaceRelativePath;
+}
+
+function pathImpactBlockedMessage(impact: WorkspaceTabPathImpact): string {
+  const rewriteCount = impact.markdownRewrites.length;
+  return `这次操作会影响 ${impact.affectedTabIds.length} 个已打开页签${
+    rewriteCount > 0 ? `，其中 ${rewriteCount} 个文档需要调整图片链接` : ""
+  }。当前版本不会在未完成全页签安全结算时修改磁盘；请先关闭受影响页签后重试。`;
 }
 
 function recoveryUnavailableError(

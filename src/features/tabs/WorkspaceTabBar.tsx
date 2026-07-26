@@ -8,9 +8,12 @@ import {
   type MouseEvent,
 } from "react";
 
+import type { DesktopError } from "../../services/desktop/contracts";
 import type { WorkspaceTabManagerSnapshot } from "./WorkspaceTabManager";
+import type { WorkspaceTabOpenResult } from "./WorkspaceTabManager";
 import { TabContextMenu } from "./TabContextMenu";
 import { TabOverflowMenu } from "./TabOverflowMenu";
+import type { WorkspaceTabPathIdentity } from "./tabPath";
 import {
   projectWorkspaceTabStatus,
   type WorkspaceTabDescriptor,
@@ -24,7 +27,11 @@ interface WorkspaceTabBarProps {
   closingTabIds?: ReadonlySet<WorkspaceTabId>;
   onActivate(tabId: WorkspaceTabId): void;
   onClose(tabId: WorkspaceTabId): void | Promise<void>;
+  onDiscardRecent(pathIdentity: WorkspaceTabPathIdentity): void;
   onMove(tabId: WorkspaceTabId, toIndex: number): void;
+  onReopen(
+    pathIdentity: WorkspaceTabPathIdentity,
+  ): Promise<WorkspaceTabOpenResult>;
   snapshot: WorkspaceTabManagerSnapshot | null;
 }
 
@@ -38,7 +45,9 @@ export function WorkspaceTabBar({
   closingTabIds = new Set(),
   onActivate,
   onClose,
+  onDiscardRecent,
   onMove,
+  onReopen,
   snapshot,
 }: WorkspaceTabBarProps) {
   const tabs = useMemo(
@@ -79,6 +88,9 @@ export function WorkspaceTabBar({
   const [contextTarget, setContextTarget] = useState<ContextTarget | null>(null);
   const [draggedTabId, setDraggedTabId] = useState<WorkspaceTabId | null>(null);
   const [dropTabId, setDropTabId] = useState<WorkspaceTabId | null>(null);
+  const [recentFailures, setRecentFailures] = useState<
+    Map<WorkspaceTabPathIdentity, DesktopError>
+  >(new Map());
   const tabRefs = useRef(new Map<WorkspaceTabId, HTMLButtonElement>());
   const overflowTriggerRef = useRef<HTMLButtonElement>(null);
   const contextTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -98,6 +110,19 @@ export function WorkspaceTabBar({
       tabRefs.current.get(tabs[Math.min(pendingIndex, tabs.length - 1)]?.tabId);
     queueMicrotask(() => target?.focus());
   }, [activeTabId, tabs]);
+
+  useEffect(() => {
+    const available = new Set(
+      snapshot?.collection.recentlyClosed.map((recent) => recent.pathIdentity) ??
+        [],
+    );
+    setRecentFailures((current) => {
+      const next = new Map(
+        [...current].filter(([identity]) => available.has(identity)),
+      );
+      return next.size === current.size ? current : next;
+    });
+  }, [snapshot?.collection.recentlyClosed]);
 
   const activeTab = tabs.find((tab) => tab.tabId === activeTabId) ?? null;
   const activeStatus = activeTab
@@ -182,6 +207,30 @@ export function WorkspaceTabBar({
   function closeContextMenu(restoreFocus = true) {
     setContextTarget(null);
     if (restoreFocus) queueMicrotask(() => contextTriggerRef.current?.focus());
+  }
+
+  function requestReopen(pathIdentity: WorkspaceTabPathIdentity) {
+    void onReopen(pathIdentity).then((result) => {
+      setRecentFailures((current) => {
+        const next = new Map(current);
+        if (result.status === "failed") {
+          next.set(pathIdentity, result.error);
+        } else {
+          next.delete(pathIdentity);
+        }
+        return next;
+      });
+    });
+  }
+
+  function discardRecent(pathIdentity: WorkspaceTabPathIdentity) {
+    onDiscardRecent(pathIdentity);
+    setRecentFailures((current) => {
+      if (!current.has(pathIdentity)) return current;
+      const next = new Map(current);
+      next.delete(pathIdentity);
+      return next;
+    });
   }
 
   return (
@@ -297,7 +346,10 @@ export function WorkspaceTabBar({
         aria-haspopup="menu"
         aria-label="所有页签"
         className="workspace-tab-bar__overflow"
-        disabled={tabs.length === 0}
+        disabled={
+          tabs.length === 0 &&
+          (snapshot?.collection.recentlyClosed.length ?? 0) === 0
+        }
         onClick={() => {
           setContextTarget(null);
           setOverflowOpen((current) => !current);
@@ -314,7 +366,11 @@ export function WorkspaceTabBar({
           onActivate={(tabId) => {
             focusAndActivate(tabId);
           }}
+          onDiscardRecent={discardRecent}
+          onReopen={requestReopen}
           onRequestClose={closeOverflowMenu}
+          recentFailures={recentFailures}
+          recentlyClosed={snapshot?.collection.recentlyClosed ?? []}
           statusById={statusById}
           tabs={tabs}
         />

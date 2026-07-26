@@ -60,6 +60,10 @@ export type WorkspaceTabAction =
       tabId: WorkspaceTabId;
       activatedAt: number;
     }
+  | {
+      type: "discard_closed";
+      pathIdentity: WorkspaceTabPathIdentity;
+    }
   | { type: "mark_persisted"; revision: number };
 
 export function createWorkspaceTabCollection(
@@ -111,6 +115,8 @@ export function reduceWorkspaceTabs(
         action.tabId,
         action.activatedAt,
       );
+    case "discard_closed":
+      return discardClosedTab(state, action.pathIdentity);
     case "mark_persisted":
       return markPersisted(state, action.revision);
   }
@@ -487,6 +493,18 @@ function restoreClosedTab(
     restoredView: closed.view,
     lastActivatedAt: activatedAt,
   });
+}
+
+function discardClosedTab(
+  state: WorkspaceTabCollection,
+  pathIdentity: WorkspaceTabPathIdentity,
+): WorkspaceTabCollection {
+  const recentlyClosed = state.recentlyClosed.filter(
+    (candidate) => candidate.pathIdentity !== pathIdentity,
+  );
+  return recentlyClosed.length === state.recentlyClosed.length
+    ? state
+    : changed(state, { recentlyClosed });
 }
 
 function markPersisted(
