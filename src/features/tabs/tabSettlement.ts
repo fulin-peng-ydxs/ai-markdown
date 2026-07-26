@@ -4,12 +4,10 @@ import type {
   WorkspaceTabDescriptor,
   WorkspaceTabId,
   WorkspaceTabSettlementReason,
+  WorkspaceTabSettlementTarget,
 } from "./tabTypes";
 
-export interface WorkspaceTabSettlementTarget {
-  tabId: WorkspaceTabId;
-  incarnation: number;
-}
+export type { WorkspaceTabSettlementTarget } from "./tabTypes";
 
 export interface WorkspaceTabSettlementBatch {
   batchId: string;

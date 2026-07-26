@@ -45,7 +45,7 @@ pnpm tauri build --bundles app
 
 `pnpm test:tabs` 包含可失败的页签身份、状态、容量、序列化和 runtime manager 门禁；`pnpm test:tabs:performance` 只输出当前机器的纯 reducer 基准样本。真实单 editor adapter 与进程 RSS 门禁由隔离的 Tauri/WebKit E2E 承载。
 
-`pnpm test:e2e` 会构建独立 identifier/capability 的测试版本，以临时状态目录和每套件独立复制的工作区启动 embedded WebDriver。最近一次本地 10 条用例覆盖 P2/P1 真 IPC、P2 1100/740 px 布局与焦点、P1 1100/1050/820/740 px 编辑 chrome、三文档可见页签切换、溢出菜单焦点返回、单 adapter/RSS 门禁、两模式编辑、图片输入/上传、保存重开、外部修改、恢复，以及含图片目录移动前的风险确认与取消零副作用；确定性业务流程不启用测试重试。该结果取得于 T39，T40 本轮未重跑桌面 E2E。测试 feature 默认关闭，生产前端产物和 release 二进制均不包含 WDIO、fixture 或 E2E 命令。提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 对应的 GitHub Actions run `30082725332` 已在 macOS/Windows runner 完成第二阶段 9/9 套件；T35～T40 尚未推送或取得远端双平台证据。
+`pnpm test:e2e` 会构建独立 identifier/capability 的测试版本，以临时状态目录和每套件独立复制的工作区启动 embedded WebDriver。最近一次本地 11 条用例覆盖 P2/P1 真 IPC、P2 1100/740 px 布局与焦点、P1 1100/1050/820/740 px 编辑 chrome、三文档可见页签切换、溢出菜单焦点返回、单 adapter/RSS 门禁、批量关闭、打开页签的真实改名/移动/删除及图片链接写回、两模式编辑、图片输入/上传、保存重开、外部修改、恢复，以及含图片目录移动前的风险确认与取消零副作用；确定性业务流程不启用测试重试。测试 feature 默认关闭，生产前端产物和 release 二进制均不包含 WDIO、fixture 或 E2E 命令。提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 对应的 GitHub Actions run `30082725332` 已在 macOS/Windows runner 完成第二阶段 9/9 套件；T35～T40 尚未推送或取得远端双平台证据。
 
 开发模式在依赖安装完成后运行：
 

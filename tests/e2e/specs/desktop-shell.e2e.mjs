@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 
 import { createWorkspaceFixture } from "../../support/workspace-fixture.mjs";
@@ -509,6 +516,178 @@ describe("Plainroot desktop shell", () => {
     assert.equal(persistedTabs.recentlyClosed.length, 0);
     await tabList.$('button[role="tab"][title^="note.md ·"]').click();
     await $('[aria-label="Markdown 排版编辑区"]').waitForDisplayed();
+  });
+
+  it("settles tab batches before real rename, move and delete mutations", async () => {
+    const tabList = await $('[role="tablist"][aria-label="打开的文档"]');
+    const noteTab = await tabList.$('button[role="tab"][title^="note.md ·"]');
+    await noteTab.click();
+    await browser.execute((element) => {
+      element.dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 140,
+          clientY: 80,
+        }),
+      );
+    }, noteTab);
+    const contextMenu = await $('[role="menu"][aria-label="note.md 页签操作"]');
+    await contextMenu.waitForDisplayed();
+    await contextMenu.$("button*=关闭右侧页签").click();
+    await browser.waitUntil(
+      async () => (await tabList.$$('[role="tab"]').length) === 1,
+      {
+        timeout: 10_000,
+        timeoutMsg: "batch close did not settle and remove the right-side tabs",
+      },
+    );
+
+    const renameSource = "t40-rename.md";
+    const renameTarget = "t40-renamed.md";
+    const moveSource = "t40-move.md";
+    const moveTargetDirectory = "t40-target";
+    const moveTarget = `${moveTargetDirectory}/${moveSource}`;
+    const deletePath = "t40-delete.md";
+    const imagePath = join(fixture.root, "assets", "t40-move.png");
+    await mkdir(join(fixture.root, "assets"), { recursive: true });
+    await mkdir(join(fixture.root, moveTargetDirectory), { recursive: true });
+    await writeFile(join(fixture.root, renameSource), "# Rename through T40\n");
+    await writeFile(
+      join(fixture.root, moveSource),
+      "# Move through T40\n\n![asset](assets/t40-move.png)\n",
+    );
+    await writeFile(join(fixture.root, deletePath), "# Delete through T40\n");
+    await writeFile(imagePath, new Uint8Array(PNG_BYTES));
+
+    try {
+      await $('[title="刷新文件树"]').click();
+
+      const renameEntry = await $(
+        `[role="treeitem"][data-tree-path="${renameSource}"]`,
+      );
+      await renameEntry.waitForDisplayed({ timeout: 10_000 });
+      await renameEntry.click();
+      await $('button=重命名').click();
+      const renameDialog = await $("dialog[open]");
+      await renameDialog.$('input[aria-label="新名称"], input').setValue(renameTarget);
+      await renameDialog.$("button=提交到磁盘").click();
+      await browser.waitUntil(
+        async () =>
+          (await tabList
+            .$(`button[role="tab"][title^="${renameTarget} ·"]`)
+            .isExisting()) &&
+          (await readFile(join(fixture.root, renameTarget), "utf8")).includes(
+            "Rename through T40",
+          ),
+        {
+          timeout: 10_000,
+          timeoutMsg: "real rename did not remap the open tab after disk success",
+        },
+      );
+      await assert.rejects(readFile(join(fixture.root, renameSource), "utf8"));
+
+      const moveEntry = await $(
+        `[role="treeitem"][data-tree-path="${moveSource}"]`,
+      );
+      await moveEntry.waitForDisplayed({ timeout: 10_000 });
+      await moveEntry.click();
+      await $('button=移动').click();
+      const moveDialog = await $("dialog[open]");
+      await moveDialog
+        .$('input[aria-label="目标文件夹（留空表示根目录）"], input')
+        .setValue(moveTargetDirectory);
+      assert.equal(
+        await moveDialog
+          .$("input[type=checkbox]")
+          .isSelected(),
+        true,
+        "the real move must offer image-link adjustment for the open document",
+      );
+      await moveDialog.$("button=提交到磁盘").click();
+      await browser.waitUntil(
+        async () => {
+          try {
+            await readFile(join(fixture.root, moveTarget), "utf8");
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        {
+          timeout: 10_000,
+          timeoutMsg: "real move did not commit the target file on disk",
+        },
+      );
+      await tabList
+        .$(`button[role="tab"][title^="${moveTarget} ·"]`)
+        .waitForExist({
+          timeout: 10_000,
+          timeoutMsg: "real move did not remap the open tab after disk success",
+        });
+      await browser.waitUntil(
+        async () =>
+          (
+            await readFile(join(fixture.root, moveTarget), "utf8")
+          ).includes("![asset](../assets/t40-move.png)"),
+        {
+          timeout: 10_000,
+          timeoutMsg:
+            "real move remapped the tab but did not save the adjusted image link",
+        },
+      );
+      await assert.rejects(readFile(join(fixture.root, moveSource), "utf8"));
+
+      const deleteEntry = await $(
+        `[role="treeitem"][data-tree-path="${deletePath}"]`,
+      );
+      await deleteEntry.waitForDisplayed({ timeout: 10_000 });
+      await deleteEntry.click();
+      await $('button=删除').click();
+      const trashDialog = await $("dialog[open]");
+      await trashDialog.$("button=移到废纸篓").click();
+      await browser.waitUntil(
+        async () => {
+          const deleteTab = await tabList.$(
+            `button[role="tab"][title^="${deletePath} ·"]`,
+          );
+          const permanent = await $("button=永久删除");
+          return !(await deleteTab.isExisting()) ||
+            (await permanent.isDisplayed().catch(() => false));
+        },
+        {
+          timeout: 10_000,
+          timeoutMsg: "real trash flow neither closed the tab nor offered fallback",
+        },
+      );
+      const permanent = await $("button=永久删除");
+      if (await permanent.isDisplayed().catch(() => false)) {
+        await permanent.click();
+      }
+      await browser.waitUntil(
+        async () =>
+          !(await tabList
+            .$(`button[role="tab"][title^="${deletePath} ·"]`)
+            .isExisting()),
+        {
+          timeout: 10_000,
+          timeoutMsg: "delete success did not atomically close the open tab",
+        },
+      );
+      await assert.rejects(readFile(join(fixture.root, deletePath), "utf8"));
+    } finally {
+      await rm(join(fixture.root, renameSource), { force: true });
+      await rm(join(fixture.root, renameTarget), { force: true });
+      await rm(join(fixture.root, moveSource), { force: true });
+      await rm(join(fixture.root, moveTargetDirectory), {
+        recursive: true,
+        force: true,
+      });
+      await rm(join(fixture.root, deletePath), { force: true });
+      await rm(imagePath, { force: true });
+      const note = await tabList.$('button[role="tab"][title^="note.md ·"]');
+      if (await note.isExisting()) await note.click();
+    }
   });
 
   it("requires an explicit warning confirmation before moving a directory with images", async () => {

@@ -36,6 +36,7 @@ import type {
   WorkspaceTabDescriptor,
   WorkspaceTabId,
   WorkspaceTabRuntime,
+  WorkspaceTabSettlementTarget,
   WorkspaceTabViewState,
 } from "./tabTypes";
 
@@ -71,11 +72,6 @@ export interface WorkspaceTabSettlementResult {
   status: "settled" | "blocked";
   blockedTabId?: WorkspaceTabId;
   outcome?: DocumentSaveOutcome;
-}
-
-export interface WorkspaceTabSettlementTarget {
-  tabId: WorkspaceTabId;
-  incarnation: number;
 }
 
 export interface WorkspaceTabSettlementAttempt
@@ -345,8 +341,11 @@ export class WorkspaceTabManager {
 
   async settleTabs(
     targets: readonly WorkspaceTabSettlementTarget[],
+    options: { captureActiveProjection?: boolean } = {},
   ): Promise<readonly WorkspaceTabSettlementAttempt[]> {
-    this.captureCurrentProjection();
+    if (options.captureActiveProjection !== false) {
+      this.captureCurrentProjection();
+    }
     const attempts: WorkspaceTabSettlementAttempt[] = [];
     for (const target of targets) {
       const tab = this.collection.tabsById.get(target.tabId);
@@ -369,6 +368,34 @@ export class WorkspaceTabManager {
     return attempts;
   }
 
+  pinSettlementTargets(
+    targets: readonly WorkspaceTabSettlementTarget[],
+  ): readonly WorkspaceTabSettlementTarget[] {
+    this.captureCurrentProjection();
+    return targets.map((target) => {
+      const tab = this.collection.tabsById.get(target.tabId);
+      if (!tab || tab.incarnation !== target.incarnation) {
+        throw new Error(`Workspace tab changed before pin: ${target.tabId}`);
+      }
+      const runtime = this.runtimes.get(target.tabId);
+      const session =
+        runtime?.incarnation === target.incarnation &&
+        runtime.session.status === "ready"
+          ? runtime.session
+          : null;
+      return {
+        tabId: target.tabId,
+        incarnation: target.incarnation,
+        expectedSessionVersion: session
+          ? {
+              generation: session.generation,
+              editVersion: session.editVersion,
+            }
+          : null,
+      };
+    });
+  }
+
   async closeTabsAtomically(
     targets: readonly WorkspaceTabSettlementTarget[],
     options: {
@@ -379,20 +406,35 @@ export class WorkspaceTabManager {
     if (this.destroyed || targets.length === 0) return false;
     this.captureCurrentProjection();
     const closeTargets: WorkspaceTabCloseTarget[] = targets.map((target) => {
-      const tab = this.collection.tabsById.get(target.tabId);
-      if (!tab || tab.incarnation !== target.incarnation) {
-        throw new Error(`Workspace tab changed before close: ${target.tabId}`);
-      }
+      this.assertSettlementTargetCurrent(target);
       return {
         ...target,
         view: viewFromSession(this.runtimes.get(target.tabId)?.session ?? null),
         recordRecent: options.recordRecent,
       };
     });
-    for (const target of closeTargets) {
-      const runtime = this.runtimes.get(target.tabId);
-      if (!runtime || runtime.incarnation !== target.incarnation) continue;
-      await runtime.saveController.abandon();
+    try {
+      for (const target of closeTargets) {
+        const runtime = this.runtimes.get(target.tabId);
+        if (!runtime || runtime.incarnation !== target.incarnation) continue;
+        await runtime.saveController.abandon();
+      }
+      for (const target of targets) {
+        this.assertSettlementTargetCurrent(target);
+      }
+    } catch (error) {
+      // `abandon` releases recovery registrations asynchronously. If content
+      // changes during that gap, restore observation before refusing the close.
+      for (const target of targets) {
+        const runtime = this.runtimes.get(target.tabId);
+        if (
+          runtime?.incarnation === target.incarnation &&
+          runtime.session.status === "ready"
+        ) {
+          runtime.saveController.observe(runtime.session);
+        }
+      }
+      throw error;
     }
     const next = reduceWorkspaceTabs(this.collection, {
       type: "close_batch",
@@ -408,6 +450,34 @@ export class WorkspaceTabManager {
     this.collection = next;
     this.emit();
     return true;
+  }
+
+  private assertSettlementTargetCurrent(
+    target: WorkspaceTabSettlementTarget,
+  ): WorkspaceTabDescriptor {
+    const tab = this.collection.tabsById.get(target.tabId);
+    if (!tab || tab.incarnation !== target.incarnation) {
+      throw new Error(`Workspace tab changed before close: ${target.tabId}`);
+    }
+    if (target.expectedSessionVersion === undefined) return tab;
+    const runtime = this.runtimes.get(target.tabId);
+    const session =
+      runtime?.incarnation === target.incarnation &&
+      runtime.session.status === "ready"
+        ? runtime.session
+        : null;
+    const changed =
+      target.expectedSessionVersion === null
+        ? session !== null
+        : !session ||
+          session.generation !== target.expectedSessionVersion.generation ||
+          session.editVersion !== target.expectedSessionVersion.editVersion;
+    if (changed) {
+      throw new Error(
+        `Workspace tab session changed before close: ${target.tabId}`,
+      );
+    }
+    return tab;
   }
 
   remapTabsAtomically(remaps: readonly WorkspaceTabRuntimeRemap[]): boolean {

@@ -605,6 +605,41 @@ describe("WorkspaceTabManager", () => {
     expect(manager.snapshot().runtimes).toHaveLength(2);
   });
 
+  it("refuses an atomic close when content changes during asynchronous abandonment", async () => {
+    const { manager, recovery } = managerFixture();
+    const tabId = await openReady(manager, "one.md");
+    const tab = manager.snapshot().collection.tabsById.get(tabId);
+    if (!tab) throw new Error("missing tab");
+    const pinned = manager.pinSettlementTargets([
+      { tabId, incarnation: tab.incarnation },
+    ]);
+    let finishRelease!: () => void;
+    vi.mocked(recovery.releaseActive).mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishRelease = () => resolve(true);
+        }),
+    );
+
+    const closing = manager.closeTabsAtomically(pinned);
+    await vi.waitFor(() =>
+      expect(recovery.releaseActive).toHaveBeenCalledWith(
+        "workspace-a",
+        "one.md",
+      ),
+    );
+    editSession(manager, tabId, "# changed while delete was in flight");
+    finishRelease();
+
+    await expect(closing).rejects.toThrow("session changed before close");
+    expect(manager.snapshot().collection.orderedTabIds).toEqual([tabId]);
+    expect(manager.snapshot().runtimes.get(tabId)?.session).toMatchObject({
+      status: "ready",
+      markdown: "# changed while delete was in flight",
+      saveState: { kind: "dirty" },
+    });
+  });
+
   it("atomically remaps descriptor identity and runtime markdown", async () => {
     const { manager } = managerFixture();
     const tabId = await openReady(manager, "guides/note.md");
@@ -641,6 +676,57 @@ describe("WorkspaceTabManager", () => {
       relativePath: "archive/note.md",
       markdown: "# moved\n\n![img](../assets/a.png)",
       saveState: { kind: "dirty" },
+    });
+  });
+
+  it("settles an active runtime rewrite without restoring the stale mounted projection", async () => {
+    let projected: ReadyDocumentSession | null = null;
+    const fixture = managerFixture({
+      captureActiveProjection: () => projected,
+    });
+    const tabId = await openReady(fixture.manager, "note.md");
+    const before = fixture.manager.snapshot();
+    const tab = before.collection.tabsById.get(tabId);
+    const session = before.runtimes.get(tabId)?.session;
+    if (!tab || session?.status !== "ready") throw new Error("missing runtime");
+    projected = session;
+
+    fixture.manager.remapTabsAtomically([
+      {
+        tabId,
+        incarnation: tab.incarnation,
+        path: {
+          relativePath: "archive/note.md",
+          identity: "native:archive/note.md",
+        },
+        markdown: "# moved\n\n![asset](../assets/a.png)",
+        expectedGeneration: session.generation,
+        expectedEditVersion: session.editVersion,
+      },
+    ]);
+    const attempts = await fixture.manager.settleTabs(
+      [{ tabId, incarnation: tab.incarnation }],
+      { captureActiveProjection: false },
+    );
+
+    expect(attempts).toEqual([
+      {
+        tabId,
+        incarnation: tab.incarnation,
+        outcome: { status: "saved" },
+      },
+    ]);
+    expect(fixture.save.write).toHaveBeenCalledWith(
+      "workspace-a",
+      "archive/note.md",
+      "# moved\n\n![asset](../assets/a.png)",
+      revision,
+    );
+    expect(fixture.manager.snapshot().runtimes.get(tabId)?.session).toMatchObject({
+      status: "ready",
+      relativePath: "archive/note.md",
+      markdown: "# moved\n\n![asset](../assets/a.png)",
+      saveState: { kind: "saved" },
     });
   });
 });

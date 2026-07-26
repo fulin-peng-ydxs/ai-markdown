@@ -830,10 +830,19 @@ export function WorkspaceWorkbench({
     const attempts = await manager.settleTabs(batch.targets);
     const blocked = attempts.some((item) => item.outcome.status === "blocked");
     if (!blocked) {
-      await commit(batch.targets, new Map());
-      closingTabIdsRef.current.clear();
-      setClosingTabIds(new Set());
-      return true;
+      try {
+        await commit(manager.pinSettlementTargets(batch.targets), new Map());
+        closingTabIdsRef.current.clear();
+        setClosingTabIds(new Set());
+        return true;
+      } catch {
+        closingTabIdsRef.current.clear();
+        setClosingTabIds(new Set());
+        setLifecycleNotice(
+          "页签内容在操作提交前发生变化；没有关闭该页签，请重新处理。",
+        );
+        return false;
+      }
     }
     settlementCommitRef.current = commit;
     setSettlementResolutions(new Map());
@@ -914,12 +923,19 @@ export function WorkspaceWorkbench({
     }
     setSettlementBusyTabIds(new Set(batch.targets.map((item) => item.tabId)));
     try {
-      await commit(batch.targets, settlementResolutions);
+      await commit(
+        manager.pinSettlementTargets(batch.targets),
+        settlementResolutions,
+      );
       settlementCommitRef.current = null;
       setSettlementBatch(null);
       setSettlementResolutions(new Map());
       closingTabIdsRef.current.clear();
       setClosingTabIds(new Set());
+    } catch {
+      setLifecycleNotice(
+        "页签内容在操作提交前发生变化；没有关闭该页签，请重新处理。",
+      );
     } finally {
       setSettlementBusyTabIds(new Set());
     }
@@ -1521,6 +1537,11 @@ export function WorkspaceWorkbench({
             tabId,
             incarnation,
           })),
+          {
+            // The manager just committed rewritten Markdown. The mounted active
+            // adapter still projects the pre-move text until React reconciles.
+            captureActiveProjection: false,
+          },
         );
         if (results.some((item) => item.outcome.status === "blocked")) {
           setLifecycleNotice(
@@ -1602,9 +1623,19 @@ export function WorkspaceWorkbench({
           ? [session.recoveryState.snapshotId]
           : [];
       });
-      await manager.closeTabsAtomically(settledTargets, {
-        recordRecent: false,
-      });
+      try {
+        await manager.closeTabsAtomically(settledTargets, {
+          recordRecent: false,
+        });
+      } catch {
+        setLifecycleNotice(
+          "磁盘删除已完成，但页签内容随后发生变化；页签保持打开，请另存仍需保留的内容。",
+        );
+        syncActiveTabChrome(
+          manager.snapshot().activeTab?.relativePath ?? null,
+        );
+        return;
+      }
       await Promise.all(
         recoveryToDelete.map((snapshotId) =>
           gateway.recoveryGateway

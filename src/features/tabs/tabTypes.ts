@@ -43,6 +43,19 @@ export const WORKSPACE_TAB_SETTLEMENT_REASONS = [
 export type WorkspaceTabSettlementReason =
   (typeof WORKSPACE_TAB_SETTLEMENT_REASONS)[number];
 
+export interface WorkspaceTabSettlementTarget {
+  tabId: WorkspaceTabId;
+  incarnation: number;
+  /**
+   * Present only after settlement has been pinned for a destructive commit.
+   * `null` means no ready runtime existed at that exact boundary.
+   */
+  expectedSessionVersion?: {
+    generation: number;
+    editVersion: number;
+  } | null;
+}
+
 export type WorkspaceTabLoadState =
   | { kind: "idle"; generation: number }
   | { kind: "loading"; generation: number }
