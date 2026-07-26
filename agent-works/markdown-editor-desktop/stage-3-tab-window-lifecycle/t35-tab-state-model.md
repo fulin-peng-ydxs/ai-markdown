@@ -51,7 +51,7 @@
 - 异步 ABA：原实现只比较 generation，现由集合分配不可复用 incarnation，begin/resolve、活动 selector 和状态投影都必须同时匹配 incarnation；“加载中关闭→复用 tabId 重开→旧结果晚到”及“旧 runtime 污染新页签状态”均被测试拒绝。
 - 状态真实性：idle 与真实空文档分离为 unloaded/empty。
 - 不变量：新增 map key 与 descriptor ID、顺序、路径索引、incarnation、活动项、最近关闭和工作区的双向损坏矩阵验证；最近关闭项同步检查规范化路径、非空 identity、重复身份及派生文件名/父路径。
-- 性能口径：T35 只保留可失败的轻量结构/容量/延迟门禁；`vitest bench` 是报告型样本。真实 Milkdown/CodeMirror 单挂载和 heap/RSS 门禁明确移入 T37，并成为 T38 前置。
+- 性能口径：T35 只保留可失败的轻量结构/容量/延迟门禁；`vitest bench` 是报告型样本。真实 Milkdown/CodeMirror 单挂载和当前平台可观测的内存门禁移入 T37，并成为 T38 前置；不可观测的 JS heap 指标不得伪报通过，由 T45 继续补证。
 
 ## 3. 验证证据
 
@@ -75,7 +75,7 @@
 
 可失败单元门禁建立 20 个已加载的小型 `DocumentSession` 引用，只投影 incarnation 匹配的活动 runtime；100 项恢复描述小于 64 KiB，且序列化结果不含 `markdown`、`history` 或 `saveController`。
 
-上述证据只覆盖轻量模型和小型 session 引用，不代表多个真实大文档的峰值内存、自动保存 I/O、Milkdown/CodeMirror 挂载或切换性能。真实单 adapter 生命周期与可失败 heap/RSS 门禁由 T37 完成并阻塞 T38，T45 再做桌面长时回归。
+上述证据只覆盖轻量模型和小型 session 引用，不代表多个真实大文档的峰值内存、自动保存 I/O、Milkdown/CodeMirror 挂载或切换性能。真实单 adapter 生命周期与当前平台可观测的可失败内存门禁由 T37 完成并阻塞 T38；当前 WebKit 未提供 JS heap 时以 DOM 单挂载和 RSS 为实际证据，JS heap 与桌面长时回归由 T45 补证。
 
 ## 4. 配置、权限与数据影响
 
@@ -100,4 +100,4 @@
 
 ## 6. 后续边界
 
-T36 才能建立版本化窗口页签会话仓储和 Rust/TypeScript 契约，并负责把平台路径 identity 真正接入前端 gateway；T35 测试中的 identity 是脱敏 fixture，只验证模型消费边界。T35 的恢复描述目前只证明序列化边界，不代表磁盘恢复已经可用。T37 才能让 P1 持有多个真实 session/controller，并必须先闭合真实 adapter 单挂载与 heap/RSS 门禁；T38 以后才出现可见页签。
+T36 才能建立版本化窗口页签会话仓储和 Rust/TypeScript 契约，并负责把平台路径 identity 真正接入前端 gateway；T35 测试中的 identity 是脱敏 fixture，只验证模型消费边界。T35 的恢复描述目前只证明序列化边界，不代表磁盘恢复已经可用。T37 才能让 P1 持有多个真实 session/controller，并必须先闭合真实 adapter 单挂载与当前平台可观测的内存门禁；不可观测的 JS heap 由 T45 补证，T38 以后才出现可见页签。

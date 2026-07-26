@@ -83,7 +83,7 @@ flowchart LR
 - 页签主状态与 `AsyncStatePanel` 共同消费 `src/components/asyncState.ts`，遵循 DESIGN 的统一优先级与 assertive/polite 契约；尚未读取的惰性页签投影为 unloaded，不能误报为 empty。
 - P1 文件树入口通过 `tabSessionGateway` 消费 Rust 规范化路径和 opaque identity；同一身份只聚焦既有 runtime。切换前由活动 `DocumentEditorShell` 提交 Markdown、选择与锚点，切换后只挂载目标 runtime 对应的 Milkdown 或 CodeMirror adapter。
 - 非活动 dirty runtime 保留 history、模式和视图状态，并由自身 controller 继续自动保存/恢复快照；窗口结算 intent 会遍历所有已加载 controller。T40 尚未实现混合阻塞态的可见逐项决策和两阶段批量提交。
-- T37 的真实 Tauri/WebKit 门禁使用三个文档、36 次切换，逐次断言页面只有一个 `.ProseMirror` 或 `.cm-editor`，并以测试 feature 的进程 RSS 采样执行增量 ≤128 MiB 的可失败门禁。当前 WebKit 未暴露 JS heap，因此不能宣称取得 JS heap 或双平台内存证据。
+- T37 的真实 Tauri/WebKit 门禁使用三个文档、36 次切换，逐次断言页面只有一个 `.ProseMirror` 或 `.cm-editor`，并以测试 feature 的进程 RSS 采样执行增量 ≤128 MiB 的可失败门禁。当前 WebKit 未暴露 JS heap，因此 T38 前置只以单 adapter 与 RSS 作为已取得证据；JS heap 由 T45 在可观测平台补证，不能宣称已通过或取得双平台内存证据。
 - 窗口页签元数据仓储已经落地，但 T42 尚未把它接入启动恢复；可见页签栏、溢出、排序、关闭和最近关闭入口由 T38 以后任务承接。
 
 ## 4. 保存、恢复和冲突
@@ -176,7 +176,7 @@ UTF-8 BOM 与单一 LF/CRLF/CR 优先沿用原文件；mixed 或不支持编码�
 - `pnpm test:roundtrip` 使用生产 adapter 验证 CommonMark/GFM、图片、受支持 HTML 与 source-only 语料。
 - Rust 契约测试登记所有 TypeScript 导出 interface 和字符串枚举/tag，防止 Rust↔TypeScript 字段漂移。
 - `pnpm test:e2e` 使用独立 identifier、临时状态目录和每套件复制的临时工作区，当前本地 10 条真桌面用例除既有 P1/P2、两种模式、图片、保存重开、外部修改、恢复和目录图片移动风险外，还覆盖三文档 runtime 的单 adapter 与 RSS 门禁。
-- 远端 GitHub Actions run `30082725332` 已在提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 上完成 macOS/Windows 双绿；该矩阵仍只覆盖第二阶段 9/9 桌面 E2E。T37 本地为 209 项 Vitest、200 个 Rust 通过且 1 项手动探针忽略、10/10 macOS 桌面 E2E，尚未推送，不能沿用旧运行宣称第三阶段双平台通过。
+- 远端 GitHub Actions run `30082725332` 已在提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 上完成 macOS/Windows 双绿；该矩阵仍只覆盖第二阶段 9/9 桌面 E2E。T37 本地为 211 项 Vitest、200 个 Rust 通过且 1 项手动探针忽略、10/10 macOS 桌面 E2E，尚未推送，不能沿用旧运行宣称第三阶段双平台通过。
 
 ## 9. 已知边界
 

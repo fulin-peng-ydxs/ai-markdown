@@ -612,7 +612,6 @@ export function WorkspaceWorkbench({
       return;
     }
     setLifecycleNotice(null);
-    setSelectedPath(path);
     setDocumentMetrics(null);
     const opened = await manager.open(path, {
       writable:
@@ -624,6 +623,7 @@ export function WorkspaceWorkbench({
       setPageError(opened.error);
       return;
     }
+    setSelectedPath(path);
     let resolved = manager.snapshot().runtimes.get(opened.tabId)?.session;
     if (
       overrideMarkdown !== undefined &&

@@ -25,14 +25,14 @@
   - 同一 identity 命中时聚焦既有 runtime，不再次读取磁盘或创建第二份可写会话；
   - 读取完成同时校验 tabId、incarnation 和 generation，关闭后重开或慢请求晚到都不能污染新页签；
   - 切换前通过 P1 注入的 `captureActiveProjection` 提交活动 adapter 的 Markdown、选择和锚点；
-  - `settleAll` 逐项结算全部已加载 controller，任一阻塞即保留集合。
+  - `settleAll` 先复用同一 `captureActiveProjection` 提交活动 adapter 的最终选择与锚点，再逐项结算全部已加载 controller；任一阻塞即保留集合。
 - 新增 `src/features/tabs/tabSessionGateway.ts`，只组合既有 read、save、recovery、Remark parser 与 T36 path identity gateway，不复制磁盘协议或路径算法。
 
 ### 2.2 P1 集成
 
 - `WorkspaceWorkbench` 为当前根工作区创建唯一 manager，并订阅其活动投影：
   - 中央文档、文件树选择、状态栏、窗口标题和原生菜单继续只消费活动 runtime；
-  - 文件树点击不同 Markdown 不再销毁前一 session，返回时保留其内容、history、模式和视图；
+  - 文件树点击不同 Markdown 不再销毁前一 session，返回时保留其内容、history、模式和视图；树选中项只在 Rust 路径身份解析成功后提交，失败时保留原选择与活动文档；
   - 活动 editor 以 `tabId:incarnation` 为 React key，非活动 runtime 不渲染 editor；
   - 非活动 dirty runtime 的 controller 保持存活，继续执行自动保存和恢复快照；
   - 慢读取只更新对应 runtime，且只有仍为活动路径时才能更新窗口标题；
@@ -62,6 +62,7 @@
   - RSS 增量阈值为 128 MiB；
   - 若 WebKit 暴露 JS heap 则执行 64 MiB 增量门禁；当前 macOS WebKit 返回 `null`，因此只如实取得 RSS 证据。
 - 最终样本：RSS `77,807,616 → 75,710,464` 字节，增量 `-2,097,152` 字节；该短时本机样本不构成 Windows、长时或 JS heap 容量承诺。
+- T38 前置按实际证据解释为“单一真实 adapter + 当前平台可观测的可失败 RSS 门禁”；JS heap 在当前 WebKit 不可观测，明确留给 T45 在可观测平台补证，不得把缺失指标写成已通过，也不因此阻塞 T38。
 
 ## 3. 复用判断
 
@@ -88,8 +89,8 @@
 | 验证 | 结果 |
 | --- | --- |
 | `pnpm typecheck` | 通过 |
-| `pnpm test` | 通过：Node 30/30、Vitest 209/209、Rust 200 通过且 1 项手动性能探针忽略 |
-| manager/editor/P1 定向 Vitest | 通过：44/44；更宽定向集合 68/68 |
+| `pnpm test` | 通过：Node 30/30、Vitest 211/211、Rust 200 通过且 1 项手动性能探针忽略 |
+| manager/P1 评审整改定向 Vitest | 通过：34/34；覆盖结算前投影提交与路径解析失败保留原树选择 |
 | `pnpm build` | 通过；既有源码 chunk >500 kB 警告保留 |
 | `cargo build --release --locked` | 通过；release 二进制字符串检查确认不含 `e2e_process_rss_bytes` |
 | Rust fmt | 通过 |
@@ -106,6 +107,7 @@
 ## 6. 文档与配置同步
 
 - 已同步：第三阶段 `plan.md`、总 `requirement.md` 阶段状态、`DESIGN.md` 运行时复用登记、两份架构文档、README 和 AGENTS 稳定事实。
+- 本次评审整改同步：`plan.md` 的 T38 内存前置口径、本留痕、架构验证摘要与 AGENTS 测试事实。需求范围、页面设计和产品配置没有变化。
 - 不需要更新：
   - SQL/seed：本任务没有数据库或初始化数据；
   - 产品权限/capability：没有新增产品文件权限或前端 capability；

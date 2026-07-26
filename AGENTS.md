@@ -67,10 +67,10 @@
 
 ## 命令与验证状态
 
-- 2026-07-26 已在 macOS arm64 实际验证 T37 本地基线：200 个 Rust 测试通过（另 1 项手动性能探针忽略）、209 个 Vitest、30 个 Node 独立回归、前端生产构建、Rust fmt/全 feature Clippy、锁定 e2e check 和许可证 727/511/0。页签 manager 专项覆盖独立 session/history/mode、Rust identity 去重、慢读取隔离、inactive 保存/恢复、adapter 投影提交与全 controller 结算；T35 的轻量 benchmark 仍只作为本机报告。
+- 2026-07-26 已在 macOS arm64 实际验证 T37 本地基线：200 个 Rust 测试通过（另 1 项手动性能探针忽略）、211 个 Vitest、30 个 Node 独立回归、前端生产构建、Rust fmt/全 feature Clippy、锁定 e2e check 和许可证 727/511/0。页签 manager 专项覆盖独立 session/history/mode、Rust identity 去重、慢读取隔离、inactive 保存/恢复、切换及结算前 adapter 投影提交、路径解析失败保留原树选择与全 controller 结算；T35 的轻量 benchmark 仍只作为本机报告。
 - `pnpm test:e2e` 每次使用独立临时状态目录与临时复制工作区，真实 macOS Tauri/WebKit 10/10 通过：P2 IPC、1100/740 px 启动页布局与入口焦点、P1 工作区打开及 1100/1050/820/740 px 编辑 chrome、三文档 runtime 的单 adapter/RSS 门禁、排版/源码编辑、WebView 文件输入到 Rust 图片上传、保存重开、外部修改内容安全、恢复仓储、显式恢复和含图片目录移动前的风险确认/取消。T37 RSS 样本由约 77.8 MiB 降至 75.7 MiB，增量 -2 MiB；WebKit 未暴露 JS heap，不能外推为 heap 证据。默认生产前端产物和 release 二进制不注册 e2e RSS 命令。T17 的生产 `.app` 原生多窗口、Finder、系统废纸篓、监听和第二实例人工证据仍有效；这些 macOS 证据不替代 Windows 原生人工验收。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。T16 已在 GitHub `windows-latest` 上验证锁定的 Node/Rust 工具链、Windows 编译、测试、WebView2 E2E 和未签名生产构建；原生系统交互仍保留人工未验证状态。
-- 当前自动化测试在既有底座、编辑器、恢复/冲突/资源、菜单、页签模型/runtime 与窗口页签仓储链路上共 200 个 Rust 测试通过（另 1 项手动性能探针忽略）、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、209 个 React UI/状态/编辑器/页签测试、1 个 fixture 测试、4 个许可证策略测试和 10 个本地 macOS 桌面 E2E。`pnpm test` 统一执行 Node、Vitest 与无桌面 feature 的 Rust 服务门禁；`test:tabs` 是可失败页签模型/runtime 门禁，`test:tabs:performance` 仅输出本机 benchmark。GitHub Actions run `30082725332` 已在 macOS/Windows 完整通过第二阶段的 9 条桌面门禁、生产构建和 artifact 上传，尚未覆盖 T35～T37 本地提交。许可证扫描为 727 个 Node 包、511 个 Rust 包、0 个阻断项。Windows 原生系统 UI 仍未人工验证。
+- 当前自动化测试在既有底座、编辑器、恢复/冲突/资源、菜单、页签模型/runtime 与窗口页签仓储链路上共 200 个 Rust 测试通过（另 1 项手动性能探针忽略）、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、211 个 React UI/状态/编辑器/页签测试、1 个 fixture 测试、4 个许可证策略测试和 10 个本地 macOS 桌面 E2E。`pnpm test` 统一执行 Node、Vitest 与无桌面 feature 的 Rust 服务门禁；`test:tabs` 是可失败页签模型/runtime 门禁，`test:tabs:performance` 仅输出本机 benchmark。GitHub Actions run `30082725332` 已在 macOS/Windows 完整通过第二阶段的 9 条桌面门禁、生产构建和 artifact 上传，尚未覆盖 T35～T37 本地提交。许可证扫描为 727 个 Node 包、511 个 Rust 包、0 个阻断项。Windows 原生系统 UI 仍未人工验证。
 
 ## 文档、协作与 Git
 

@@ -46,7 +46,7 @@
 ### 2.1 工程与验证基线
 
 - 当前技术基线为 Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以清单和锁文件为准。
-- 2026-07-26 已在 T37 当前本地状态重新执行完整门禁：Node 独立回归 30/30、Vitest 25 个文件 209/209、Rust 200 项通过且 1 项手动性能探针忽略；类型检查、生产构建、Rust fmt/全 feature Clippy、锁定 e2e check 和许可证 727/511/0 同步通过，macOS Tauri/WebKit 桌面套件为 10/10。T32、T35、T36 留痕中的测试数字只是各任务当时的历史快照。最新远端证据仍为 GitHub Actions run `30082725332` 在 macOS/Windows 通过第二阶段 9 条套件，尚未覆盖第三阶段本地提交。
+- 2026-07-26 已在 T37 当前本地状态重新执行完整门禁：Node 独立回归 30/30、Vitest 25 个文件 211/211、Rust 200 项通过且 1 项手动性能探针忽略；类型检查和生产构建通过。T37 主实现还取得 Rust fmt/全 feature Clippy、锁定 e2e check、许可证 727/511/0 与 macOS Tauri/WebKit 桌面套件 10/10 证据；本次评审整改未重跑这些未受影响的重型门禁。T32、T35、T36 留痕中的测试数字只是各任务当时的历史快照。最新远端证据仍为 GitHub Actions run `30082725332` 在 macOS/Windows 通过第二阶段 9 条套件，尚未覆盖第三阶段本地提交。
 - 第三阶段不得删除、降低或用重试掩盖上述基线。新增页签测试必须加入统一 `pnpm test`、真实桌面 E2E 和双平台 CI。
 - 当前产品依赖已能实现页签状态、拖动、菜单和持久化；T37 只为真实桌面内存门禁在 `e2e` feature 增加可选 `sysinfo`，默认产品构建不注册对应命令。若后续确认必须引入拖拽或状态库，先补许可证、包体、复用理由和回滚方案，再修改清单。
 
@@ -393,7 +393,7 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 - 影响范围：仅模型/测试，不修改磁盘、菜单、权限或可见页面。
 - 边界与异常：不得把 Markdown/history 复制到 tab DTO；不得为通过门禁设置产品级页签数量上限；T35 不宣称验证真实 adapter 生命周期、heap/RSS 或大文档多 session；性能结论只报告实测平台。
 - 验证方式：Vitest 覆盖平台路径别名、非法/未规范化路径、顺序、活动项、关闭/恢复、generation+incarnation 陈旧结果、双向不变量、unloaded/empty 分离和轻量活动 runtime 投影；类型检查、生产构建、许可证扫描。
-- 完成标准：身份、状态、不变量与序列化边界可执行，轻量模型可失败门禁通过；真实 adapter 单挂载和 heap/RSS 门禁必须在 T37 完成并作为 T38 前置。
+- 完成标准：身份、状态、不变量与序列化边界可执行，轻量模型可失败门禁通过；T38 前置由 T37 的真实 adapter 单挂载和当前平台可取得的可失败内存门禁闭合。macOS WebKit 未暴露 JS heap 时只以 DOM 单挂载与 RSS 门禁作为本阶段证据，JS heap 明确记为不可用并由 T45 在可观测平台继续补证，不得伪报通过。
 - 实际落地情况：已新增 `src/features/tabs/tabPath.ts`、`tabTypes.ts` 与 `tabReducer.ts`，固化窗口内稳定 `tabId`、集合单调分配的 incarnation、Rust 规范化相对路径与不透明平台路径身份、派生文件名/父路径、`idle/loading/ready/error/missing/permission_denied` 加载状态、视图恢复描述、10 种结算原因和最近关闭 50 项边界。纯 reducer 使用有序 ID、平台身份索引、活动项、revision/persistedRevision 表达唯一打开、聚焦、排序、关闭相邻项接替、重新打开、generation/incarnation 双重陈旧拒绝和持久化待提交状态；不变量双向校验 map key、descriptor、order、path index、active、incarnation 与最近关闭。
   - 页签 DTO 只保存轻量描述；`DocumentSession` 与 `DocumentSaveController` 位于独立 runtime map，runtime 必须匹配当前 incarnation，活动 editor adapter 不进入集合或恢复 DTO。活动 selector 与 `projectWorkspaceTabStatus` 都独立拒绝旧 incarnation；最近关闭项也校验规范化路径、identity、派生文件名和父路径。
   - 复用审查确认 `AsyncStatePanel` 已是公共状态优先级事实源，因此把其纯契约提取到 `src/components/asyncState.ts`，现有面板和页签投影共同消费同一 `resolveAsyncState`/presentation，不复制私有优先级。页签状态把 load/session/save/recovery/content-safety 组合后严格遵循 DESIGN 的主状态和 assertive/polite 契约。
@@ -432,12 +432,13 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 - 影响范围：P1 文档生命周期与内存；不改变 Rust 磁盘协议。
 - 边界与异常：慢读取、慢 adapter、陈旧保存和陈旧恢复不得覆盖后来活动页签；manager 销毁必须结算/释放每个控制器；错误 tab 不阻断其他 tab。
 - 验证方式：多 session history、模式/锚点、切换中输入、inactive autosave、恢复注册、StrictMode 生命周期；真实 adapter factory 断言任意时刻挂载数不超过 1、切换不重建 inactive session；固定 fixture 的真实 WebView 反复切换记录 heap/RSS，先校准再固化可失败阈值并归档平台证据。
-- 完成标准：三个文档可在同一窗口保留独立内容/历史/模式并安全切换，单一文档替换实现被移除；真实单 adapter 生命周期和可失败 heap/RSS 门禁通过后才允许开始 T38。
+- 完成标准：三个文档可在同一窗口保留独立内容/历史/模式并安全切换，单一文档替换实现被移除；真实单 adapter 生命周期与当前 macOS WebKit 可取得的可失败 RSS 门禁通过后允许开始 T38。JS heap 未暴露属于明确的平台观测缺口，由 T45 继续补证，不作为已通过项，也不阻塞 T38。
 - 实际落地情况：已新增 `WorkspaceTabManager` 与薄 `tabSessionGateway`，P1 文件树打开 Markdown 时先消费 T36 Rust 返回的规范化相对路径和 opaque 平台身份，再创建或聚焦唯一 runtime。每个已加载页签独立持有 `DocumentSession`、统一 history、选择/锚点、模式和 `DocumentSaveController`；非活动 dirty 页签继续自动保存与恢复快照，慢读取通过 tabId/incarnation/generation 三重校验隔离，慢结果也不能回写活动窗口标题。
   - `DocumentEditorShell` 新增切换前真实投影提交句柄；P1 在激活其他 runtime 前提交当前 adapter Markdown、选择与锚点，只渲染活动 `tabId:incarnation` 对应的 editor。Milkdown/CodeMirror 包装层通过公共生命周期事件向 manager 报告真实创建/销毁，测试锁定两模式切换和三 session 反复激活时活动 adapter 峰值为 1。
+  - `settleAll` 在遍历全部保存控制器前复用同一活动投影提交入口，使窗口结算和 manager 销毁也能保存最后的 selection/anchor；文件树只在 Rust 路径身份解析成功后提交 Markdown 选中项，解析失败时保留原选择和原活动文档。
   - P1 的中央内容、文件树选择、状态栏、标题和原生菜单继续只消费活动 runtime。冲突重载与恢复副本重新读取目标磁盘基线；恢复命中已有 dirty runtime 时先执行内容保护。窗口关闭/替换/退出 intent 已调用 manager 的全 runtime `settleAll`，但 T40 的混合阻塞列表、逐项决策和两阶段批量提交尚未实现。
   - 真实 macOS Tauri/WebKit E2E 新增三文档 session、36 次切换和单 adapter/进程 RSS 门禁；阈值为 RSS 增量不超过 128 MiB，WebKit 未提供 JS heap 时明确记为不可用而不伪造通过。E2E 测试命令通过仅在 `e2e` feature 启用的 `sysinfo` 命令读取当前测试进程 RSS，默认生产构建不注册该命令。
-  - 当前本地门禁为 209/209 Vitest、200 个 Rust 通过且 1 项手动性能探针忽略、30/30 Node 独立回归、10/10 macOS 真桌面 E2E；typecheck、生产 build、Rust fmt、全 feature Clippy、锁定 e2e check 和许可证 727 Node / 511 Rust / 0 阻断均通过。第三阶段尚未推送，Windows/远端 CI、可见页签栏、会话重启恢复和完整批量结算均未验证或未实现。证据见 `t37-tab-session-manager.md`。
+  - 当前本地非桌面门禁为 211/211 Vitest、200 个 Rust 通过且 1 项手动性能探针忽略、30/30 Node 独立回归，typecheck 与生产 build 通过；T37 主实现的 10/10 macOS 真桌面 E2E、Rust fmt、全 feature Clippy、锁定 e2e check 和许可证 727 Node / 511 Rust / 0 阻断证据继续有效，本次评审整改未重跑这些未受影响的门禁。第三阶段尚未推送，Windows/远端 CI、可见页签栏、会话重启恢复和完整批量结算均未验证或未实现。证据见 `t37-tab-session-manager.md`。
 
 ### 6.4 任务 T38：页签条、溢出菜单、上下文动作与无障碍
 

@@ -216,6 +216,50 @@ describe("WorkspaceWorkbench", () => {
     await waitFor(() => expect(api.setTitle).toHaveBeenCalledWith("note.md"));
   });
 
+  it("keeps the previous tree selection when tab path resolution fails", async () => {
+    const completeScan: WorkspaceScanBatch = {
+      scanId: "scan-1",
+      processed: 3,
+      entries: [note, secondNote, folder],
+      issues: [],
+      complete: true,
+      cancelled: false,
+    };
+    const api = gateway({
+      pollScan: vi.fn().mockResolvedValue(completeScan),
+      resolveTabPath: vi.fn().mockImplementation(
+        async (_workspaceId, relativePath: string) => {
+          if (relativePath === "second.md") {
+            throw new Error("path identity unavailable");
+          }
+          return {
+            relativePath,
+            identity: `native:${relativePath}`,
+          };
+        },
+      ),
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    const first = await screen.findByRole("treeitem", { name: /note\.md/ });
+    await user.click(first);
+    await screen.findByText(/真实文档/);
+    expect(first.getAttribute("aria-selected")).toBe("true");
+
+    const second = screen.getByRole("treeitem", { name: /second\.md/ });
+    await user.click(second);
+    await screen.findByRole("alert");
+    expect(first.getAttribute("aria-selected")).toBe("true");
+    expect(second.getAttribute("aria-selected")).toBe("false");
+  });
+
   it("keeps the native menu bound to the focused document session and routes real actions", async () => {
     let menuListener:
       | Parameters<WorkspaceWorkbenchGateway["listenWorkbenchMenu"]>[0]

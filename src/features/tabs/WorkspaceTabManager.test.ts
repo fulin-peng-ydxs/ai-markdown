@@ -339,6 +339,32 @@ describe("WorkspaceTabManager", () => {
     });
   });
 
+  it("commits the active adapter projection before settling every controller", async () => {
+    let projected: ReadyDocumentSession | null = null;
+    const fixture = managerFixture({
+      captureActiveProjection: () => projected,
+    });
+    const first = await openReady(fixture.manager, "one.md");
+    const firstSession = fixture.manager.snapshot().activeRuntime
+      ?.session as ReadyDocumentSession;
+    projected = {
+      ...firstSession,
+      selection: { kind: "source", anchor: 7, head: 7 },
+      anchor: { kind: "source", offset: 7, scrollTop: 41 },
+      mode: "source",
+    };
+
+    expect(await fixture.manager.settleAll()).toEqual({ status: "settled" });
+    expect(
+      (fixture.manager.snapshot().runtimes.get(first)
+        ?.session as ReadyDocumentSession),
+    ).toMatchObject({
+      mode: "source",
+      selection: { anchor: 7, head: 7 },
+      anchor: { offset: 7, scrollTop: 41 },
+    });
+  });
+
   it("records actual adapter mounts with a maximum of one active projection", async () => {
     const { manager } = managerFixture();
     const first = await openReady(manager, "one.md");

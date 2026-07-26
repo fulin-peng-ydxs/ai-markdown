@@ -274,6 +274,7 @@ export class WorkspaceTabManager {
   }
 
   async settleAll(): Promise<WorkspaceTabSettlementResult> {
+    this.captureCurrentProjection();
     for (const tabId of this.collection.orderedTabIds) {
       const runtime = this.runtimes.get(tabId);
       if (!runtime) continue;
