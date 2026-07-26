@@ -7,6 +7,9 @@ interface TabContextMenuProps {
   canMoveLeft: boolean;
   canMoveRight: boolean;
   onClose(): void;
+  onCloseAll(): void;
+  onCloseOthers(): void;
+  onCloseRight(): void;
   onMoveLeft(): void;
   onMoveRight(): void;
   onRequestClose(restoreFocus: boolean): void;
@@ -18,6 +21,9 @@ export function TabContextMenu({
   canMoveLeft,
   canMoveRight,
   onClose,
+  onCloseAll,
+  onCloseOthers,
+  onCloseRight,
   onMoveLeft,
   onMoveRight,
   onRequestClose,
@@ -52,23 +58,21 @@ export function TabContextMenu({
     {
       id: "close-others",
       label: "关闭其他页签",
-      description: "等待全页签安全结算能力",
-      disabled: true,
-      onSelect: () => undefined,
+      description: "安全结算后一次关闭",
+      onSelect: onCloseOthers,
     },
     {
       id: "close-right",
       label: "关闭右侧页签",
-      description: "等待全页签安全结算能力",
-      disabled: true,
-      onSelect: () => undefined,
+      description: "安全结算后一次关闭",
+      disabled: !canMoveRight,
+      onSelect: onCloseRight,
     },
     {
       id: "close-all",
       label: "关闭全部页签",
-      description: "等待全页签安全结算能力",
-      disabled: true,
-      onSelect: () => undefined,
+      description: "安全结算后一次关闭",
+      onSelect: onCloseAll,
     },
   ];
 

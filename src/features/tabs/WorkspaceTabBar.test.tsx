@@ -121,6 +121,7 @@ function renderBar(snapshot = tabSnapshot(["guides/note.md", "drafts/note.md"], 
   const actions = {
     onActivate: vi.fn(),
     onClose: vi.fn(),
+    onCloseMany: vi.fn(),
     onDiscardRecent: vi.fn(),
     onMove: vi.fn(),
     onReopen: vi.fn().mockResolvedValue({
@@ -172,7 +173,7 @@ describe("WorkspaceTabBar", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("shares keyboard menu behavior for context actions and keeps unsafe batch close disabled", async () => {
+  it("routes context batch-close actions through the shared settlement callback", async () => {
     const actions = renderBar();
     const second = screen.getAllByRole("tab")[1] as HTMLButtonElement;
     fireEvent.contextMenu(second, { clientX: 240, clientY: 72 });
@@ -183,7 +184,13 @@ describe("WorkspaceTabBar", () => {
     const closeOthers = screen.getByRole("menuitem", {
       name: /关闭其他页签/,
     }) as HTMLButtonElement;
-    expect(closeOthers.disabled).toBe(true);
+    expect(closeOthers.disabled).toBe(false);
+    await userEvent.click(closeOthers);
+    expect(actions.onCloseMany).toHaveBeenCalledWith(
+      ["tab-0"],
+      "close_others",
+    );
+    fireEvent.contextMenu(second, { clientX: 240, clientY: 72 });
     await userEvent.click(
       screen.getByRole("menuitem", { name: /向左移动/ }),
     );

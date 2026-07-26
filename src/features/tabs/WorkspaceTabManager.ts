@@ -5,6 +5,7 @@ import type {
 } from "../../services/desktop/contracts";
 import { normalizeDesktopError } from "../../services/desktop/errors";
 import {
+  applyDocumentEdit,
   beginDocumentLoad,
   createEmptyDocumentSession,
   type DocumentSessionState,
@@ -22,10 +23,14 @@ import {
   createWorkspaceTabCollection,
   reduceWorkspaceTabs,
   selectActiveWorkspaceTabProjection,
+  type WorkspaceTabCloseTarget,
   type WorkspaceTabCollection,
+  type WorkspaceTabPathRemap,
 } from "./tabReducer";
 import { acceptWorkspaceTabPath } from "./tabPath";
-import type { WorkspaceTabPathIdentity } from "./tabPath";
+import type {
+  WorkspaceTabPathIdentity,
+} from "./tabPath";
 import type { WorkspaceTabSessionGateway } from "./tabSessionGateway";
 import type {
   WorkspaceTabDescriptor,
@@ -66,6 +71,27 @@ export interface WorkspaceTabSettlementResult {
   status: "settled" | "blocked";
   blockedTabId?: WorkspaceTabId;
   outcome?: DocumentSaveOutcome;
+}
+
+export interface WorkspaceTabSettlementTarget {
+  tabId: WorkspaceTabId;
+  incarnation: number;
+}
+
+export interface WorkspaceTabSettlementAttempt
+  extends WorkspaceTabSettlementTarget {
+  outcome: DocumentSaveOutcome;
+}
+
+export interface WorkspaceTabRuntimeRemap
+  extends WorkspaceTabSettlementTarget {
+  path: {
+    relativePath: WorkspaceRelativePath;
+    identity: string;
+  };
+  markdown?: string;
+  expectedGeneration?: number;
+  expectedEditVersion?: number;
 }
 
 export interface WorkspaceTabAdapterLifecycle {
@@ -315,6 +341,122 @@ export class WorkspaceTabManager {
       view: closingView,
     });
     return { status: "settled" };
+  }
+
+  async settleTabs(
+    targets: readonly WorkspaceTabSettlementTarget[],
+  ): Promise<readonly WorkspaceTabSettlementAttempt[]> {
+    this.captureCurrentProjection();
+    const attempts: WorkspaceTabSettlementAttempt[] = [];
+    for (const target of targets) {
+      const tab = this.collection.tabsById.get(target.tabId);
+      if (!tab || tab.incarnation !== target.incarnation) {
+        attempts.push({
+          ...target,
+          outcome: { status: "blocked", reason: "stale" },
+        });
+        continue;
+      }
+      const runtime = this.runtimes.get(target.tabId);
+      attempts.push({
+        ...target,
+        outcome:
+          runtime?.incarnation === target.incarnation
+            ? await runtime.saveController.settle()
+            : { status: "already_safe" },
+      });
+    }
+    return attempts;
+  }
+
+  async closeTabsAtomically(
+    targets: readonly WorkspaceTabSettlementTarget[],
+    options: {
+      closedAt?: number;
+      recordRecent?: boolean;
+    } = {},
+  ): Promise<boolean> {
+    if (this.destroyed || targets.length === 0) return false;
+    this.captureCurrentProjection();
+    const closeTargets: WorkspaceTabCloseTarget[] = targets.map((target) => {
+      const tab = this.collection.tabsById.get(target.tabId);
+      if (!tab || tab.incarnation !== target.incarnation) {
+        throw new Error(`Workspace tab changed before close: ${target.tabId}`);
+      }
+      return {
+        ...target,
+        view: viewFromSession(this.runtimes.get(target.tabId)?.session ?? null),
+        recordRecent: options.recordRecent,
+      };
+    });
+    for (const target of closeTargets) {
+      const runtime = this.runtimes.get(target.tabId);
+      if (!runtime || runtime.incarnation !== target.incarnation) continue;
+      await runtime.saveController.abandon();
+    }
+    const next = reduceWorkspaceTabs(this.collection, {
+      type: "close_batch",
+      targets: closeTargets,
+      closedAt: options.closedAt ?? this.now(),
+    });
+    for (const target of closeTargets) {
+      const runtime = this.runtimes.get(target.tabId);
+      if (!runtime || runtime.incarnation !== target.incarnation) continue;
+      runtime.saveController.dispose();
+      this.runtimes.delete(target.tabId);
+    }
+    this.collection = next;
+    this.emit();
+    return true;
+  }
+
+  remapTabsAtomically(remaps: readonly WorkspaceTabRuntimeRemap[]): boolean {
+    if (this.destroyed || remaps.length === 0) return false;
+    const accepted: WorkspaceTabPathRemap[] = [];
+    const runtimeUpdates = new Map<WorkspaceTabId, DocumentSessionState>();
+    for (const remap of remaps) {
+      const tab = this.collection.tabsById.get(remap.tabId);
+      if (!tab || tab.incarnation !== remap.incarnation) {
+        throw new Error(`Workspace tab changed before remap: ${remap.tabId}`);
+      }
+      const path = acceptWorkspaceTabPath(remap.path);
+      accepted.push({ tabId: remap.tabId, incarnation: remap.incarnation, path });
+      const runtime = this.runtimes.get(remap.tabId);
+      if (!runtime || runtime.incarnation !== remap.incarnation) continue;
+      const session = runtime.session;
+      if (
+        remap.expectedGeneration !== undefined &&
+        session.generation !== remap.expectedGeneration
+      ) {
+        throw new Error(`Workspace tab generation changed: ${remap.tabId}`);
+      }
+      if (
+        remap.expectedEditVersion !== undefined &&
+        (session.status !== "ready" ||
+          session.editVersion !== remap.expectedEditVersion)
+      ) {
+        throw new Error(`Workspace tab edit version changed: ${remap.tabId}`);
+      }
+      runtimeUpdates.set(
+        remap.tabId,
+        remapSession(session, path.relativePath, remap.markdown),
+      );
+    }
+    const next = reduceWorkspaceTabs(this.collection, {
+      type: "remap_paths",
+      remaps: accepted,
+    });
+    for (const [tabId, session] of runtimeUpdates) {
+      const runtime = this.runtimes.get(tabId);
+      if (!runtime) continue;
+      runtime.session = session;
+      runtime.saveController.observe(
+        session.status === "ready" ? session : null,
+      );
+    }
+    this.collection = next;
+    this.emit();
+    return true;
   }
 
   async settleAll(): Promise<WorkspaceTabSettlementResult> {
@@ -570,6 +712,29 @@ function applyRestoredView(
     selection: view.selection,
     anchor: view.anchor,
   };
+}
+
+function remapSession(
+  session: DocumentSessionState,
+  relativePath: WorkspaceRelativePath,
+  markdown?: string,
+): DocumentSessionState {
+  if (session.status === "empty") return session;
+  const remapped = { ...session, relativePath };
+  if (remapped.status !== "ready" || markdown === undefined) return remapped;
+  const edited = applyDocumentEdit(remapped, {
+    generation: remapped.generation,
+    expectedEditVersion: remapped.editVersion,
+    markdown,
+    mode: remapped.mode,
+    selection: remapped.selection,
+    anchor: remapped.anchor,
+    transactionGroup: null,
+  });
+  if (edited.status !== "applied") {
+    throw new Error(`Workspace tab markdown could not be remapped: ${edited.status}`);
+  }
+  return edited.session;
 }
 
 function managerError(

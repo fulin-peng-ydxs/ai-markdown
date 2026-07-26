@@ -804,7 +804,7 @@ describe("WorkspaceWorkbench", () => {
     );
   });
 
-  it("blocks a directory move before disk when multiple open tabs are affected", async () => {
+  it("atomically remaps multiple open tabs after a directory move succeeds", async () => {
     const firstGuide: FsEntry = {
       ...note,
       relativePath: "guides/a.md",
@@ -839,7 +839,10 @@ describe("WorkspaceWorkbench", () => {
       read: vi.fn().mockImplementation(async (_workspaceId, path) => ({
         relativePath: path,
         status: "ready",
-        content: `# ${path}`,
+        content:
+          path === "guides/a.md"
+            ? `# ${path}\n\n![asset](../assets/example.png)`
+            : `# ${path}`,
         revision: {
           modifiedAt: 1,
           size: 8,
@@ -848,8 +851,28 @@ describe("WorkspaceWorkbench", () => {
           lineEnding: "lf",
         },
       })),
-      move: vi.fn(),
+      move: vi.fn().mockResolvedValue({
+        kind: "move",
+        previousPath: "guides",
+        entry: {
+          ...folder,
+          relativePath: "archive/guides",
+          name: "guides",
+        },
+      }),
     });
+    vi.mocked(api.saveGateway.write).mockImplementation(
+      async (_workspaceId, relativePath, content, expectedRevision) => ({
+        relativePath,
+        bytesWritten: new TextEncoder().encode(content).byteLength,
+        revision: {
+          ...expectedRevision,
+          modifiedAt: expectedRevision.modifiedAt + 1,
+          size: new TextEncoder().encode(content).byteLength,
+          contentHash: `saved:${relativePath}`,
+        },
+      }),
+    );
     const user = userEvent.setup();
     render(
       <WorkspaceWorkbench
@@ -870,16 +893,46 @@ describe("WorkspaceWorkbench", () => {
     const target = screen.getByLabelText("目标文件夹（留空表示根目录）");
     await user.clear(target);
     await user.type(target, "archive");
+    expect(
+      screen.getByRole("checkbox", {
+        name: /移动后同步调整 1 个本地图片链接/,
+      }),
+    ).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "提交到磁盘" }));
 
+    await waitFor(() =>
+      expect(api.move).toHaveBeenCalledWith(
+        "workspace-a",
+        "guides",
+        "archive",
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: /b\.md/ }).getAttribute("title"),
+      ).toContain("archive/guides/b.md"),
+    );
     expect(
-      await screen.findByText(/影响 2 个已打开页签/),
-    ).toBeTruthy();
-    expect(api.move).not.toHaveBeenCalled();
+      screen.getByRole("tab", { name: /a\.md/ }).getAttribute("title"),
+    ).toContain("archive/guides/a.md");
+    await waitFor(() =>
+      expect(api.saveGateway.write).toHaveBeenCalledWith(
+        "workspace-a",
+        "archive/guides/a.md",
+        expect.stringContaining("../../assets/example.png"),
+        expect.any(Object),
+      ),
+    );
   });
 
-  it("does not rename an open tab before T40 can atomically remap its runtime", async () => {
-    const api = gateway({ rename: vi.fn() });
+  it("renames an open tab only after the disk mutation succeeds", async () => {
+    const api = gateway({
+      rename: vi.fn().mockResolvedValue({
+        kind: "rename",
+        previousPath: "note.md",
+        entry: { ...note, relativePath: "renamed.md", name: "renamed.md" },
+      }),
+    });
     const user = userEvent.setup();
     render(
       <WorkspaceWorkbench
@@ -897,10 +950,110 @@ describe("WorkspaceWorkbench", () => {
     await user.type(input, "renamed.md");
     await user.click(screen.getByRole("button", { name: "提交到磁盘" }));
 
+    await waitFor(() =>
+      expect(api.rename).toHaveBeenCalledWith(
+        "workspace-a",
+        "note.md",
+        "renamed.md",
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: /renamed\.md/ }).getAttribute("title"),
+      ).toContain("renamed.md"),
+    );
+  });
+
+  it("keeps the original open tab path when the settled rename fails on disk", async () => {
+    const api = gateway({
+      rename: vi.fn().mockRejectedValue({
+        code: "mutation_unavailable",
+        messageKey: "error.desktop.mutation_unavailable",
+        pathHint: "note.md",
+        contentSafe: true,
+        retryable: true,
+      }),
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByRole("heading", { name: "真实文档" });
+    await user.click(screen.getByRole("button", { name: "重命名" }));
+    const input = screen.getByLabelText("新名称");
+    await user.clear(input);
+    await user.type(input, "renamed.md");
+    await user.click(screen.getByRole("button", { name: "提交到磁盘" }));
+
+    expect(await screen.findByText(/文件操作服务当前不可用/)).toBeTruthy();
     expect(
-      await screen.findByText(/影响 1 个已打开页签/),
+      screen.getByRole("tab", { name: /note\.md/ }).getAttribute("title"),
+    ).toContain("note.md");
+    expect(screen.queryByRole("tab", { name: /renamed\.md/ })).toBeNull();
+  });
+
+  it("reports a post-disk remap failure without pretending the disk rename rolled back", async () => {
+    const api = gateway({
+      rename: vi.fn().mockResolvedValue({
+        kind: "rename",
+        previousPath: "note.md",
+        entry: { ...note, relativePath: "renamed.md", name: "renamed.md" },
+      }),
+      resolveTabPath: vi.fn().mockImplementation(
+        async (_workspaceId, relativePath: string) => {
+          if (relativePath === "renamed.md") {
+            throw {
+              code: "path_not_found",
+              messageKey: "error.desktop.path_not_found",
+              pathHint: "renamed.md",
+              contentSafe: true,
+              retryable: true,
+            };
+          }
+          return {
+            relativePath,
+            identity: `native:${relativePath}`,
+          };
+        },
+      ),
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByRole("heading", { name: "真实文档" });
+    await user.click(screen.getByRole("button", { name: "重命名" }));
+    const input = screen.getByLabelText("新名称");
+    await user.clear(input);
+    await user.type(input, "renamed.md");
+    await user.click(screen.getByRole("button", { name: "提交到磁盘" }));
+
+    await waitFor(() =>
+      expect(api.rename).toHaveBeenCalledWith(
+        "workspace-a",
+        "note.md",
+        "renamed.md",
+      ),
+    );
+    expect(
+      await screen.findByText(/磁盘变更已完成，但部分页签状态尚未同步/),
     ).toBeTruthy();
-    expect(api.rename).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("tab", { name: /note\.md/ }).getAttribute("title"),
+    ).toContain("note.md");
+    expect(screen.queryByRole("dialog", { name: /重命名/ })).toBeNull();
   });
 
   it("opens a dense Markdown document directly in source mode without stale visual content", async () => {

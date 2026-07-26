@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plainroot · 页签安全结算原型</title>
+  <style>
+    :root {
+      --stage: #d7d7d8;
+      --chrome: #ececed;
+      --paper: #f3f3f2;
+      --paper-hover: #e9e9e8;
+      --heading: #222226;
+      --text: #28282c;
+      --muted: #66666d;
+      --quiet: #85858c;
+      --line: #ceced2;
+      --line-strong: #b9b9bf;
+      --accent: #70677f;
+      --accent-soft: #dedbe3;
+      --danger: #9b5050;
+      --danger-soft: #eadcdc;
+      --overlay: rgba(35, 35, 39, .32);
+      --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --mono: "SFMono-Regular", Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body { color: var(--text); background: var(--stage); font-family: var(--ui); -webkit-font-smoothing: antialiased; }
+    button { color: inherit; font: inherit; }
+    button:disabled { cursor: not-allowed; opacity: .48; }
+    .stage { width: 100%; height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px; padding: 22px; }
+    .stage.note-hidden { grid-template-rows: minmax(0, 1fr); }
+    .prototype-note { justify-self: end; width: min(700px, 100%); padding: 9px 11px; border: 1px dashed #8e869a; border-radius: 7px; background: #fbfaf6; color: #55515d; font-size: 11px; line-height: 1.45; }
+    .prototype-note strong { display: block; margin-bottom: 4px; color: #3f3948; }
+    .prototype-note button { margin-top: 7px; padding: 3px 8px; border: 1px solid #aaa3b2; border-radius: 4px; background: transparent; cursor: pointer; }
+    .prototype-note.collapsed { width: auto; }
+    .prototype-note.collapsed strong, .prototype-note.collapsed span { display: none; }
+    .prototype-note.collapsed button { margin: 0; }
+    .workbench {
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+      border: 1px solid #ababaf;
+      border-radius: 11px;
+      background: var(--paper);
+      box-shadow: 0 22px 55px rgba(37,37,41,.2);
+    }
+    .workbench::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, var(--chrome) 0 245px, transparent 245px); opacity: .72; }
+    .backdrop { position: absolute; inset: 0; display: grid; place-items: center; padding: 26px; background: var(--overlay); }
+    .dialog {
+      width: min(680px, 100%);
+      max-height: min(650px, 100%);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      background: var(--paper);
+      box-shadow: 0 26px 70px rgba(29,29,33,.3);
+    }
+    .dialog-header { padding: 22px 24px 17px; border-bottom: 1px solid var(--line); }
+    .dialog-header__line { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; }
+    h1 { margin: 0; color: var(--heading); font-size: 19px; letter-spacing: -.01em; }
+    .progress-copy { flex: none; color: var(--muted); font-size: 11px; }
+    .dialog-header p { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+    .ledger { min-height: 0; overflow: auto; padding: 14px 18px; }
+    .ledger-list { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+    .ledger-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 13px 14px; border: 1px solid var(--line); border-radius: 7px; background: #f6f6f5; }
+    .ledger-row[data-state="resolved"] { background: var(--paper-hover); }
+    .file-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .file-line strong { overflow: hidden; color: var(--heading); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+    .badge { flex: none; padding: 2px 6px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--muted); font-size: 9.5px; }
+    .badge.danger { border-color: #c7a1a1; color: var(--danger); background: var(--danger-soft); }
+    .badge.accent { border-color: #aaa3b2; color: var(--accent); background: var(--accent-soft); }
+    .path { margin-top: 4px; overflow: hidden; color: var(--quiet); font: 10.5px/1.4 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .safety { margin-top: 7px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .safety strong { color: var(--text); font-weight: 600; }
+    .row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 230px; }
+    .button { min-height: 31px; padding: 0 11px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--paper); font-size: 11.5px; cursor: pointer; }
+    .button:hover:not(:disabled) { background: var(--paper-hover); }
+    .button.primary { border-color: var(--accent); background: var(--accent); color: white; }
+    .button.danger { color: var(--danger); }
+    .dialog-footer { display: flex; justify-content: space-between; gap: 14px; padding: 13px 18px; border-top: 1px solid var(--line); background: var(--chrome); }
+    .footer-note { align-self: center; color: var(--quiet); font-size: 10.5px; line-height: 1.4; }
+    .footer-actions { display: flex; gap: 8px; }
+    .confirm {
+      position: absolute;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 24px;
+      background: var(--overlay);
+    }
+    .confirm.open { display: grid; }
+    .confirm-card { width: min(440px, 100%); padding: 22px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--paper); box-shadow: 0 20px 52px rgba(29,29,33,.28); }
+    .confirm-card h2 { margin: 0 0 8px; color: var(--heading); font-size: 17px; }
+    .confirm-card p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+    .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    @media (max-width: 620px) {
+      .stage { padding: 0; }
+      .workbench { border: 0; border-radius: 0; }
+      .backdrop { padding: 12px; }
+      .ledger-row { grid-template-columns: 1fr; }
+      .row-actions { justify-content: flex-start; max-width: none; }
+      .dialog-footer { align-items: stretch; flex-direction: column; }
+      .footer-actions { justify-content: flex-end; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+  </style>
+</head>
+<body>
+  <main class="stage" id="stage">
+    <aside class="prototype-note" id="prototypeNote" aria-label="原型说明">
+      <strong>原型说明</strong>
+      <span>这是 T40 的补充安全弹层原型。按钮只推进本地演示状态，不执行磁盘操作；生产实现必须复用真实保存、冲突、另存副本与恢复链路。固定标题和底部动作，中间清单独立滚动。</span>
+      <button id="toggleNote" type="button">隐藏说明</button>
+    </aside>
+    <section class="workbench" aria-label="Plainroot 工作台背景">
+      <div class="backdrop">
+        <section aria-describedby="settlement-description" aria-labelledby="settlement-title" aria-modal="true" class="dialog" role="dialog">
+          <header class="dialog-header">
+            <div class="dialog-header__line">
+              <h1 id="settlement-title">关闭 4 个页签前处理修改</h1>
+              <span class="progress-copy" id="progressCopy">已安全 1 / 4</span>
+            </div>
+            <p id="settlement-description">Plainroot 会先逐项确认内容位置；取消会保持全部页签打开，已经写入磁盘的保存不会回滚。</p>
+          </header>
+          <div class="ledger" tabindex="0">
+            <ol class="ledger-list">
+              <li class="ledger-row" data-state="resolved">
+                <div>
+                  <div class="file-line"><strong>README.md</strong><span class="badge accent">已保存</span></div>
+                  <div class="path">README.md</div>
+                  <div class="safety"><strong>内容安全：</strong>磁盘已是最新版本。</div>
+                </div>
+                <div class="row-actions"><button class="button" disabled type="button">无需处理</button></div>
+              </li>
+              <li class="ledger-row" data-row="dirty">
+                <div>
+                  <div class="file-line"><strong>roadmap.md</strong><span class="badge">有未保存修改</span></div>
+                  <div class="path">docs/roadmap.md</div>
+                  <div class="safety"><strong>内容安全：</strong>当前窗口内存与恢复快照。</div>
+                </div>
+                <div class="row-actions">
+                  <button class="button" data-action="save" type="button">保存并标记安全</button>
+                  <button class="button" data-action="copy" type="button">另存副本</button>
+                  <button class="button danger" data-action="discard" type="button">放弃修改</button>
+                </div>
+              </li>
+              <li class="ledger-row" data-row="conflict">
+                <div>
+                  <div class="file-line"><strong>research.md</strong><span class="badge danger">磁盘冲突</span></div>
+                  <div class="path">notes/research.md</div>
+                  <div class="safety"><strong>内容安全：</strong>内存内容仍在；磁盘已有外部版本。</div>
+                </div>
+                <div class="row-actions">
+                  <button class="button" data-action="conflict" type="button">处理冲突</button>
+                  <button class="button" data-action="copy" type="button">另存副本</button>
+                  <button class="button danger" data-action="discard" type="button">放弃修改</button>
+                </div>
+              </li>
+              <li class="ledger-row" data-row="readonly">
+                <div>
+                  <div class="file-line"><strong>archive.md</strong><span class="badge danger">只读</span></div>
+                  <div class="path">archive/2025.md</div>
+                  <div class="safety"><strong>内容安全：</strong>修改只在当前窗口与恢复快照中。</div>
+                </div>
+                <div class="row-actions">
+                  <button class="button" data-action="copy" type="button">另存副本</button>
+                  <button class="button danger" data-action="discard" type="button">放弃修改</button>
+                </div>
+              </li>
+            </ol>
+          </div>
+          <footer class="dialog-footer">
+            <span class="footer-note">最终动作只在所有条目都有明确安全去向后启用。</span>
+            <div class="footer-actions">
+              <button class="button" id="cancelAll" type="button">取消并保持全部页签</button>
+              <button class="button primary" disabled id="commitAll" type="button">关闭 4 个页签</button>
+            </div>
+          </footer>
+        </section>
+      </div>
+      <div class="confirm" id="discardConfirm">
+        <section aria-describedby="confirm-description" aria-labelledby="confirm-title" aria-modal="true" class="confirm-card" role="alertdialog">
+          <h2 id="confirm-title">放弃这一个页签的修改？</h2>
+          <p id="confirm-description">这只会把该条目标记为“可在最终提交时放弃”。其他页签不会关闭；在你点击最终关闭前，当前内容仍保留。</p>
+          <div class="confirm-actions">
+            <button class="button" id="cancelDiscard" type="button">返回列表</button>
+            <button class="button danger" id="confirmDiscard" type="button">确认放弃这个页签的修改</button>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script>
+    const rows = [...document.querySelectorAll("[data-row]")];
+    const progressCopy = document.getElementById("progressCopy");
+    const commitAll = document.getElementById("commitAll");
+    const confirmLayer = document.getElementById("discardConfirm");
+    let pendingDiscard = null;
+    function markResolved(row, label) {
+      row.dataset.state = "resolved";
+      row.querySelector(".badge").textContent = label;
+      row.querySelector(".badge").className = "badge accent";
+      row.querySelector(".safety").innerHTML = "<strong>内容安全：</strong>已为最终批量关闭确认安全去向。";
+      row.querySelector(".row-actions").innerHTML = '<button class="button" disabled type="button">已处理</button>';
+      const safe = 1 + rows.filter((item) => item.dataset.state === "resolved").length;
+      progressCopy.textContent = `已安全 ${safe} / 4`;
+      commitAll.disabled = safe !== 4;
+    }
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-action]");
+      if (!button) return;
+      const row = button.closest("[data-row]");
+      if (button.dataset.action === "discard") {
+        pendingDiscard = row;
+        confirmLayer.classList.add("open");
+        document.getElementById("cancelDiscard").focus();
+        return;
+      }
+      markResolved(row, button.dataset.action === "copy" ? "副本已保存" : button.dataset.action === "conflict" ? "冲突已处理" : "已保存");
+    });
+    document.getElementById("confirmDiscard").addEventListener("click", () => {
+      if (pendingDiscard) markResolved(pendingDiscard, "待最终放弃");
+      pendingDiscard = null;
+      confirmLayer.classList.remove("open");
+    });
+    document.getElementById("cancelDiscard").addEventListener("click", () => {
+      pendingDiscard = null;
+      confirmLayer.classList.remove("open");
+    });
+    document.getElementById("cancelAll").addEventListener("click", () => {
+      progressCopy.textContent = "原型演示：取消不会关闭任何页签";
+    });
+    commitAll.addEventListener("click", () => {
+      progressCopy.textContent = "原型演示：批次可以一次性提交";
+    });
+    document.getElementById("toggleNote").addEventListener("click", (event) => {
+      const note = document.getElementById("prototypeNote");
+      const collapsed = note.classList.toggle("collapsed");
+      document.getElementById("stage").classList.toggle("note-hidden", collapsed);
+      event.currentTarget.textContent = collapsed ? "显示原型说明" : "隐藏说明";
+    });
+  </script>
+</body>
+</html>

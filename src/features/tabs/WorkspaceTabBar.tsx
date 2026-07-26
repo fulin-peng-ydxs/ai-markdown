@@ -19,6 +19,7 @@ import {
   type WorkspaceTabDescriptor,
   type WorkspaceTabId,
   type WorkspaceTabStatus,
+  type WorkspaceTabSettlementReason,
 } from "./tabTypes";
 
 import "./WorkspaceTabBar.css";
@@ -27,6 +28,10 @@ interface WorkspaceTabBarProps {
   closingTabIds?: ReadonlySet<WorkspaceTabId>;
   onActivate(tabId: WorkspaceTabId): void;
   onClose(tabId: WorkspaceTabId): void | Promise<void>;
+  onCloseMany(
+    tabIds: readonly WorkspaceTabId[],
+    reason: WorkspaceTabSettlementReason,
+  ): void | Promise<void>;
   onDiscardRecent(pathIdentity: WorkspaceTabPathIdentity): void;
   onMove(tabId: WorkspaceTabId, toIndex: number): void;
   onReopen(
@@ -45,6 +50,7 @@ export function WorkspaceTabBar({
   closingTabIds = new Set(),
   onActivate,
   onClose,
+  onCloseMany,
   onDiscardRecent,
   onMove,
   onReopen,
@@ -383,6 +389,32 @@ export function WorkspaceTabBar({
             tabs.length - 1
           }
           onClose={() => requestClose(contextTarget.tabId)}
+          onCloseAll={() => {
+            closeContextMenu();
+            void onCloseMany(
+              tabs.map((tab) => tab.tabId),
+              "close_all",
+            );
+          }}
+          onCloseOthers={() => {
+            closeContextMenu();
+            void onCloseMany(
+              tabs
+                .filter((tab) => tab.tabId !== contextTarget.tabId)
+                .map((tab) => tab.tabId),
+              "close_others",
+            );
+          }}
+          onCloseRight={() => {
+            const index = tabs.findIndex(
+              (tab) => tab.tabId === contextTarget.tabId,
+            );
+            closeContextMenu();
+            void onCloseMany(
+              tabs.slice(index + 1).map((tab) => tab.tabId),
+              "close_right",
+            );
+          }}
           onMoveLeft={() => {
             const index = tabs.findIndex((tab) => tab.tabId === contextTarget.tabId);
             moveTab(contextTarget.tabId, index - 1);

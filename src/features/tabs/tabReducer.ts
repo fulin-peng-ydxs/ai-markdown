@@ -14,6 +14,7 @@ import {
 } from "./tabTypes";
 import {
   isValidWorkspaceTabPath,
+  type WorkspaceTabPath,
   type WorkspaceTabPathIdentity,
 } from "./tabPath";
 
@@ -29,6 +30,19 @@ export interface WorkspaceTabCollection {
   nextIncarnation: number;
   revision: number;
   persistedRevision: number;
+}
+
+export interface WorkspaceTabCloseTarget {
+  tabId: WorkspaceTabId;
+  incarnation: number;
+  view: WorkspaceTabViewState | null;
+  recordRecent?: boolean;
+}
+
+export interface WorkspaceTabPathRemap {
+  tabId: WorkspaceTabId;
+  incarnation: number;
+  path: WorkspaceTabPath;
 }
 
 export type WorkspaceTabAction =
@@ -53,6 +67,15 @@ export type WorkspaceTabAction =
       tabId: WorkspaceTabId;
       closedAt: number;
       view: WorkspaceTabViewState | null;
+    }
+  | {
+      type: "close_batch";
+      targets: readonly WorkspaceTabCloseTarget[];
+      closedAt: number;
+    }
+  | {
+      type: "remap_paths";
+      remaps: readonly WorkspaceTabPathRemap[];
     }
   | {
       type: "restore_closed";
@@ -108,6 +131,10 @@ export function reduceWorkspaceTabs(
       return moveTab(state, action.tabId, action.toIndex);
     case "close":
       return closeTab(state, action.tabId, action.closedAt, action.view);
+    case "close_batch":
+      return closeTabs(state, action.targets, action.closedAt);
+    case "remap_paths":
+      return remapTabPaths(state, action.remaps);
     case "restore_closed":
       return restoreClosedTab(
         state,
@@ -471,6 +498,119 @@ function closeTab(
     pathIndex,
     recentlyClosed,
   });
+}
+
+function closeTabs(
+  state: WorkspaceTabCollection,
+  targets: readonly WorkspaceTabCloseTarget[],
+  closedAt: number,
+): WorkspaceTabCollection {
+  const uniqueTargets = new Map<WorkspaceTabId, WorkspaceTabCloseTarget>();
+  for (const target of targets) {
+    const tab = state.tabsById.get(target.tabId);
+    if (!tab || tab.incarnation !== target.incarnation) {
+      throw new Error(`Workspace tab changed before batch close: ${target.tabId}`);
+    }
+    uniqueTargets.set(target.tabId, target);
+  }
+  if (uniqueTargets.size === 0) return state;
+
+  const closingIds = new Set(uniqueTargets.keys());
+  const tabsById = new Map(state.tabsById);
+  const pathIndex = new Map(state.pathIndex);
+  const closed: RecentlyClosedWorkspaceTab[] = [];
+  for (const tabId of state.orderedTabIds) {
+    const target = uniqueTargets.get(tabId);
+    if (!target) continue;
+    const tab = state.tabsById.get(tabId);
+    if (!tab) continue;
+    tabsById.delete(tabId);
+    pathIndex.delete(tab.pathIdentity);
+    if (target.recordRecent !== false) {
+      closed.push({
+        workspaceId: tab.workspaceId,
+        relativePath: tab.relativePath,
+        pathIdentity: tab.pathIdentity,
+        displayName: tab.displayName,
+        parentHint: tab.parentHint,
+        view: target.view,
+        closedAt,
+      });
+    }
+  }
+  const orderedTabIds = state.orderedTabIds.filter(
+    (tabId) => !closingIds.has(tabId),
+  );
+  let activeTabId = state.activeTabId;
+  if (!activeTabId || closingIds.has(activeTabId)) {
+    const firstClosingIndex = Math.min(
+      ...state.orderedTabIds.flatMap((tabId, index) =>
+        closingIds.has(tabId) ? [index] : [],
+      ),
+    );
+    activeTabId =
+      orderedTabIds[Math.min(firstClosingIndex, orderedTabIds.length - 1)] ??
+      orderedTabIds.at(-1) ??
+      null;
+  }
+  const closedIdentities = new Set(closed.map((item) => item.pathIdentity));
+  const recentlyClosed = [
+    ...closed.reverse(),
+    ...state.recentlyClosed.filter(
+      (candidate) => !closedIdentities.has(candidate.pathIdentity),
+    ),
+  ].slice(0, RECENTLY_CLOSED_TAB_LIMIT);
+  return changed(state, {
+    orderedTabIds,
+    activeTabId,
+    tabsById,
+    pathIndex,
+    recentlyClosed,
+  });
+}
+
+function remapTabPaths(
+  state: WorkspaceTabCollection,
+  remaps: readonly WorkspaceTabPathRemap[],
+): WorkspaceTabCollection {
+  if (remaps.length === 0) return state;
+  const byTabId = new Map<WorkspaceTabId, WorkspaceTabPathRemap>();
+  for (const remap of remaps) {
+    const tab = state.tabsById.get(remap.tabId);
+    if (!tab || tab.incarnation !== remap.incarnation) {
+      throw new Error(`Workspace tab changed before path remap: ${remap.tabId}`);
+    }
+    if (!isValidWorkspaceTabPath(remap.path)) {
+      throw new Error(`Workspace tab path is invalid: ${remap.tabId}`);
+    }
+    byTabId.set(remap.tabId, remap);
+  }
+
+  const nextIdentities = new Set<WorkspaceTabPathIdentity>();
+  for (const tab of state.tabsById.values()) {
+    const identity = byTabId.get(tab.tabId)?.path.identity ?? tab.pathIdentity;
+    if (nextIdentities.has(identity)) {
+      throw new Error(`Workspace tab path identity is duplicated: ${identity}`);
+    }
+    nextIdentities.add(identity);
+  }
+
+  const tabsById = new Map(state.tabsById);
+  const pathIndex = new Map<WorkspaceTabPathIdentity, WorkspaceTabId>();
+  for (const tab of state.tabsById.values()) {
+    const remap = byTabId.get(tab.tabId);
+    const nextTab = remap
+      ? {
+          ...tab,
+          relativePath: remap.path.relativePath,
+          pathIdentity: remap.path.identity,
+          ...deriveWorkspaceTabPathPresentation(remap.path.relativePath),
+        }
+      : tab;
+    tabsById.set(tab.tabId, nextTab);
+    pathIndex.set(nextTab.pathIdentity, nextTab.tabId);
+  }
+  return changed(state, { tabsById, pathIndex });
 }
 
 function restoreClosedTab(

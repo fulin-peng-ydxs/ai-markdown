@@ -502,4 +502,145 @@ describe("WorkspaceTabManager", () => {
       "two.md",
     );
   });
+
+  it("closes a settled batch in one collection commit without partial removal", async () => {
+    const { manager } = managerFixture();
+    const first = await openReady(manager, "one.md");
+    const second = await openReady(manager, "two.md");
+    const third = await openReady(manager, "three.md");
+    const before = manager.snapshot().collection.revision;
+    const targets = [first, second].map((tabId) => {
+      const tab = manager.snapshot().collection.tabsById.get(tabId);
+      if (!tab) throw new Error("missing tab");
+      return { tabId, incarnation: tab.incarnation };
+    });
+
+    expect(await manager.settleTabs(targets)).toEqual([
+      { ...targets[0], outcome: { status: "already_safe" } },
+      { ...targets[1], outcome: { status: "already_safe" } },
+    ]);
+    expect(await manager.closeTabsAtomically(targets)).toBe(true);
+
+    const snapshot = manager.snapshot();
+    expect(snapshot.collection.orderedTabIds).toEqual([third]);
+    expect(snapshot.collection.activeTabId).toBe(third);
+    expect(snapshot.collection.revision).toBe(before + 1);
+    expect(snapshot.runtimes.has(first)).toBe(false);
+    expect(snapshot.runtimes.has(second)).toBe(false);
+    expect(snapshot.collection.recentlyClosed.map((item) => item.relativePath))
+      .toEqual(["two.md", "one.md"]);
+  });
+
+  it("settles mixed dirty tabs without removing any target on a partial save failure", async () => {
+    const { manager, save } = managerFixture();
+    const first = await openReady(manager, "one.md");
+    const second = await openReady(manager, "two.md");
+    editSession(manager, first, "# one dirty");
+    editSession(manager, second, "# two dirty");
+    vi.mocked(save.write).mockImplementation(
+      async (_workspaceId, relativePath, content) => {
+        if (relativePath === "two.md") {
+          throw {
+            code: "safe_write_failed",
+            messageKey: "safe_write_failed",
+            pathHint: relativePath,
+            contentSafe: true,
+            retryable: true,
+          };
+        }
+        return {
+          relativePath,
+          bytesWritten: content.length,
+          revision: {
+            ...revision,
+            size: content.length,
+            contentHash: `saved:${content}`,
+          },
+          durability: "file_and_directory",
+          durabilityIssue: null,
+        };
+      },
+    );
+    const snapshot = manager.snapshot();
+    const targets = [first, second].map((tabId) => {
+      const tab = snapshot.collection.tabsById.get(tabId);
+      if (!tab) throw new Error("missing tab");
+      return { tabId, incarnation: tab.incarnation };
+    });
+
+    expect(await manager.settleTabs(targets)).toEqual([
+      { ...targets[0], outcome: { status: "saved" } },
+      {
+        ...targets[1],
+        outcome: { status: "blocked", reason: "failed" },
+      },
+    ]);
+    expect(manager.snapshot().collection.orderedTabIds).toEqual([first, second]);
+    expect(manager.snapshot().runtimes.get(first)?.session).toMatchObject({
+      status: "ready",
+      saveState: { kind: "saved" },
+    });
+    expect(manager.snapshot().runtimes.get(second)?.session).toMatchObject({
+      status: "ready",
+      saveState: { kind: "save_failed" },
+    });
+  });
+
+  it("rejects a stale batch before closing any tab", async () => {
+    const { manager } = managerFixture();
+    const first = await openReady(manager, "one.md");
+    const second = await openReady(manager, "two.md");
+    const before = manager.snapshot();
+    const firstTab = before.collection.tabsById.get(first);
+    const secondTab = before.collection.tabsById.get(second);
+    if (!firstTab || !secondTab) throw new Error("missing tabs");
+
+    await expect(
+      manager.closeTabsAtomically([
+        { tabId: first, incarnation: firstTab.incarnation },
+        { tabId: second, incarnation: secondTab.incarnation + 1 },
+      ]),
+    ).rejects.toThrow("changed before close");
+    expect(manager.snapshot().collection.orderedTabIds).toEqual([first, second]);
+    expect(manager.snapshot().runtimes).toHaveLength(2);
+  });
+
+  it("atomically remaps descriptor identity and runtime markdown", async () => {
+    const { manager } = managerFixture();
+    const tabId = await openReady(manager, "guides/note.md");
+    const before = manager.snapshot();
+    const tab = before.collection.tabsById.get(tabId);
+    const session = before.runtimes.get(tabId)?.session;
+    if (!tab || session?.status !== "ready") throw new Error("missing runtime");
+
+    expect(
+      manager.remapTabsAtomically([
+        {
+          tabId,
+          incarnation: tab.incarnation,
+          path: {
+            relativePath: "archive/note.md",
+            identity: "native:archive/note.md",
+          },
+          markdown: "# moved\n\n![img](../assets/a.png)",
+          expectedGeneration: session.generation,
+          expectedEditVersion: session.editVersion,
+        },
+      ]),
+    ).toBe(true);
+
+    const snapshot = manager.snapshot();
+    expect(snapshot.collection.tabsById.get(tabId)).toMatchObject({
+      relativePath: "archive/note.md",
+      pathIdentity: "native:archive/note.md",
+      displayName: "note.md",
+      parentHint: "archive",
+    });
+    expect(snapshot.runtimes.get(tabId)?.session).toMatchObject({
+      status: "ready",
+      relativePath: "archive/note.md",
+      markdown: "# moved\n\n![img](../assets/a.png)",
+      saveState: { kind: "dirty" },
+    });
+  });
 });

@@ -70,6 +70,16 @@ import {
   type WorkspaceTabManagerSnapshot,
 } from "../tabs/WorkspaceTabManager";
 import { WorkspaceTabBar } from "../tabs/WorkspaceTabBar";
+import { TabSettlementDialog } from "../tabs/TabSettlementDialog";
+import {
+  createWorkspaceTabSettlementBatch,
+  projectWorkspaceTabSettlement,
+  settlementBatchIsSafe,
+  settlementResolutionFor,
+  type WorkspaceTabExplicitResolution,
+  type WorkspaceTabSettlementBatch,
+  type WorkspaceTabSettlementTarget,
+} from "../tabs/tabSettlement";
 import {
   analyzeWorkspaceTabPathImpact,
   type WorkspaceTabPathImpact,
@@ -77,7 +87,10 @@ import {
 } from "../tabs/tabPathImpact";
 import type { WorkspaceTabPathIdentity } from "../tabs/tabPath";
 import { WorkspaceTabSessionPersistence } from "../tabs/tabSessionPersistence";
-import type { WorkspaceTabId } from "../tabs/tabTypes";
+import type {
+  WorkspaceTabId,
+  WorkspaceTabSettlementReason,
+} from "../tabs/tabTypes";
 import type { WorkspaceTabSessionGateway } from "../tabs/tabSessionGateway";
 import { WorkspaceTree } from "./WorkspaceTree";
 import { isSameOrInside, parentPath, replacePrefix } from "./workspacePath";
@@ -157,14 +170,38 @@ export function WorkspaceWorkbench({
     new Set(),
   );
   const closingTabIdsRef = useRef(new Set<WorkspaceTabId>());
+  const [settlementBatch, setSettlementBatch] =
+    useState<WorkspaceTabSettlementBatch | null>(null);
+  const [settlementResolutions, setSettlementResolutions] = useState<
+    Map<WorkspaceTabId, WorkspaceTabExplicitResolution>
+  >(new Map());
+  const [settlementBusyTabIds, setSettlementBusyTabIds] = useState<
+    Set<WorkspaceTabId>
+  >(new Set());
+  const [settlementFinalLabel, setSettlementFinalLabel] =
+    useState("关闭页签");
+  const [settlementChild, setSettlementChild] = useState<{
+    tabId: WorkspaceTabId;
+    kind: "conflict" | "save_copy";
+  } | null>(null);
+  const settlementCommitRef = useRef<
+    ((
+      targets: readonly WorkspaceTabSettlementTarget[],
+      resolutions: ReadonlyMap<
+        WorkspaceTabId,
+        WorkspaceTabExplicitResolution
+      >,
+    ) => Promise<void>) | null
+  >(null);
   const [pageError, setPageError] = useState<DesktopError | null>(null);
   const [operation, setOperation] = useState<PendingOperation | null>(null);
   const [operationError, setOperationError] = useState<DesktopError | null>(null);
-  const [operationBlock, setOperationBlock] = useState<string | null>(null);
   const [operationInspecting, setOperationInspecting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<FsEntry | null>(null);
-  const [deleteBlock, setDeleteBlock] = useState<string | null>(null);
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<FsEntry | null>(null);
+  const [permanentDeleteTabTargets, setPermanentDeleteTabTargets] = useState<
+    readonly WorkspaceTabSettlementTarget[]
+  >([]);
   const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
   const [decision, setDecision] = useState<PendingDecision | null>(null);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
@@ -599,13 +636,12 @@ export function WorkspaceWorkbench({
   useEffect(() => {
     const ready = documentState.status === "ready" ? documentState : null;
     if (
-      lifecycleNotice &&
       ready &&
       (ready.saveState.kind === "clean" || ready.saveState.kind === "saved")
     ) {
       setLifecycleNotice(null);
     }
-  }, [documentState, lifecycleNotice]);
+  }, [documentState]);
 
   useEffect(() => {
     if (documentState.status !== "ready") return;
@@ -712,32 +748,180 @@ export function WorkspaceWorkbench({
   }
 
   async function closeWorkspaceTab(tabId: WorkspaceTabId) {
+    await requestTabSettlement(
+      [tabId],
+      "close_current",
+      "关闭这个页签",
+      closeSettledTabs,
+    );
+  }
+
+  async function closeWorkspaceTabs(
+    tabIds: readonly WorkspaceTabId[],
+    reason: WorkspaceTabSettlementReason,
+  ) {
+    if (tabIds.length === 0) return;
+    await requestTabSettlement(
+      tabIds,
+      reason,
+      reason === "close_all"
+        ? `关闭 ${tabIds.length} 个页签`
+        : reason === "close_right"
+          ? "关闭右侧页签"
+          : "关闭其他页签",
+      closeSettledTabs,
+    );
+  }
+
+  async function closeSettledTabs(
+    targets: readonly WorkspaceTabSettlementTarget[],
+  ) {
     const manager = tabManagerRef.current;
-    if (!manager || closingTabIdsRef.current.has(tabId)) return;
-    closingTabIdsRef.current.add(tabId);
+    if (!manager) return;
+    const snapshot = manager.snapshot();
+    const recoveryToDelete = targets.flatMap((target) => {
+      const session = snapshot.runtimes.get(target.tabId)?.session;
+      return session?.status === "ready" &&
+        session.recoveryState.kind === "available"
+        ? [session.recoveryState.snapshotId]
+        : [];
+    });
+    await manager.closeTabsAtomically(targets);
+    await Promise.all(
+      recoveryToDelete.map((snapshotId) =>
+        gateway.recoveryGateway
+          .delete(snapshotId, workspace.id)
+          .catch(() => false),
+      ),
+    );
+    setRecoverySnapshots((items) =>
+      items.filter((item) => !recoveryToDelete.includes(item.snapshotId)),
+    );
+    syncActiveTabChrome(manager.snapshot().activeTab?.relativePath ?? null);
+    setLifecycleNotice(
+      targets.length === 1
+        ? "页签已安全关闭。"
+        : `${targets.length} 个页签已一次性安全关闭。`,
+    );
+  }
+
+  async function requestTabSettlement(
+    tabIds: readonly WorkspaceTabId[],
+    reason: WorkspaceTabSettlementReason,
+    finalLabel: string,
+    commit: (
+      targets: readonly WorkspaceTabSettlementTarget[],
+      resolutions: ReadonlyMap<
+        WorkspaceTabId,
+        WorkspaceTabExplicitResolution
+      >,
+    ) => Promise<void>,
+  ): Promise<boolean> {
+    const manager = tabManagerRef.current;
+    if (!manager || settlementBatch) return false;
+    const batch = createWorkspaceTabSettlementBatch(
+      manager.snapshot(),
+      tabIds,
+      reason,
+    );
+    if (batch.targets.length === 0) return true;
+    closingTabIdsRef.current = new Set(batch.targets.map((item) => item.tabId));
     setClosingTabIds(new Set(closingTabIdsRef.current));
+    const attempts = await manager.settleTabs(batch.targets);
+    const blocked = attempts.some((item) => item.outcome.status === "blocked");
+    if (!blocked) {
+      await commit(batch.targets, new Map());
+      closingTabIdsRef.current.clear();
+      setClosingTabIds(new Set());
+      return true;
+    }
+    settlementCommitRef.current = commit;
+    setSettlementResolutions(new Map());
+    setSettlementFinalLabel(finalLabel);
+    setSettlementBatch(batch);
+    return false;
+  }
+
+  function cancelTabSettlement() {
+    settlementCommitRef.current = null;
+    setSettlementBatch(null);
+    setSettlementResolutions(new Map());
+    setSettlementChild(null);
+    closingTabIdsRef.current.clear();
+    setClosingTabIds(new Set());
+    setLifecycleNotice("操作已取消；全部页签仍保持打开。");
+  }
+
+  async function retryTabSettlement(tabId: WorkspaceTabId) {
+    const batch = settlementBatch;
+    const manager = tabManagerRef.current;
+    const target = batch?.targets.find((item) => item.tabId === tabId);
+    if (!manager || !target || settlementBusyTabIds.has(tabId)) return;
+    setSettlementBusyTabIds((current) => new Set(current).add(tabId));
     try {
-      const result = await manager.close(tabId);
-      if (!mountedRef.current) return;
-      if (result.status === "blocked") {
-        manager.activate(tabId);
-        syncActiveTabChrome(manager.snapshot().activeTab?.relativePath ?? null);
-        setLifecycleNotice(
-          closeBlockedMessage(
-            result.outcome?.status === "blocked"
-              ? result.outcome.reason
-              : "failed",
-          ),
-        );
-        return;
-      }
-      syncActiveTabChrome(manager.snapshot().activeTab?.relativePath ?? null);
-      setLifecycleNotice("页签已安全关闭。");
+      await manager.settleTabs([target]);
+      setSettlementResolutions((current) => {
+        const next = new Map(current);
+        next.delete(tabId);
+        return next;
+      });
     } finally {
-      if (mountedRef.current) {
-        closingTabIdsRef.current.delete(tabId);
-        setClosingTabIds(new Set(closingTabIdsRef.current));
-      }
+      setSettlementBusyTabIds((current) => {
+        const next = new Set(current);
+        next.delete(tabId);
+        return next;
+      });
+    }
+  }
+
+  function resolveTabSettlementByDiscard(tabId: WorkspaceTabId) {
+    const session = tabManagerRef.current?.snapshot().runtimes.get(tabId)?.session;
+    if (session?.status !== "ready") return;
+    setSettlementResolutions((current) => {
+      const next = new Map(current);
+      next.set(tabId, settlementResolutionFor(session, { kind: "discard" }));
+      return next;
+    });
+  }
+
+  function openSettlementChild(
+    tabId: WorkspaceTabId,
+    kind: "conflict" | "save_copy",
+  ) {
+    const manager = tabManagerRef.current;
+    if (!manager?.activate(tabId)) return;
+    syncActiveTabChrome(manager.snapshot().activeTab?.relativePath ?? null);
+    setSettlementChild({ tabId, kind });
+    if (kind === "conflict") setConflictOpen(true);
+    else setSaveCopyOpen(true);
+  }
+
+  async function commitTabSettlement() {
+    const batch = settlementBatch;
+    const manager = tabManagerRef.current;
+    const commit = settlementCommitRef.current;
+    if (!batch || !manager || !commit) return;
+    const projections = projectWorkspaceTabSettlement(
+      batch,
+      manager.snapshot(),
+      settlementResolutions,
+    );
+    if (!settlementBatchIsSafe(projections)) {
+      setLifecycleNotice(
+        "页签内容在处理期间发生变化，请重新处理仍未安全的条目。",
+      );
+      return;
+    }
+    setSettlementBusyTabIds(new Set(batch.targets.map((item) => item.tabId)));
+    try {
+      await commit(batch.targets, settlementResolutions);
+      settlementCommitRef.current = null;
+      setSettlementBatch(null);
+      setSettlementResolutions(new Map());
+      closingTabIdsRef.current.clear();
+      setClosingTabIds(new Set());
+    } finally {
+      setSettlementBusyTabIds(new Set());
     }
   }
 
@@ -815,6 +999,7 @@ export function WorkspaceWorkbench({
     await discardRecoveryFor(current);
     setConflictOpen(false);
     await loadDocumentWithoutSettlement(current.relativePath);
+    setSettlementChild(null);
   }
 
   async function loadDocumentWithoutSettlement(path: WorkspaceRelativePath) {
@@ -927,6 +1112,7 @@ export function WorkspaceWorkbench({
       );
     }
     setConflictOpen(false);
+    setSettlementChild(null);
     setLifecycleNotice("当前内容已覆盖磁盘版本。");
   }
 
@@ -1029,15 +1215,24 @@ export function WorkspaceWorkbench({
 
   function openOperation(kind: OperationKind) {
     if ((kind === "rename" || kind === "move") && !selectedEntry) return;
-    const current = documentStateRef.current;
-    const movingOpenDocument =
-      kind === "move" &&
-      selectedEntry &&
-      current.status === "ready" &&
-      isSameOrInside(current.relativePath, selectedEntry.relativePath);
-    const localImageCount = movingOpenDocument
-      ? countLocalMarkdownImages(current.markdown, current.relativePath)
-      : 0;
+    const snapshot = tabManagerRef.current?.snapshot() ?? null;
+    const localImageCount =
+      kind === "move" && selectedEntry && snapshot
+        ? [...snapshot.runtimes.values()].reduce((count, runtime) => {
+            const session = runtime.session;
+            return session.status === "ready" &&
+              isSameOrInside(
+                session.relativePath,
+                selectedEntry.relativePath,
+              )
+              ? count +
+                  countLocalMarkdownImages(
+                    session.markdown,
+                    session.relativePath,
+                  )
+              : count;
+          }, 0)
+        : 0;
     const details: Record<OperationKind, PendingOperation> = {
       create_file: { kind, title: "新建 Markdown 文档", label: "文件名", value: "未命名文档.md" },
       create_directory: { kind, title: "新建文件夹", label: "文件夹名称", value: "新文件夹" },
@@ -1052,7 +1247,6 @@ export function WorkspaceWorkbench({
       },
     };
     setOperationError(null);
-    setOperationBlock(null);
     setOperation(details[kind]);
   }
 
@@ -1091,105 +1285,251 @@ export function WorkspaceWorkbench({
         setBusyLabel(null);
       }
     }
-    const currentDocument = documentStateRef.current;
     const pathImpact = pathImpactForOperation(
       tabManagerRef.current?.snapshot() ?? null,
       operation,
       selectedEntry,
     );
     if (pathImpact && pathImpact.affectedTabIds.length > 0) {
-      setOperationBlock(pathImpactBlockedMessage(pathImpact));
+      const pending = operation;
+      setOperation(null);
+      await requestTabSettlement(
+        pathImpact.affectedTabIds,
+        pending.kind === "rename" ? "rename_entry" : "move_entry",
+        pending.kind === "rename"
+          ? "重命名并更新受影响页签"
+          : "移动并更新受影响页签",
+        async (targets, resolutions) =>
+          performWorkspaceOperation(
+            pending,
+            pathImpact,
+            targets,
+            resolutions,
+          ),
+      );
       return;
     }
-    setOperationBlock(null);
-    const movedDocumentSnapshot =
-      operation.kind === "move" &&
-      selectedEntry &&
-      currentDocument.status === "ready" &&
-      isSameOrInside(currentDocument.relativePath, selectedEntry.relativePath)
-        ? {
-            markdown: currentDocument.markdown,
-            path: currentDocument.relativePath,
-          }
-        : null;
-    if (
-      currentDocument.status === "ready" &&
-      selectedEntry &&
-      (operation.kind === "rename" || operation.kind === "move") &&
-      isSameOrInside(currentDocument.relativePath, selectedEntry.relativePath)
-    ) {
-      const settlement = await settleCurrentDocument();
-      if (settlement.status === "blocked") return;
-    }
+    await performWorkspaceOperation(operation, pathImpact, []);
+  }
+
+  async function performWorkspaceOperation(
+    pendingOperation: PendingOperation,
+    pathImpact: WorkspaceTabPathImpact | null,
+    settledTargets: readonly WorkspaceTabSettlementTarget[],
+    resolutions: ReadonlyMap<
+      WorkspaceTabId,
+      WorkspaceTabExplicitResolution
+    > = new Map(),
+  ) {
+    const targetEntry = selectedEntry;
     const mutationId = crypto.randomUUID();
     mutationInFlightRef.current = true;
-    const sourcePath = operation.kind === "rename" || operation.kind === "move"
-      ? selectedEntry?.relativePath ?? null
+    const sourcePath =
+      pendingOperation.kind === "rename" || pendingOperation.kind === "move"
+      ? targetEntry?.relativePath ?? null
       : null;
-    commitTree((current) => beginWorkspaceTreeMutation(current, mutationId, operation.kind, sourcePath));
+    commitTree((current) =>
+      beginWorkspaceTreeMutation(
+        current,
+        mutationId,
+        pendingOperation.kind,
+        sourcePath,
+      ),
+    );
     setBusyLabel("正在提交磁盘变更");
     setOperationError(null);
     try {
       let result: WorkspaceMutationResult;
-      if (operation.kind === "create_file") {
-        result = await gateway.createFile(workspace.id, value, parentForCreate());
-      } else if (operation.kind === "create_directory") {
-        result = await gateway.createDirectory(workspace.id, value, parentForCreate());
-      } else if (operation.kind === "rename" && selectedEntry) {
-        result = await gateway.rename(workspace.id, selectedEntry.relativePath, value);
-      } else if (operation.kind === "move" && selectedEntry) {
-        result = await gateway.move(workspace.id, selectedEntry.relativePath, value.trim() || null);
-      } else {
+      try {
+        if (pendingOperation.kind === "create_file") {
+          result = await gateway.createFile(
+            workspace.id,
+            pendingOperation.value,
+            parentForCreate(),
+          );
+        } else if (pendingOperation.kind === "create_directory") {
+          result = await gateway.createDirectory(
+            workspace.id,
+            pendingOperation.value,
+            parentForCreate(),
+          );
+        } else if (pendingOperation.kind === "rename" && targetEntry) {
+          result = await gateway.rename(
+            workspace.id,
+            targetEntry.relativePath,
+            pendingOperation.value,
+          );
+        } else if (pendingOperation.kind === "move" && targetEntry) {
+          result = await gateway.move(
+            workspace.id,
+            targetEntry.relativePath,
+            pendingOperation.value.trim() || null,
+          );
+        } else {
+          return;
+        }
+      } catch (reason) {
+        const error = normalizeDesktopError(reason, "mutation_unavailable");
+        commitTree((current) =>
+          applyWorkspaceTreeMutationFailure(current, mutationId, error),
+        );
+        setOperation(pendingOperation);
+        setOperationError(error);
         return;
       }
-      commitTree((current) => applyWorkspaceTreeMutationSuccess(current, mutationId, result));
-      await remapSelectionAfterMutation(
-        result,
-        operation.adjustImageLinks ? movedDocumentSnapshot : null,
+      commitTree((current) =>
+        applyWorkspaceTreeMutationSuccess(current, mutationId, result),
       );
       setOperation(null);
-      if (result.entry.kind === "markdown_file" && operation.kind === "create_file") {
+      try {
+        await commitTabPathMutation(
+          result,
+          pathImpact,
+          settledTargets,
+          resolutions,
+          pendingOperation.adjustImageLinks !== false,
+        );
+      } catch (reason) {
+        const error = normalizeDesktopError(reason, "mutation_unavailable");
+        setPageError(error);
+        setLifecycleNotice(
+          "磁盘变更已完成，但部分页签状态尚未同步；请刷新文件树并重新打开受影响文档。",
+        );
+        return;
+      }
+      if (
+        result.entry.kind === "markdown_file" &&
+        pendingOperation.kind === "create_file"
+      ) {
         void openMarkdown(result.entry.relativePath);
       }
-    } catch (reason) {
-      const error = normalizeDesktopError(reason, "mutation_unavailable");
-      commitTree((current) => applyWorkspaceTreeMutationFailure(current, mutationId, error));
-      setOperationError(error);
     } finally {
       mutationInFlightRef.current = false;
       setBusyLabel(null);
     }
   }
 
-  async function remapSelectionAfterMutation(
+  async function commitTabPathMutation(
     result: WorkspaceMutationResult,
-    movedDocument: { markdown: string; path: WorkspaceRelativePath } | null,
+    impact: WorkspaceTabPathImpact | null,
+    settledTargets: readonly WorkspaceTabSettlementTarget[],
+    resolutions: ReadonlyMap<
+      WorkspaceTabId,
+      WorkspaceTabExplicitResolution
+    >,
+    adjustImageLinks: boolean,
   ) {
     if (!result.previousPath) return;
     const previousPath = result.previousPath;
     const nextPath = result.entry.relativePath;
-    const documentPath =
-      documentState.status === "empty" ? null : documentState.relativePath;
-    setSelectedPath((current) => current ? replacePrefix(current, previousPath, nextPath) : null);
-    setExpanded((current) => new Set([...current].map((path) => replacePrefix(path, previousPath, nextPath))));
-    if (documentPath && isSameOrInside(documentPath, previousPath)) {
-      const nextDocumentPath = replacePrefix(documentPath, previousPath, nextPath);
-      const adjustedMarkdown = movedDocument
-        ? rewriteMarkdownImageLinksForMove(
-            movedDocument.markdown,
-            movedDocument.path,
-            nextDocumentPath,
-            previousPath,
-            nextPath,
-          )
-        : undefined;
-      await openMarkdown(
-        nextDocumentPath,
-        workspace,
-        generationRef.current,
-        adjustedMarkdown,
+    setSelectedPath((current) =>
+      current ? replacePrefix(current, previousPath, nextPath) : null,
+    );
+    setExpanded(
+      (current) =>
+        new Set(
+          [...current].map((path) =>
+            replacePrefix(path, previousPath, nextPath),
+          ),
+        ),
+    );
+    const manager = tabManagerRef.current;
+    if (!manager || !impact) return;
+    const remaps = await Promise.all(
+      impact.pathRemaps.flatMap((item) =>
+        item.nextPath
+          ? [
+              gateway
+                .resolveTabPath(workspace.id, item.nextPath)
+                .then((path) => ({ ...item, path })),
+            ]
+          : [],
+      ),
+    );
+    if (remaps.length > 0) {
+      manager.remapTabsAtomically(
+        remaps.map((item) => ({
+          tabId: item.tabId,
+          incarnation: item.incarnation,
+          path: item.path,
+        })),
       );
     }
+    const detachedIds = new Set(
+      settledTargets.flatMap((target) => {
+        const resolution = resolutions.get(target.tabId);
+        return resolution?.kind === "discard" ||
+          resolution?.kind === "save_copy"
+          ? [target.tabId]
+          : [];
+      }),
+    );
+    for (const tabId of detachedIds) {
+      const tab = manager.snapshot().collection.tabsById.get(tabId);
+      if (!tab) continue;
+      await manager.reload(
+        tabId,
+        workspace.writable &&
+          (treeRef.current.entries[tab.relativePath]?.writable ?? true),
+      );
+    }
+    if (adjustImageLinks) {
+      const snapshot = manager.snapshot();
+      const rewriteCandidates = new Set([
+        ...impact.pathRemaps.map((item) => item.tabId),
+        ...impact.markdownRewrites.map((item) => item.tabId),
+      ]);
+      const rewriteRemaps = [...rewriteCandidates].flatMap((tabId) => {
+        const tab = snapshot.collection.tabsById.get(tabId);
+        const runtime = snapshot.runtimes.get(tabId);
+        const pathRemap = impact.pathRemaps.find(
+          (item) => item.tabId === tabId,
+        );
+        if (
+          !tab ||
+          runtime?.incarnation !== tab.incarnation ||
+          runtime.session.status !== "ready"
+        ) {
+          return [];
+        }
+        const previousDocumentPath =
+          pathRemap?.previousPath ?? tab.relativePath;
+        const markdown = rewriteMarkdownImageLinksForMove(
+          runtime.session.markdown,
+          previousDocumentPath,
+          tab.relativePath,
+          previousPath,
+          nextPath,
+        );
+        if (markdown === runtime.session.markdown) return [];
+        return [{
+          tabId,
+          incarnation: tab.incarnation,
+          path: {
+            relativePath: tab.relativePath,
+            identity: tab.pathIdentity,
+          },
+          markdown,
+          expectedGeneration: runtime.session.generation,
+          expectedEditVersion: runtime.session.editVersion,
+        }];
+      });
+      if (rewriteRemaps.length > 0) {
+        manager.remapTabsAtomically(rewriteRemaps);
+        const results = await manager.settleTabs(
+          rewriteRemaps.map(({ tabId, incarnation }) => ({
+            tabId,
+            incarnation,
+          })),
+        );
+        if (results.some((item) => item.outcome.status === "blocked")) {
+          setLifecycleNotice(
+            "目录已移动，但部分图片链接尚未安全写回；相关页签保持打开并显示真实保存状态。",
+          );
+        }
+      }
+    }
+    syncActiveTabChrome(manager.snapshot().activeTab?.relativePath ?? null);
   }
 
   async function moveToTrash() {
@@ -1203,25 +1543,29 @@ export function WorkspaceWorkbench({
         })
       : null;
     if (impact && impact.affectedTabIds.length > 0) {
-      setDeleteBlock(pathImpactBlockedMessage(impact));
+      setDeleteTarget(null);
+      await requestTabSettlement(
+        impact.affectedTabIds,
+        "delete_entry",
+        `移到废纸篓并关闭 ${impact.affectedTabIds.length} 个页签`,
+        async (targets) => performTrash(target, targets),
+      );
       return;
     }
-    setDeleteBlock(null);
-    const currentDocument = documentStateRef.current;
-    if (
-      currentDocument.status === "ready" &&
-      isSameOrInside(currentDocument.relativePath, target.relativePath)
-    ) {
-      const settlement = await settleCurrentDocument();
-      if (settlement.status === "blocked") return;
-    }
+    await performTrash(target, []);
+  }
+
+  async function performTrash(
+    target: FsEntry,
+    settledTargets: readonly WorkspaceTabSettlementTarget[],
+  ) {
     mutationInFlightRef.current = true;
     const mutationId = crypto.randomUUID();
     commitTree((current) => beginWorkspaceTreeMutation(current, mutationId, "trash", target.relativePath));
     setBusyLabel("正在移到系统废纸篓");
     try {
       const result = await gateway.trash(workspace.id, target.relativePath);
-      finishDelete(mutationId, result);
+      await finishDelete(mutationId, result, settledTargets);
       setDeleteTarget(null);
     } catch (reason) {
       const error = normalizeDesktopError(reason, "trash_unavailable");
@@ -1229,6 +1573,7 @@ export function WorkspaceWorkbench({
       setDeleteTarget(null);
       if (error.code === "trash_unavailable") {
         setPermanentDeleteTarget(target);
+        setPermanentDeleteTabTargets(settledTargets);
       } else {
         setPageError(error);
       }
@@ -1238,18 +1583,39 @@ export function WorkspaceWorkbench({
     }
   }
 
-  function finishDelete(mutationId: string, result: DeleteResult) {
+  async function finishDelete(
+    mutationId: string,
+    result: DeleteResult,
+    settledTargets: readonly WorkspaceTabSettlementTarget[] = [],
+  ) {
     commitTree((current) => applyWorkspaceTreeDeleteSuccess(current, mutationId, result));
     if (selectedPath && isSameOrInside(selectedPath, result.relativePath)) {
       setSelectedPath(null);
     }
-    const openDocumentPath =
-      documentState.status === "empty" ? null : documentState.relativePath;
-    if (openDocumentPath && isSameOrInside(openDocumentPath, result.relativePath)) {
-      const manager = tabManagerRef.current;
-      const active = manager?.snapshot().activeTab;
-      if (manager && active) void manager.close(active.tabId);
-      void gateway.setTitle(null).catch(() => undefined);
+    const manager = tabManagerRef.current;
+    if (manager && settledTargets.length > 0) {
+      const snapshot = manager.snapshot();
+      const recoveryToDelete = settledTargets.flatMap((target) => {
+        const session = snapshot.runtimes.get(target.tabId)?.session;
+        return session?.status === "ready" &&
+          session.recoveryState.kind === "available"
+          ? [session.recoveryState.snapshotId]
+          : [];
+      });
+      await manager.closeTabsAtomically(settledTargets, {
+        recordRecent: false,
+      });
+      await Promise.all(
+        recoveryToDelete.map((snapshotId) =>
+          gateway.recoveryGateway
+            .delete(snapshotId, workspace.id)
+            .catch(() => false),
+        ),
+      );
+      setRecoverySnapshots((items) =>
+        items.filter((item) => !recoveryToDelete.includes(item.snapshotId)),
+      );
+      syncActiveTabChrome(manager.snapshot().activeTab?.relativePath ?? null);
     }
   }
 
@@ -1448,9 +1814,26 @@ export function WorkspaceWorkbench({
         closingTabIds={closingTabIds}
         onActivate={activateWorkspaceTab}
         onClose={closeWorkspaceTab}
+        onCloseMany={closeWorkspaceTabs}
         onDiscardRecent={discardRecentlyClosed}
         onMove={moveWorkspaceTab}
         onReopen={reopenWorkspaceTab}
+        snapshot={tabSnapshot}
+      />
+
+      <TabSettlementDialog
+        batch={settlementChild ? null : settlementBatch}
+        busyTabIds={settlementBusyTabIds}
+        finalActionLabel={settlementFinalLabel}
+        onCancel={cancelTabSettlement}
+        onCommit={() => void commitTabSettlement()}
+        onDiscard={resolveTabSettlementByDiscard}
+        onResolveConflict={(tabId) =>
+          openSettlementChild(tabId, "conflict")
+        }
+        onRetry={(tabId) => void retryTabSettlement(tabId)}
+        onSaveCopy={(tabId) => openSettlementChild(tabId, "save_copy")}
+        resolutions={settlementResolutions}
         snapshot={tabSnapshot}
       />
 
@@ -1491,7 +1874,6 @@ export function WorkspaceWorkbench({
                 <button disabled={!selectedEntry.writable || operationProcessing} onClick={() => openOperation("move")} type="button">移动</button>
                 <button onClick={() => void revealSelected()} type="button">定位</button>
                 <button className="is-danger" disabled={!selectedEntry.writable || operationProcessing} onClick={() => {
-                  setDeleteBlock(null);
                   setDeleteTarget(selectedEntry);
                 }} type="button">删除</button>
               </div>
@@ -1602,7 +1984,6 @@ export function WorkspaceWorkbench({
             {operationDescription}
           </p>
           <label>{operation?.label}<input autoFocus disabled={operationProcessing} onChange={(event) => {
-            setOperationBlock(null);
             setOperation((current) => current ? { ...current, value: event.target.value } : null);
           }} value={operation?.value ?? ""} /></label>
           {operation?.kind === "move" &&
@@ -1626,7 +2007,6 @@ export function WorkspaceWorkbench({
             </label>
           ) : null}
           {operationError ? <p aria-live="assertive" className="workbench-dialog-copy__error">{desktopErrorMessage(operationError)}</p> : null}
-          {operationBlock ? <p aria-live="assertive" className="workbench-dialog-copy__error">{operationBlock}</p> : null}
         </div>
       </AppDialog>
 
@@ -1638,18 +2018,28 @@ export function WorkspaceWorkbench({
         onRequestClose={() => setDeleteTarget(null)}
         open={Boolean(deleteTarget)}
       >
-        <div className="workbench-dialog-copy"><h2 id="trash-title">删除“{deleteTarget?.name}”？</h2><p id="trash-description">Plainroot 会先请求系统废纸篓或回收站。系统能力不可用时，才会另行询问是否永久删除。</p>{deleteBlock ? <p aria-live="assertive" className="workbench-dialog-copy__error">{deleteBlock}</p> : null}</div>
+        <div className="workbench-dialog-copy"><h2 id="trash-title">删除“{deleteTarget?.name}”？</h2><p id="trash-description">Plainroot 会先安全结算所有受影响页签，再请求系统废纸篓或回收站。系统能力不可用时，才会另行询问是否永久删除。</p></div>
       </AppDialog>
 
       {permanentDeleteTarget ? (
         <PermanentDeleteDialog
-          onClose={() => setPermanentDeleteTarget(null)}
+          onClose={() => {
+            setPermanentDeleteTarget(null);
+            setPermanentDeleteTabTargets([]);
+          }}
           onDeleted={(result) => {
             const mutationId = treeRef.current.mutation?.id ?? crypto.randomUUID();
             if (!treeRef.current.mutation) {
               commitTree((current) => beginWorkspaceTreeMutation(current, mutationId, "permanent", result.relativePath));
             }
-            finishDelete(mutationId, result);
+            void finishDelete(
+              mutationId,
+              result,
+              permanentDeleteTabTargets,
+            ).finally(() => {
+              setPermanentDeleteTarget(null);
+              setPermanentDeleteTabTargets([]);
+            });
           }}
           open
           relativePath={permanentDeleteTarget.relativePath}
@@ -1661,12 +2051,18 @@ export function WorkspaceWorkbench({
         <>
           <ConflictDialog
             gateway={gateway.saveGateway}
-            onClose={() => setConflictOpen(false)}
+            onClose={() => {
+              setConflictOpen(false);
+              setSettlementChild(null);
+            }}
             onOverwrite={(result) => void applyConflictOverwrite(result)}
             onReload={reloadConflictFromDisk}
             onSaveCopy={() => {
               setConflictOpen(false);
               setSaveCopyOpen(true);
+              setSettlementChild((current) =>
+                current ? { ...current, kind: "save_copy" } : current,
+              );
             }}
             open={
               conflictOpen && documentState.saveState.kind === "conflict"
@@ -1675,7 +2071,10 @@ export function WorkspaceWorkbench({
           />
           <SaveCopyDialog
             gateway={gateway.saveGateway}
-            onClose={() => setSaveCopyOpen(false)}
+            onClose={() => {
+              setSaveCopyOpen(false);
+              setSettlementChild(null);
+            }}
             onSaved={(result) => {
               const current = documentStateRef.current;
               if (current.status === "ready") {
@@ -1684,8 +2083,22 @@ export function WorkspaceWorkbench({
                   editVersion: current.editVersion,
                   displayPath: result.displayPath,
                 });
+                if (settlementChild) {
+                  setSettlementResolutions((resolutions) => {
+                    const next = new Map(resolutions);
+                    next.set(
+                      settlementChild.tabId,
+                      settlementResolutionFor(current, {
+                        kind: "save_copy",
+                        displayPath: result.displayPath,
+                      }),
+                    );
+                    return next;
+                  });
+                }
               }
               setSaveCopyOpen(false);
+              setSettlementChild(null);
               setLifecycleNotice(`副本已保存到 ${result.displayPath}`);
             }}
             open={saveCopyOpen}
@@ -1853,13 +2266,6 @@ function joinWorkspacePath(
   return (parent ? `${parent}/${name}` : name) as WorkspaceRelativePath;
 }
 
-function pathImpactBlockedMessage(impact: WorkspaceTabPathImpact): string {
-  const rewriteCount = impact.markdownRewrites.length;
-  return `这次操作会影响 ${impact.affectedTabIds.length} 个已打开页签${
-    rewriteCount > 0 ? `，其中 ${rewriteCount} 个文档需要调整图片链接` : ""
-  }。当前版本不会在未完成全页签安全结算时修改磁盘；请先关闭受影响页签后重试。`;
-}
-
 function recoveryUnavailableError(
   state: DocumentSessionState,
 ): DesktopError | null {
@@ -1909,21 +2315,6 @@ function settlementMessage(result: Extract<DocumentSaveOutcome, { status: "block
       return "当前文档无法写入，窗口保持打开。";
     case "stale":
       return "文档仍在变化，窗口保持打开，请再次保存。";
-  }
-}
-
-function closeBlockedMessage(
-  reason: "readonly" | "conflict" | "failed" | "stale",
-): string {
-  switch (reason) {
-    case "readonly":
-      return "页签未关闭：文档只读且仍有本地修改，请先另存副本。";
-    case "conflict":
-      return "页签未关闭：磁盘内容已变化，请先处理冲突或另存副本。";
-    case "stale":
-      return "页签未关闭：保存状态仍在变化，请稍后重试。";
-    case "failed":
-      return "页签未关闭：保存没有完成，当前内容仍保留在页签或恢复副本中。";
   }
 }
 
