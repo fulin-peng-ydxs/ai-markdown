@@ -72,3 +72,8 @@ export interface EditorSurfaceHandle {
   setSelection(selection: EditorSelection): void;
   setSelectionAtCoordinates(x: number, y: number): void;
 }
+
+export interface EditorAdapterLifecycleEvent {
+  mode: EditorMode;
+  phase: "mounted" | "unmounted";
+}

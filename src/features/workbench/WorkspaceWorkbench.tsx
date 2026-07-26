@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentProps,
   type RefObject,
 } from "react";
 
@@ -34,7 +35,6 @@ import type {
 } from "../../services/desktop/contracts";
 import { desktopErrorMessage, normalizeDesktopError } from "../../services/desktop/errors";
 import {
-  beginDocumentLoad,
   applyDocumentEdit,
   completeDocumentConflictOverwrite,
   createEmptyDocumentSession,
@@ -47,13 +47,9 @@ import { ConflictDialog } from "../editor/recovery/ConflictDialog";
 import { RecoveryDialog } from "../editor/recovery/RecoveryDialog";
 import { SaveCopyDialog } from "../editor/recovery/SaveCopyDialog";
 import {
-  DocumentSaveController,
+  type DocumentSaveController,
   type DocumentSaveOutcome,
 } from "../editor/save/DocumentSaveController";
-import {
-  applyDocumentLoadOutcome,
-  requestDocumentLoad,
-} from "../editor/editorGateway";
 import {
   DocumentEditorShell,
   type DocumentEditorRuntimeState,
@@ -68,6 +64,11 @@ import {
   rewriteMarkdownImageLinksForMove,
 } from "../editor/assets/workspaceAssetPath";
 import { PermanentDeleteDialog } from "./PermanentDeleteDialog";
+import {
+  WorkspaceTabManager,
+  type WorkspaceTabManagerSnapshot,
+} from "../tabs/WorkspaceTabManager";
+import type { WorkspaceTabSessionGateway } from "../tabs/tabSessionGateway";
 import { WorkspaceTree } from "./WorkspaceTree";
 import { isSameOrInside, parentPath, replacePrefix } from "./workspacePath";
 import {
@@ -136,6 +137,9 @@ export function WorkspaceWorkbench({
   const editorHandleRef = useRef<DocumentEditorShellHandle | null>(null);
   const documentStateRef = useRef(documentState);
   const saveControllerRef = useRef<DocumentSaveController | null>(null);
+  const tabManagerRef = useRef<WorkspaceTabManager | null>(null);
+  const tabManagerSubscriptionRef = useRef<(() => void) | null>(null);
+  const tabManagerSnapshotRef = useRef<WorkspaceTabManagerSnapshot | null>(null);
   const [pageError, setPageError] = useState<DesktopError | null>(null);
   const [operation, setOperation] = useState<PendingOperation | null>(null);
   const [operationError, setOperationError] = useState<DesktopError | null>(null);
@@ -185,6 +189,7 @@ export function WorkspaceWorkbench({
   const mutationProcessing = tree.mutation?.status === "processing";
   const activeDocumentPath =
     documentState.status === "empty" ? null : documentState.relativePath;
+  const activeTab = tabManagerSnapshotRef.current?.activeTab ?? null;
   const editorMenuState = useMemo<EditorMenuState>(() => {
     if (documentState.status !== "ready") {
       return {
@@ -220,6 +225,7 @@ export function WorkspaceWorkbench({
   ]);
 
   const commitDocument = useCallback((next: DocumentSessionState) => {
+    if (tabManagerRef.current?.updateActiveSession(next)) return;
     documentStateRef.current = next;
     setDocumentState(next);
     saveControllerRef.current?.observe(next.status === "ready" ? next : null);
@@ -371,9 +377,27 @@ export function WorkspaceWorkbench({
     setSelectedPath(null);
     setDocumentMetrics(null);
     setSavedCopyEvidence(null);
-    commitDocument(
-      createEmptyDocumentSession(documentStateRef.current.generation + 1),
-    );
+    tabManagerSubscriptionRef.current?.();
+    tabManagerSubscriptionRef.current = null;
+    const previousManager = tabManagerRef.current;
+    if (previousManager) void previousManager.destroy();
+    const manager = new WorkspaceTabManager({
+      workspaceId: nextWorkspace.id,
+      gateway: tabSessionGateway(gateway),
+      captureActiveProjection: () =>
+        editorHandleRef.current?.commitProjection() ?? null,
+    });
+    tabManagerRef.current = manager;
+    tabManagerSubscriptionRef.current = manager.subscribe((snapshot) => {
+      if (!mountedRef.current || generation !== generationRef.current) return;
+      tabManagerSnapshotRef.current = snapshot;
+      const nextDocument =
+        snapshot.activeRuntime?.session ??
+        createEmptyDocumentSession(documentStateRef.current.generation + 1);
+      documentStateRef.current = nextDocument;
+      setDocumentState(nextDocument);
+      saveControllerRef.current = manager.activeSaveController();
+    });
     setPageError(null);
     void gateway.setTitle(null).catch((reason) => {
       if (mountedRef.current && generation === generationRef.current) {
@@ -402,32 +426,13 @@ export function WorkspaceWorkbench({
       if (activeWatchRef.current) {
         void gateway.stopWatch(activeWatchRef.current).catch(() => false);
       }
+      tabManagerSubscriptionRef.current?.();
+      tabManagerSubscriptionRef.current = null;
+      const manager = tabManagerRef.current;
+      tabManagerRef.current = null;
+      if (manager) void manager.destroy();
     };
   }, [gateway, initialWorkspace, loadWorkspace]);
-
-  useEffect(() => {
-    const controller = new DocumentSaveController({
-      getSession: () =>
-        documentStateRef.current.status === "ready"
-          ? documentStateRef.current
-          : null,
-      onSessionChange: commitDocument,
-      saveGateway: gateway.saveGateway,
-      recoveryGateway: gateway.recoveryGateway,
-    });
-    saveControllerRef.current = controller;
-    controller.observe(
-      documentStateRef.current.status === "ready"
-        ? documentStateRef.current
-        : null,
-    );
-    return () => {
-      controller.dispose();
-      if (saveControllerRef.current === controller) {
-        saveControllerRef.current = null;
-      }
-    };
-  }, [commitDocument, gateway]);
 
   const loadRecoverySnapshots = useCallback(async () => {
     try {
@@ -599,43 +604,30 @@ export function WorkspaceWorkbench({
     generation = generationRef.current,
     overrideMarkdown?: string,
   ) {
-    const current = documentStateRef.current;
-    if (
-      current.status === "ready" &&
-      (current.workspaceId !== targetWorkspace.id ||
-        current.relativePath !== path)
-    ) {
-      const settlement = await settleCurrentDocument();
-      if (settlement.status === "blocked") return;
+    const manager = tabManagerRef.current;
+    if (!manager || manager.snapshot().collection.workspaceId !== targetWorkspace.id) {
+      setPageError(
+        normalizeDesktopError(null, "workspace_not_registered"),
+      );
+      return;
     }
     setLifecycleNotice(null);
     setSelectedPath(path);
-    const loading = beginDocumentLoad(documentStateRef.current, {
-      workspaceId: targetWorkspace.id,
-      relativePath: path,
-    });
-    commitDocument(loading);
     setDocumentMetrics(null);
-    const outcome = await requestDocumentLoad(
-      {
-        generation: loading.generation,
-        workspaceId: targetWorkspace.id,
-        relativePath: path,
-        writable:
-          targetWorkspace.writable &&
-          (treeRef.current.entries[path]?.writable ?? true),
-      },
-      gateway,
-      remarkMarkdownCompatibilityParser,
-    );
+    const opened = await manager.open(path, {
+      writable:
+        targetWorkspace.writable &&
+        (treeRef.current.entries[path]?.writable ?? true),
+    });
     if (!mountedRef.current || generation !== generationRef.current) return;
-    let resolved = applyDocumentLoadOutcome(
-      documentStateRef.current,
-      outcome,
-    );
+    if (opened.status === "failed") {
+      setPageError(opened.error);
+      return;
+    }
+    let resolved = manager.snapshot().runtimes.get(opened.tabId)?.session;
     if (
       overrideMarkdown !== undefined &&
-      resolved.status === "ready" &&
+      resolved?.status === "ready" &&
       overrideMarkdown !== resolved.markdown
     ) {
       const adjusted = applyDocumentEdit(resolved, {
@@ -649,17 +641,18 @@ export function WorkspaceWorkbench({
       });
       if (adjusted.status === "applied") resolved = adjusted.session;
     }
-    commitDocument(resolved);
+    if (resolved) manager.updateActiveSession(resolved);
     if (
+      resolved &&
       resolved.status !== "empty" &&
-      resolved.generation === loading.generation &&
-      resolved.relativePath === path
+      resolved.relativePath === path &&
+      manager.snapshot().activeTab?.relativePath === path
     ) {
       void gateway.setTitle(path).catch((reason) => {
         if (
           mountedRef.current &&
           generation === generationRef.current &&
-          documentStateRef.current.generation === loading.generation
+          tabManagerRef.current?.snapshot().activeTab?.relativePath === path
         ) {
           setPageError(normalizeDesktopError(reason, "window_title_failed"));
         }
@@ -678,6 +671,20 @@ export function WorkspaceWorkbench({
     return result;
   }
 
+  async function settleAllDocuments(): Promise<DocumentSaveOutcome> {
+    const result = await tabManagerRef.current?.settleAll();
+    if (!result || result.status === "settled") {
+      return { status: "already_safe" };
+    }
+    const outcome = result.outcome ?? {
+      status: "blocked" as const,
+      reason: "failed" as const,
+    };
+    if (outcome.status !== "blocked") return { status: "already_safe" };
+    setLifecycleNotice(settlementMessage(outcome));
+    return outcome;
+  }
+
   async function reloadConflictFromDisk() {
     const current = documentStateRef.current;
     if (current.status !== "ready") return;
@@ -693,24 +700,13 @@ export function WorkspaceWorkbench({
   }
 
   async function loadDocumentWithoutSettlement(path: WorkspaceRelativePath) {
-    const loading = beginDocumentLoad(documentStateRef.current, {
-      workspaceId: workspace.id,
-      relativePath: path,
-    });
-    commitDocument(loading);
-    const outcome = await requestDocumentLoad(
-      {
-        generation: loading.generation,
-        workspaceId: workspace.id,
-        relativePath: path,
-        writable:
-          workspace.writable && (treeRef.current.entries[path]?.writable ?? true),
-      },
-      gateway,
-      remarkMarkdownCompatibilityParser,
+    const manager = tabManagerRef.current;
+    const tabId = manager?.snapshot().activeTab?.tabId;
+    if (!manager || !tabId) return;
+    await manager.reload(
+      tabId,
+      workspace.writable && (treeRef.current.entries[path]?.writable ?? true),
     );
-    const resolved = applyDocumentLoadOutcome(documentStateRef.current, outcome);
-    commitDocument(resolved);
   }
 
   async function restoreSnapshot(snapshot: RecoverySnapshot) {
@@ -719,46 +715,37 @@ export function WorkspaceWorkbench({
       current.status === "ready" &&
       (current.workspaceId !== snapshot.metadata.workspaceId ||
         current.relativePath !== snapshot.metadata.relativePath ||
-        (current.markdown !== snapshot.content &&
-          current.saveState.kind !== "clean" &&
-          current.saveState.kind !== "saved" &&
-          current.saveState.kind !== "readonly"))
+        shouldProtectBeforeRecovery(current, snapshot.content))
     ) {
-      const settlement = await settleCurrentDocument();
-      if (settlement.status === "blocked") {
-        throw {
-          code: "recovery_snapshot_protected",
-          messageKey: "error.desktop.recovery_snapshot_protected",
-          pathHint: current.relativePath,
-          contentSafe: true,
-          retryable: false,
-        } satisfies DesktopError;
-      }
+      await requireRecoverySettlement(current);
     }
     setBusyLabel("正在核对恢复副本与原文件");
     try {
-      const loading = beginDocumentLoad(documentStateRef.current, {
-        workspaceId: snapshot.metadata.workspaceId,
-        relativePath: snapshot.metadata.relativePath,
+      const manager = tabManagerRef.current;
+      if (!manager) return;
+      const opened = await manager.open(snapshot.metadata.relativePath, {
+        writable:
+          workspace.writable &&
+          (treeRef.current.entries[snapshot.metadata.relativePath]?.writable ??
+            true),
       });
-      commitDocument(loading);
-      const outcome = await requestDocumentLoad(
-        {
-          generation: loading.generation,
-          workspaceId: snapshot.metadata.workspaceId,
-          relativePath: snapshot.metadata.relativePath,
-          writable:
-            workspace.writable &&
-            (treeRef.current.entries[snapshot.metadata.relativePath]?.writable ??
-              true),
-        },
-        gateway,
-        remarkMarkdownCompatibilityParser,
+      if (opened.status === "failed") throw opened.error;
+      const openedState = manager.snapshot().activeRuntime?.session;
+      if (
+        openedState?.status === "ready" &&
+        openedState !== current &&
+        shouldProtectBeforeRecovery(openedState, snapshot.content)
+      ) {
+        await requireRecoverySettlement(openedState);
+      }
+      await manager.reload(
+        opened.tabId,
+        workspace.writable &&
+          (treeRef.current.entries[snapshot.metadata.relativePath]?.writable ??
+            true),
       );
-      const diskState = applyDocumentLoadOutcome(
-        documentStateRef.current,
-        outcome,
-      );
+      const diskState = manager.snapshot().activeRuntime?.session;
+      if (!diskState) return;
       let compatibility;
       try {
         compatibility = assessVisualEditingCompatibility(
@@ -773,7 +760,7 @@ export function WorkspaceWorkbench({
         compatibility,
         recoveryUnavailableError(diskState),
       );
-      commitDocument(recovered);
+      manager.updateActiveSession(recovered);
       setSelectedPath(snapshot.metadata.relativePath);
       setRecoveryOpen(false);
       setLifecycleNotice(
@@ -782,6 +769,20 @@ export function WorkspaceWorkbench({
     } finally {
       setBusyLabel(null);
     }
+  }
+
+  async function requireRecoverySettlement(
+    session: ReadyDocumentSession,
+  ): Promise<void> {
+    const settlement = await settleCurrentDocument();
+    if (settlement.status !== "blocked") return;
+    throw {
+      code: "recovery_snapshot_protected",
+      messageKey: "error.desktop.recovery_snapshot_protected",
+      pathHint: session.relativePath,
+      contentSafe: true,
+      retryable: false,
+    } satisfies DesktopError;
   }
 
   async function applyConflictOverwrite(result: SafeWriteResult) {
@@ -829,9 +830,11 @@ export function WorkspaceWorkbench({
       return;
     }
     await controller?.abandon();
-    commitDocument(
-      createEmptyDocumentSession(documentStateRef.current.generation + 1),
-    );
+    const manager = tabManagerRef.current;
+    const active = manager?.snapshot().activeTab;
+    if (manager && active) {
+      await manager.close(active.tabId, active.restoredView, Date.now(), true);
+    }
     setSelectedPath(null);
     setSavedCopyEvidence(null);
     setLifecycleNotice(
@@ -854,7 +857,7 @@ export function WorkspaceWorkbench({
   }
 
   async function resolveSettlementIntent(intent: WindowSettlementIntent) {
-    const settlement = await settleCurrentDocument();
+    const settlement = await settleAllDocuments();
     try {
       const outcome = await gateway.resolveSettlement(
         intent.intentId,
@@ -1102,9 +1105,9 @@ export function WorkspaceWorkbench({
     const openDocumentPath =
       documentState.status === "empty" ? null : documentState.relativePath;
     if (openDocumentPath && isSameOrInside(openDocumentPath, result.relativePath)) {
-      commitDocument(
-        createEmptyDocumentSession(documentStateRef.current.generation + 1),
-      );
+      const manager = tabManagerRef.current;
+      const active = manager?.snapshot().activeTab;
+      if (manager && active) void manager.close(active.tabId, active.restoredView);
       void gateway.setTitle(null).catch(() => undefined);
     }
   }
@@ -1386,9 +1389,26 @@ export function WorkspaceWorkbench({
             </div>
           ) : null}
           <DocumentView
+            activeTab={activeTab}
             assetGateway={gateway.assetGateway}
             editorHandleRef={editorHandleRef}
             onMetricsChange={setDocumentMetrics}
+            onAdapterLifecycle={(event) => {
+              if (!activeTab) return;
+              if (event.phase === "mounted") {
+                tabManagerRef.current?.noteAdapterMounted(
+                  activeTab.tabId,
+                  activeTab.incarnation,
+                  event.mode,
+                );
+              } else {
+                tabManagerRef.current?.noteAdapterUnmounted(
+                  activeTab.tabId,
+                  activeTab.incarnation,
+                  event.mode,
+                );
+              }
+            }}
             onResolveConflict={() => setConflictOpen(true)}
             onRetry={(path) => void openMarkdown(path)}
             onRuntimeStateChange={setEditorRuntime}
@@ -1549,9 +1569,11 @@ export function WorkspaceWorkbench({
 }
 
 function DocumentView({
+  activeTab,
   assetGateway,
   editorHandleRef,
   onMetricsChange,
+  onAdapterLifecycle,
   onResolveConflict,
   state,
   onRetry,
@@ -1560,9 +1582,13 @@ function DocumentView({
   onSaveCopy,
   onSessionChange,
 }: {
+  activeTab: WorkspaceTabManagerSnapshot["activeTab"];
   assetGateway: WorkspaceWorkbenchGateway["assetGateway"];
   editorHandleRef: RefObject<DocumentEditorShellHandle | null>;
   onMetricsChange(metrics: DocumentEditorMetrics): void;
+  onAdapterLifecycle: NonNullable<
+    ComponentProps<typeof DocumentEditorShell>["onAdapterLifecycle"]
+  >;
   onResolveConflict(): void;
   state: DocumentSessionState;
   onRetry(path: WorkspaceRelativePath): void;
@@ -1588,6 +1614,12 @@ function DocumentView({
   return (
     <DocumentEditorShell
       assetGateway={assetGateway}
+      key={
+        activeTab
+          ? `${activeTab.tabId}:${activeTab.incarnation}`
+          : "no-active-tab"
+      }
+      onAdapterLifecycle={onAdapterLifecycle}
       onMetricsChange={onMetricsChange}
       onResolveConflict={onResolveConflict}
       onRuntimeStateChange={onRuntimeStateChange}
@@ -1634,6 +1666,30 @@ function recoveryUnavailableError(
       : state.reason === "unsupported_encoding"
         ? "unsupported_text_encoding"
         : "editor_save_unavailable",
+  );
+}
+
+function tabSessionGateway(
+  gateway: WorkspaceWorkbenchGateway,
+): WorkspaceTabSessionGateway {
+  return {
+    resolvePath: gateway.resolveTabPath,
+    read: gateway.read,
+    saveGateway: gateway.saveGateway,
+    recoveryGateway: gateway.recoveryGateway,
+    parser: remarkMarkdownCompatibilityParser,
+  };
+}
+
+function shouldProtectBeforeRecovery(
+  session: ReadyDocumentSession,
+  recoveryMarkdown: string,
+): boolean {
+  return (
+    session.markdown !== recoveryMarkdown &&
+    session.saveState.kind !== "clean" &&
+    session.saveState.kind !== "saved" &&
+    session.saveState.kind !== "readonly"
   );
 }
 

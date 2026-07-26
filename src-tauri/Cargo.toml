@@ -20,6 +20,7 @@ default = ["desktop-runtime"]
 desktop-runtime = ["tauri/wry"]
 e2e = [
     "desktop-runtime",
+    "dep:sysinfo",
     "dep:tauri-plugin-wdio",
     "dep:tauri-plugin-wdio-webdriver",
 ]
@@ -33,6 +34,7 @@ notify = "=8.2.0"
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.150"
 sha2 = "=0.10.9"
+sysinfo = { version = "=0.36.1", optional = true }
 tauri = { version = "=2.11.5", default-features = false, features = [] }
 tauri-plugin-dialog = "=2.7.1"
 tauri-plugin-opener = "=2.5.4"

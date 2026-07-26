@@ -115,6 +115,8 @@ pub fn run() {
             commands::workspace::select_markdown_file,
             #[cfg(feature = "e2e")]
             commands::workspace::prepare_e2e_workspace,
+            #[cfg(feature = "e2e")]
+            commands::workspace::e2e_process_rss_bytes,
             commands::workspace::authorize_workspace_selection,
             commands::workspace::cancel_workspace_selection,
             commands::workspace::validate_recent_workspace,

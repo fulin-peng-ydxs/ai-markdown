@@ -10,6 +10,7 @@ import {
 
 import type {
   EditorAdapterChange,
+  EditorAdapterLifecycleEvent,
   EditorAdapterDocument,
   EditorSelection,
   EditorSurfaceHandle,
@@ -44,6 +45,7 @@ export interface VisualMarkdownEditorProps {
   }): void;
   onPerformance?(sample: VisualEditorPerformanceSample): void;
   onHistoryCommand?(direction: "undo" | "redo"): boolean;
+  onAdapterLifecycle?(event: EditorAdapterLifecycleEvent): void;
   onSelectionChange?(selection: EditorSelection): void;
   onRequestImage?(
     selection: EditorSelection,
@@ -65,6 +67,7 @@ export const VisualMarkdownEditor = forwardRef<
     document,
     readOnly = false,
     onChange,
+    onAdapterLifecycle,
     onHistoryCommand,
     onUnavailable,
     onPerformance,
@@ -81,6 +84,7 @@ export const VisualMarkdownEditor = forwardRef<
   const readyRef = useRef<Promise<void> | null>(null);
   const loadedDocumentRef = useRef<EditorAdapterDocument | null>(null);
   const onChangeRef = useRef(onChange);
+  const onAdapterLifecycleRef = useRef(onAdapterLifecycle);
   const onHistoryCommandRef = useRef(onHistoryCommand);
   const onPerformanceRef = useRef(onPerformance);
   const onRequestImageRef = useRef(onRequestImage);
@@ -98,6 +102,7 @@ export const VisualMarkdownEditor = forwardRef<
   const eligibilityState = eligibility.eligible ? "eligible" : eligibility.reason;
 
   onChangeRef.current = onChange;
+  onAdapterLifecycleRef.current = onAdapterLifecycle;
   onHistoryCommandRef.current = onHistoryCommand;
   onPerformanceRef.current = onPerformance;
   onRequestImageRef.current = onRequestImage;
@@ -161,6 +166,10 @@ export const VisualMarkdownEditor = forwardRef<
       onResolveImage: (source) =>
         onResolveImageRef.current?.(source) ?? Promise.resolve(null),
     });
+    onAdapterLifecycleRef.current?.({
+      mode: "visual",
+      phase: "mounted",
+    });
     adapterRef.current = adapter;
     loadedDocumentRef.current = document;
     const unsubscribe = adapter.onChange((change) => onChangeRef.current(change));
@@ -181,6 +190,10 @@ export const VisualMarkdownEditor = forwardRef<
       active = false;
       unsubscribe();
       adapter.destroy();
+      onAdapterLifecycleRef.current?.({
+        mode: "visual",
+        phase: "unmounted",
+      });
       root.replaceChildren();
       adapterRef.current = null;
       readyRef.current = null;

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   FsEntry,
   MarkdownReadResult,
+  WorkspaceRelativePath,
   WindowSettlementIntent,
   WorkspaceDescriptor,
   WorkspaceScanBatch,
@@ -55,6 +56,12 @@ function gateway(overrides: Partial<WorkspaceWorkbenchGateway> = {}): WorkspaceW
     cancelled: false,
   };
   return {
+    resolveTabPath: vi.fn().mockImplementation(
+      async (_workspaceId, relativePath: string) => ({
+        relativePath,
+        identity: `native:${relativePath}`,
+      }),
+    ),
     scan: vi.fn().mockImplementation(
       (_workspaceId, directory: string | null) =>
         Promise.resolve({
@@ -495,6 +502,9 @@ describe("WorkspaceWorkbench", () => {
     await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
     await user.click(await screen.findByRole("treeitem", { name: /second\.md/ }));
     expect(await screen.findByText(/第二份文档/)).toBeTruthy();
+    await waitFor(() =>
+      expect(api.setTitle).toHaveBeenLastCalledWith("second.md"),
+    );
 
     resolveFirst({
       relativePath: "note.md",
@@ -511,7 +521,64 @@ describe("WorkspaceWorkbench", () => {
     await Promise.resolve();
 
     expect(screen.getByText(/第二份文档/)).toBeTruthy();
+    expect(api.setTitle).toHaveBeenLastCalledWith("second.md");
     expect(screen.queryByText(/过期文档/)).toBeNull();
+  });
+
+  it("keeps independent tab sessions while the file tree switches the single active editor", async () => {
+    const read = vi.fn().mockImplementation(
+      async (_workspaceId, path: WorkspaceRelativePath) => ({
+        relativePath: path,
+        status: "ready" as const,
+        content: path === "note.md" ? "# First" : "# Second",
+        revision: {
+          modifiedAt: 1,
+          size: 8,
+          contentHash: `hash:${path}`,
+          encoding: "utf8" as const,
+          lineEnding: "lf" as const,
+        },
+      }),
+    );
+    const api = gateway({
+      pollScan: vi.fn().mockResolvedValue({
+        scanId: "scan-1",
+        processed: 2,
+        entries: [note, secondNote],
+        issues: [],
+        complete: true,
+        cancelled: false,
+      }),
+      read,
+    });
+    const user = userEvent.setup();
+    const rendered = render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByText("First");
+    await user.click(screen.getByRole("button", { name: "源码" }));
+    await waitFor(() =>
+      expect(rendered.container.querySelectorAll(".cm-editor")).toHaveLength(1),
+    );
+
+    await user.click(screen.getByRole("treeitem", { name: /second\.md/ }));
+    await screen.findByText("Second");
+    expect(
+      rendered.container.querySelectorAll(".cm-editor, .milkdown"),
+    ).toHaveLength(1);
+
+    await user.click(screen.getByRole("treeitem", { name: /note\.md/ }));
+    await waitFor(() =>
+      expect(rendered.container.querySelectorAll(".cm-editor")).toHaveLength(1),
+    );
+    expect(await screen.findByText("First")).toBeTruthy();
+    expect(read).toHaveBeenCalledTimes(2);
   });
 
   it("opens a dense Markdown document directly in source mode without stale visual content", async () => {

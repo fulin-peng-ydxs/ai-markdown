@@ -395,6 +395,21 @@ pub fn prepare_e2e_workspace(
     access.prepare_folder(Some(root))
 }
 
+/// Returns the current desktop process resident set only in the isolated E2E flavor.
+///
+/// The runtime probe is intentionally unavailable to production WebViews; it exists so
+/// the real Tauri/WebKit tab-switch test can enforce a bounded RSS delta.
+#[cfg(feature = "e2e")]
+#[tauri::command]
+pub fn e2e_process_rss_bytes() -> Result<u64, String> {
+    let system = sysinfo::System::new_all();
+    let pid = sysinfo::get_current_pid().map_err(|error| error.to_string())?;
+    system
+        .process(pid)
+        .map(|process| process.memory())
+        .ok_or_else(|| "current process is unavailable".to_string())
+}
+
 #[tauri::command]
 pub fn authorize_workspace_selection(
     selection_id: String,

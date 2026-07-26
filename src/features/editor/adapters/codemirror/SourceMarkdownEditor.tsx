@@ -7,6 +7,7 @@ import {
 
 import type {
   EditorAdapterChange,
+  EditorAdapterLifecycleEvent,
   EditorAdapterDocument,
   EditorSelection,
   EditorSurfaceHandle,
@@ -24,6 +25,7 @@ export interface SourceMarkdownEditorProps {
   readOnly?: boolean;
   onChange(change: EditorAdapterChange): void;
   onHistoryCommand?(direction: "undo" | "redo"): boolean;
+  onAdapterLifecycle?(event: EditorAdapterLifecycleEvent): void;
   onPerformance?(sample: SourceEditorPerformanceSample): void;
   onSelectionChange?(selection: EditorSelection): void;
   onUnavailable?(reason: { code: "adapter_failed"; message: string }): void;
@@ -37,6 +39,7 @@ export const SourceMarkdownEditor = forwardRef<
     document,
     readOnly = false,
     onChange,
+    onAdapterLifecycle,
     onHistoryCommand,
     onPerformance,
     onSelectionChange,
@@ -48,12 +51,14 @@ export const SourceMarkdownEditor = forwardRef<
   const adapterRef = useRef<CodeMirrorSourceAdapter | null>(null);
   const loadedDocumentRef = useRef<EditorAdapterDocument | null>(null);
   const onChangeRef = useRef(onChange);
+  const onAdapterLifecycleRef = useRef(onAdapterLifecycle);
   const onHistoryCommandRef = useRef(onHistoryCommand);
   const onPerformanceRef = useRef(onPerformance);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const onUnavailableRef = useRef(onUnavailable);
 
   onChangeRef.current = onChange;
+  onAdapterLifecycleRef.current = onAdapterLifecycle;
   onHistoryCommandRef.current = onHistoryCommand;
   onPerformanceRef.current = onPerformance;
   onSelectionChangeRef.current = onSelectionChange;
@@ -98,6 +103,10 @@ export const SourceMarkdownEditor = forwardRef<
         onHistoryCommandRef.current?.(direction) ?? false,
       onPerformance: (sample) => onPerformanceRef.current?.(sample),
     });
+    onAdapterLifecycleRef.current?.({
+      mode: "source",
+      phase: "mounted",
+    });
     adapterRef.current = adapter;
     loadedDocumentRef.current = document;
     const unsubscribe = adapter.onChange((change) => onChangeRef.current(change));
@@ -114,6 +123,10 @@ export const SourceMarkdownEditor = forwardRef<
     return () => {
       unsubscribe();
       adapter.destroy();
+      onAdapterLifecycleRef.current?.({
+        mode: "source",
+        phase: "unmounted",
+      });
       adapterRef.current = null;
       loadedDocumentRef.current = null;
       root.replaceChildren();

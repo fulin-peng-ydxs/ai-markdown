@@ -23,6 +23,7 @@ import {
 } from "./documentSession";
 import type {
   DocumentAnchor,
+  EditorAdapterLifecycleEvent,
   EditorAdapterChange,
   EditorCommand,
   EditorMode,
@@ -69,6 +70,7 @@ export interface DocumentEditorMetrics {
 }
 
 export interface DocumentEditorShellHandle {
+  commitProjection(): ReadyDocumentSession;
   execute(command: EditorCommand): void;
   focus(): void;
   switchMode(mode: EditorMode): void;
@@ -83,6 +85,7 @@ export interface DocumentEditorShellProps {
   session: ReadyDocumentSession;
   parser?: MarkdownCompatibilityParser;
   onMetricsChange?(metrics: DocumentEditorMetrics): void;
+  onAdapterLifecycle?(event: EditorAdapterLifecycleEvent): void;
   onRuntimeStateChange?(state: DocumentEditorRuntimeState): void;
   onResolveConflict?(): void;
   onSave?(): void;
@@ -99,6 +102,7 @@ export const DocumentEditorShell = forwardRef<
     session,
     parser = remarkMarkdownCompatibilityParser,
     onMetricsChange,
+    onAdapterLifecycle,
     onRuntimeStateChange,
     onResolveConflict,
     onSave,
@@ -324,13 +328,16 @@ export const DocumentEditorShell = forwardRef<
   useImperativeHandle(
     ref,
     () => ({
+      commitProjection: () =>
+        commitProjection(sessionRef.current, sessionRef.current.mode) ??
+        sessionRef.current,
       execute: executeCommand,
       focus: () => editorRef.current?.focus(),
       switchMode: (mode) => {
         void switchMode(mode);
       },
     }),
-    [executeCommand, switchMode],
+    [commitProjection, executeCommand, switchMode],
   );
 
   const insertPreparedAsset = useCallback(
@@ -665,6 +672,7 @@ export const DocumentEditorShell = forwardRef<
           {session.mode === "visual" ? (
             <LazyVisualMarkdownEditor
               document={editorDocument}
+              onAdapterLifecycle={onAdapterLifecycle}
               onChange={(change) => applyAdapterChange("visual", change)}
               onHistoryCommand={applyHistory}
               onSelectionChange={handleSelectionChange}
@@ -679,6 +687,7 @@ export const DocumentEditorShell = forwardRef<
           ) : (
             <LazySourceMarkdownEditor
               document={editorDocument}
+              onAdapterLifecycle={onAdapterLifecycle}
               onChange={(change) => applyAdapterChange("source", change)}
               onHistoryCommand={applyHistory}
               onSelectionChange={handleSelectionChange}

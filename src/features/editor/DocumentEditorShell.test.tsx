@@ -16,6 +16,45 @@ import type { EditorAssetGateway } from "./editorGateway";
 const compatible = { mode: "visual", reasons: [] } as const;
 
 describe("DocumentEditorShell", () => {
+  it("reports real adapter factory mounts with at most one live projection", async () => {
+    const active = new Set<string>();
+    let peak = 0;
+    const lifecycle = vi.fn((event: { mode: "visual" | "source"; phase: "mounted" | "unmounted" }) => {
+      if (event.phase === "mounted") active.add(event.mode);
+      else active.delete(event.mode);
+      peak = Math.max(peak, active.size);
+    });
+    const user = userEvent.setup();
+    const rendered = render(
+      <Harness
+        initial={readySession("# Adapter lifecycle")}
+        onAdapterLifecycle={lifecycle}
+      />,
+    );
+    await waitFor(() =>
+      expect(rendered.container.querySelector(".ProseMirror")).not.toBeNull(),
+    );
+    expect(active.size).toBe(1);
+
+    await user.click(screen.getByRole("button", { name: "源码" }));
+    await waitFor(() =>
+      expect(rendered.container.querySelector(".cm-editor")).not.toBeNull(),
+    );
+    expect(active).toEqual(new Set(["source"]));
+    expect(peak).toBe(1);
+
+    rendered.unmount();
+    expect(active.size).toBe(0);
+    expect(lifecycle).toHaveBeenCalledWith({
+      mode: "visual",
+      phase: "mounted",
+    });
+    expect(lifecycle).toHaveBeenCalledWith({
+      mode: "source",
+      phase: "mounted",
+    });
+  });
+
   it("switches visual to source and back through one controlled session", async () => {
     const user = userEvent.setup();
     const rendered = render(<Harness initial={readySession("# One\n\nBody")} />);
@@ -357,16 +396,21 @@ describe("DocumentEditorShell", () => {
 function Harness({
   assetGateway,
   initial,
+  onAdapterLifecycle,
   parser,
 }: {
   assetGateway?: EditorAssetGateway;
   initial: ReadyDocumentSession;
+  onAdapterLifecycle?: React.ComponentProps<
+    typeof DocumentEditorShell
+  >["onAdapterLifecycle"];
   parser?: React.ComponentProps<typeof DocumentEditorShell>["parser"];
 }) {
   const [session, setSession] = useState(initial);
   return (
     <DocumentEditorShell
       assetGateway={assetGateway}
+      onAdapterLifecycle={onAdapterLifecycle}
       onSessionChange={setSession}
       parser={parser}
       session={session}

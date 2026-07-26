@@ -14,13 +14,13 @@
 - Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器，核心体验是目录工作区、多文档页签、所见即所得与源码无损切换、长文阅读和可编辑颜色预设。
 - T1 已建立并验证技术基线：Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以当前清单和锁文件为准。
 - Markdown 内容事实源始终是用户授权目录中的真实 `.md` 文件；首版不建立云端账号、在线协作、插件市场或私有内容数据库。
-- 第一阶段 T1～T17 已建立并验证系统选择器、最近记录、根目录决策、渐进文件树、文件 CRUD/删除/定位、窄窗目录抽屉、多窗口协调和隔离 P1/P2 桌面测试等底座。第二阶段 T18～T34 又建立单一 `DocumentSession`、两种编辑 adapter、自动/手动保存与窗口结算、恢复/冲突/另存、受控图片链路、目录移动风险提示、原生编辑菜单、固定主操作工具栏和单一保存/路径状态栏。第三阶段分支 `codex/plainroot-stage-3` 的 T35～T36 已建立纯页签集合模型、公共状态投影、轻量性能门禁、内容无关窗口页签会话仓储、真实根会话引用和 Rust 平台路径身份契约；P1 尚未消费多页签，T37 及后续任务仍未实施。当前计划见 `agent-works/markdown-editor-desktop/stage-3-tab-window-lifecycle/plan.md`。
-- 第二阶段基线提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 的非桌面门禁和 9/9 隔离桌面 E2E 已在 macOS/Windows runner 通过；第三阶段 T35～T36 当前仅取得 macOS 本地非桌面证据，尚未推送或取得远端 CI。系统 IME、峰值内存、原生系统输入以及 Windows 选择器、回收站、Explorer、菜单和辅助技术仍无完整人工证据；当前完成状态不得表述为多页签、大纲、工作区搜索、分页阅读、主题工作室或完整产品完成。
+- 第一阶段 T1～T17 已建立并验证系统选择器、最近记录、根目录决策、渐进文件树、文件 CRUD/删除/定位、窄窗目录抽屉、多窗口协调和隔离 P1/P2 桌面测试等底座。第二阶段 T18～T34 又建立单一 `DocumentSession`、两种编辑 adapter、自动/手动保存与窗口结算、恢复/冲突/另存、受控图片链路、目录移动风险提示、原生编辑菜单、固定主操作工具栏和单一保存/路径状态栏。第三阶段分支 `codex/plainroot-stage-3` 的 T35～T37 已建立纯页签集合模型、公共状态投影、内容无关窗口页签会话仓储、真实根会话引用、Rust 平台路径身份，以及 P1 每页签独立 session/history/save controller 与活动 editor 单挂载；T38 及后续任务仍未实施。当前计划见 `agent-works/markdown-editor-desktop/stage-3-tab-window-lifecycle/plan.md`。
+- 第二阶段基线提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 的非桌面门禁和 9/9 隔离桌面 E2E 已在 macOS/Windows runner 通过；第三阶段 T35～T37 当前仅取得 macOS 本地证据，尚未推送或取得远端 CI。系统 IME、JS heap、长时峰值内存、原生系统输入以及 Windows 选择器、回收站、Explorer、菜单和辅助技术仍无完整人工证据；当前完成状态不得表述为可见多页签、大纲、工作区搜索、分页阅读、主题工作室或完整产品完成。
 
 ## 当前与目标代码边界
 
 - `agent-works/markdown-editor-desktop/`：本产品的需求、计划、原型和后续开发留痕；同一产品能力继续复用该目录或其语义明确的阶段子目录。
-- `src/`、`src-tauri/`：已建立 P1/P2、共享状态/弹层/焦点组件、工作区树与路径工具、单文档 `DocumentSession`、两种编辑 adapter、保存控制器、恢复/冲突/另存组件、图片资源链、目录移动风险检查、固定主操作工具栏、单一保存/路径状态栏和每窗口原生编辑菜单状态。`src/features/tabs/` 已提供不含正文/history 的轻量页签描述、不可复用 incarnation、纯 reducer、活动 runtime 投影和轻量模型门禁；`src-tauri/src/window_session.rs` 与 `commands/window_session.rs` 已提供内容无关、版本化、CAS/原子回滚的页签会话仓储和受窗口绑定保护的 Rust 路径身份 IPC。P1 尚无页签 runtime 或页面消费者；真实 adapter 单挂载与 heap/RSS 门禁由 T37 承接，当前不得宣称多页签已可用。
+- `src/`、`src-tauri/`：已建立 P1/P2、共享状态/弹层/焦点组件、工作区树与路径工具、`DocumentSession`、两种编辑 adapter、保存控制器、恢复/冲突/另存组件、图片资源链、目录移动风险检查、固定主操作工具栏、单一保存/路径状态栏和每窗口原生编辑菜单状态。`src/features/tabs/` 已提供不含正文/history 的页签描述、不可复用 incarnation、纯 reducer，以及由 P1 文件树消费的 `WorkspaceTabManager`；每个已加载 runtime 独立持有 session/history/save controller，只有活动 editor 挂载。`src-tauri/src/window_session.rs` 与 `commands/window_session.rs` 已提供内容无关、版本化、CAS/原子回滚的页签会话仓储和受窗口绑定保护的 Rust 路径身份 IPC。可见页签 UI 与持久恢复尚未接线，当前不得宣称多页签产品能力已完成。
 - `tests/`：已建立脱敏工作区 fixture、Node 临时目录工厂和隔离的 P1/P2 Tauri E2E；桌面套件在每次运行时复制独立临时工作区，业务流程不靠重试掩盖确定性失败。`.github/workflows/ci.yml` 已在提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 上跑通 macOS/Windows 的 9 条桌面套件、非桌面门禁、未签名生产构建和 artifact 上传。自动化证据不替代 Windows 原生系统交互的人工验收。
 - 前端只负责视图、用户意图和可观察状态；不得直接拼接任意绝对路径执行磁盘写操作。
 - Rust 命令层集中负责授权根、路径规范化、越界检查、文件扫描与 CRUD、安全写入、回收站和窗口协调。
@@ -67,16 +67,16 @@
 
 ## 命令与验证状态
 
-- 2026-07-25 已在 macOS arm64 实际验证 T36 本地基线：200 个 Rust 测试通过（另 1 项手动性能探针忽略）、200 个 Vitest、30 个 Node 独立回归、前端生产构建、Rust fmt/全 feature Clippy 和许可证 727/508/0。页签专项 24/24 通过；窗口页签仓储覆盖 CAS、双文件原子故障回滚与崩溃前滚、损坏/未知版本、manifest 重建、容量、并发单提交、可重试元数据移除、跨工作区授权和解析后路径身份隔离。T35 的 100 个轻量页签 benchmark 仍只作为本机报告，不是 adapter/heap 门禁。T36 没有可见页面消费者，因此未重跑桌面 E2E，远端 9/9 双平台证据仍只覆盖第二阶段代码。
-- `pnpm test:e2e` 每次使用独立临时状态目录与临时复制工作区，真实 macOS Tauri/WebKit 9/9 通过：P2 IPC、1100/740 px 启动页布局与入口焦点、P1 工作区打开及 1100/1050/820/740 px 编辑 chrome、排版/源码编辑、WebView 文件输入到 Rust 图片上传、保存重开、外部修改内容安全、恢复仓储、显式恢复和含图片目录移动前的风险确认/取消。默认生产前端产物和 release 二进制确认不含 WDIO、fixture 或 E2E 命令。T17 的生产 `.app` 原生多窗口、Finder、系统废纸篓、监听和第二实例人工证据仍有效；这些 macOS 证据不替代 Windows 原生人工验收。
+- 2026-07-26 已在 macOS arm64 实际验证 T37 本地基线：200 个 Rust 测试通过（另 1 项手动性能探针忽略）、209 个 Vitest、30 个 Node 独立回归、前端生产构建、Rust fmt/全 feature Clippy、锁定 e2e check 和许可证 727/511/0。页签 manager 专项覆盖独立 session/history/mode、Rust identity 去重、慢读取隔离、inactive 保存/恢复、adapter 投影提交与全 controller 结算；T35 的轻量 benchmark 仍只作为本机报告。
+- `pnpm test:e2e` 每次使用独立临时状态目录与临时复制工作区，真实 macOS Tauri/WebKit 10/10 通过：P2 IPC、1100/740 px 启动页布局与入口焦点、P1 工作区打开及 1100/1050/820/740 px 编辑 chrome、三文档 runtime 的单 adapter/RSS 门禁、排版/源码编辑、WebView 文件输入到 Rust 图片上传、保存重开、外部修改内容安全、恢复仓储、显式恢复和含图片目录移动前的风险确认/取消。T37 RSS 样本由约 77.8 MiB 降至 75.7 MiB，增量 -2 MiB；WebKit 未暴露 JS heap，不能外推为 heap 证据。默认生产前端产物和 release 二进制不注册 e2e RSS 命令。T17 的生产 `.app` 原生多窗口、Finder、系统废纸篓、监听和第二实例人工证据仍有效；这些 macOS 证据不替代 Windows 原生人工验收。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。T16 已在 GitHub `windows-latest` 上验证锁定的 Node/Rust 工具链、Windows 编译、测试、WebView2 E2E 和未签名生产构建；原生系统交互仍保留人工未验证状态。
-- 当前自动化测试在既有底座、编辑器、恢复/冲突/资源、菜单、页签模型与窗口页签仓储链路上共 200 个 Rust 测试通过（另 1 项手动性能探针忽略）、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、200 个 React UI/状态/编辑器/页签测试、1 个 fixture 测试、4 个许可证策略测试和 9 个桌面 E2E。`pnpm test` 统一执行 Node、Vitest 与无桌面 feature 的 Rust 服务门禁；`test:tabs` 是可失败页签模型门禁，`test:tabs:performance` 仅输出本机 benchmark。GitHub Actions run `30082725332` 已在 macOS/Windows 完整通过第二阶段的 9 条桌面门禁、生产构建和 artifact 上传，尚未覆盖 T35～T36 本地提交。许可证扫描为 727 个 Node 包、508 个 Rust 包、0 个阻断项。Windows 原生系统 UI 仍未人工验证。
+- 当前自动化测试在既有底座、编辑器、恢复/冲突/资源、菜单、页签模型/runtime 与窗口页签仓储链路上共 200 个 Rust 测试通过（另 1 项手动性能探针忽略）、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、209 个 React UI/状态/编辑器/页签测试、1 个 fixture 测试、4 个许可证策略测试和 10 个本地 macOS 桌面 E2E。`pnpm test` 统一执行 Node、Vitest 与无桌面 feature 的 Rust 服务门禁；`test:tabs` 是可失败页签模型/runtime 门禁，`test:tabs:performance` 仅输出本机 benchmark。GitHub Actions run `30082725332` 已在 macOS/Windows 完整通过第二阶段的 9 条桌面门禁、生产构建和 artifact 上传，尚未覆盖 T35～T37 本地提交。许可证扫描为 727 个 Node 包、511 个 Rust 包、0 个阻断项。Windows 原生系统 UI 仍未人工验证。
 
 ## 文档、协作与 Git
 
 - 除命令、代码、日志和原文外，面向用户使用简体中文。
 - 需求、计划、开发留痕、业务核查、测试证据和 SQL（若未来确有）放入 `agent-works/{feature-slug}/`；同一功能复用同一语义目录，不在根目录堆零散 Markdown。
 - 已确认任务在既有功能目录内的常规开发留痕，随代码、计划状态和验证证据直接同步，不再单独请求确认；只有功能目录、范围拆分或归档边界存在真实歧义时才确认。
-- 修改代码或文档前检查最近一次远端同步时间；超过 2 小时先同步并解决冲突。最近一次远端同步：2026-07-25 17:22 CST（本地 `codex/plainroot-stage-3` 基于最新 `origin/codex/plainroot-stage-2`，当前第三阶段提交尚未推送或取得远端 CI 证据）。
+- 修改代码或文档前检查最近一次远端同步时间；超过 2 小时先同步并解决冲突。最近一次远端同步：2026-07-26 11:17 CST（本地 `codex/plainroot-stage-3` 已核对最新 `origin/codex/plainroot-stage-2`，当前第三阶段提交尚未推送或取得远端 CI 证据）。
 - 工作区可能包含用户未提交改动；先读 `git status`，保留无关改动，不覆盖、不清理、不顺手格式化。
 - 未经用户要求不创建提交或推送。需要提交时按用户确认范围处理，提交信息使用中文语义化描述。

@@ -233,6 +233,14 @@ async function openFixtureDocument() {
   return editor;
 }
 
+async function runtimeMemorySnapshot() {
+  const rssBytes = await invoke("e2e_process_rss_bytes");
+  const heapBytes = await browser.execute(
+    () => performance.memory?.usedJSHeapSize ?? null,
+  );
+  return { rssBytes, heapBytes };
+}
+
 describe("Plainroot desktop shell", () => {
   before(async () => {
     fixture = await createWorkspaceFixture();
@@ -330,6 +338,71 @@ describe("Plainroot desktop shell", () => {
       assert.equal(chrome.statusPathTitle, "note.md");
     }
     await resizeApp(1100, 720);
+  });
+
+  it("keeps one real editor adapter while three document sessions switch within a bounded runtime", async () => {
+    const extraPaths = ["tab-two.md", "tab-three.md"];
+    const largeBody = `${"# Runtime tab\n\n"}${"Plainroot tab runtime probe.\n\n".repeat(700)}`;
+    for (const relativePath of extraPaths) {
+      await writeFile(join(fixture.root, relativePath), largeBody, "utf8");
+    }
+    await $('[title="刷新文件树"]').click();
+    for (const relativePath of extraPaths) {
+      const entry = await $(
+        `[role="treeitem"][data-tree-path="${relativePath}"]`,
+      );
+      await entry.waitForDisplayed({ timeout: 10_000 });
+      await entry.click();
+      await $('[aria-label="Markdown 排版编辑区"]').waitForDisplayed();
+    }
+    await $('[role="treeitem"][data-tree-path="note.md"]').click();
+    await $('[aria-label="Markdown 排版编辑区"]').waitForDisplayed();
+    const baseline = await runtimeMemorySnapshot();
+
+    const paths = ["note.md", ...extraPaths];
+    for (let round = 0; round < 12; round += 1) {
+      for (const relativePath of paths) {
+        await $(
+          `[role="treeitem"][data-tree-path="${relativePath}"]`,
+        ).click();
+        await browser.waitUntil(
+          async () =>
+            (await browser.execute(
+              () =>
+                document.querySelectorAll(
+                  ".ProseMirror, .cm-editor",
+                ).length,
+            )) === 1,
+          {
+            timeout: 10_000,
+            timeoutMsg: "tab switch mounted more than one editor adapter",
+          },
+        );
+      }
+    }
+
+    const after = await runtimeMemorySnapshot();
+    const rssDelta = after.rssBytes - baseline.rssBytes;
+    const heapDelta =
+      baseline.heapBytes !== null && after.heapBytes !== null
+        ? after.heapBytes - baseline.heapBytes
+        : null;
+    console.log(
+      "T37 tab runtime memory",
+      JSON.stringify({ baseline, after, rssDelta, heapDelta }),
+    );
+    assert.ok(
+      rssDelta <= 128 * 1024 * 1024,
+      `tab runtime RSS grew beyond 128 MiB: ${JSON.stringify({ baseline, after, rssDelta })}`,
+    );
+    if (heapDelta !== null) {
+      assert.ok(
+        heapDelta <= 64 * 1024 * 1024,
+        `tab runtime JS heap grew beyond 64 MiB: ${JSON.stringify({ baseline, after, heapDelta })}`,
+      );
+    }
+    await $('[role="treeitem"][data-tree-path="note.md"]').click();
+    await $('[aria-label="Markdown 排版编辑区"]').waitForDisplayed();
   });
 
   it("requires an explicit warning confirmation before moving a directory with images", async () => {

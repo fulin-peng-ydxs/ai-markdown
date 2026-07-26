@@ -8,6 +8,7 @@ import type {
   WorkspaceOpenDisposition,
   WorkspaceOpenOutcome,
   WorkspaceRelativePath,
+  WorkspaceTabPathContract,
   WorkspaceScanBatch,
   WorkspaceScanStart,
   WorkspaceSelectionOutcome,
@@ -49,6 +50,7 @@ import {
   updateEditorMenuState,
   type LauncherMenuAction,
 } from "../../services/desktop/workspace";
+import { resolveWorkspaceTabPath } from "../../services/desktop/windowSession";
 import type { EditorDocumentGateway } from "../editor/editorGateway";
 import {
   desktopAssetGateway,
@@ -60,6 +62,10 @@ import {
 } from "../editor/editorGateway";
 
 export interface WorkspaceWorkbenchGateway extends EditorDocumentGateway {
+  resolveTabPath(
+    workspaceId: WorkspaceId,
+    relativePath: WorkspaceRelativePath,
+  ): Promise<WorkspaceTabPathContract>;
   scan(workspaceId: WorkspaceId, directory: WorkspaceRelativePath | null): Promise<WorkspaceScanStart>;
   pollScan(scanId: string): Promise<WorkspaceScanBatch>;
   cancelScan(scanId: string): Promise<boolean>;
@@ -99,6 +105,7 @@ export interface WorkspaceWorkbenchGateway extends EditorDocumentGateway {
 }
 
 export const desktopWorkspaceWorkbenchGateway: WorkspaceWorkbenchGateway = {
+  resolveTabPath: resolveWorkspaceTabPath,
   scan: startWorkspaceScan,
   pollScan: pollWorkspaceScan,
   cancelScan: cancelWorkspaceScan,
