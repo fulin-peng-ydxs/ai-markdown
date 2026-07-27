@@ -82,12 +82,10 @@ async function sendNativeTabShortcut(direction) {
 
   if (process.platform === "win32") {
     const keys = direction === "next" ? "^{TAB}" : "^+{TAB}";
-    const menuItemTitle = direction === "next" ? "下一个页签" : "上一个页签";
     const script = `
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type @"
 using System;
-using System.Text;
 using System.Runtime.InteropServices;
 public static class PlainrootNativeInput {
   [DllImport("user32.dll")]
@@ -95,64 +93,10 @@ public static class PlainrootNativeInput {
 
   [DllImport("user32.dll")]
   public static extern IntPtr GetForegroundWindow();
-
-  [DllImport("user32.dll")]
-  public static extern IntPtr GetMenu(IntPtr hWnd);
-
-  [DllImport("user32.dll")]
-  public static extern int GetMenuItemCount(IntPtr hMenu);
-
-  [DllImport("user32.dll")]
-  public static extern IntPtr GetSubMenu(IntPtr hMenu, int nPos);
-
-  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-  public static extern int GetMenuString(
-    IntPtr hMenu,
-    uint uIDItem,
-    StringBuilder lpString,
-    int cchMax,
-    uint flags
-  );
-
-  [DllImport("user32.dll")]
-  public static extern uint GetMenuState(IntPtr hMenu, uint uId, uint flags);
 }
 "@
 
-function Test-PlainrootMenuItemEnabled {
-  param(
-    [IntPtr]$Menu,
-    [string]$ExpectedTitle
-  )
-  if ($Menu -eq [IntPtr]::Zero) { return $false }
-  $itemCount = [PlainrootNativeInput]::GetMenuItemCount($Menu)
-  for ($index = 0; $index -lt $itemCount; $index += 1) {
-    $caption = New-Object System.Text.StringBuilder 256
-    [void][PlainrootNativeInput]::GetMenuString(
-      $Menu,
-      [uint32]$index,
-      $caption,
-      $caption.Capacity,
-      0x400
-    )
-    if ($caption.ToString().Replace("&", "").StartsWith($ExpectedTitle)) {
-      $state = [PlainrootNativeInput]::GetMenuState(
-        $Menu,
-        [uint32]$index,
-        0x400
-      )
-      return $state -ne [uint32]::MaxValue -and ($state -band 0x3) -eq 0
-    }
-    $subMenu = [PlainrootNativeInput]::GetSubMenu($Menu, $index)
-    if (Test-PlainrootMenuItemEnabled $subMenu $ExpectedTitle) {
-      return $true
-    }
-  }
-  return $false
-}
-
 $expectedTitle = [IO.Path]::GetFileName($env:PLAINROOT_E2E_WORKSPACE_ROOT)
-$expectedMenuItem = "${menuItemTitle}"
 $process = $null
 $discoveryDeadline = [DateTime]::UtcNow.AddSeconds(5)
 do {
@@ -169,11 +113,7 @@ do {
   if ([PlainrootNativeInput]::GetForegroundWindow() -ne $process.MainWindowHandle) {
     [void][PlainrootNativeInput]::SetForegroundWindow($process.MainWindowHandle)
   }
-  $isForeground =
-    [PlainrootNativeInput]::GetForegroundWindow() -eq $process.MainWindowHandle
-  $nativeMenu = [PlainrootNativeInput]::GetMenu($process.MainWindowHandle)
-  $isMenuEnabled = Test-PlainrootMenuItemEnabled $nativeMenu $expectedMenuItem
-  if ($isForeground -and $isMenuEnabled) {
+  if ([PlainrootNativeInput]::GetForegroundWindow() -eq $process.MainWindowHandle) {
     $ready = $true
     break
   }
@@ -181,7 +121,7 @@ do {
 } while ([DateTime]::UtcNow -lt $deadline)
 
 if (-not $ready) {
-  throw "Plainroot shortcut window or menu item did not become ready"
+  throw "Plainroot shortcut window did not become foreground"
 }
 [System.Windows.Forms.SendKeys]::SendWait("${keys}")
 `;
@@ -196,6 +136,18 @@ if (-not $ready) {
   }
 
   throw new Error(`native tab shortcut is not supported on ${process.platform}`);
+}
+
+async function waitForNativeTabShortcutReadiness() {
+  await browser.waitUntil(
+    async () => invoke("e2e_tab_shortcuts_ready"),
+    {
+      timeout: 10_000,
+      interval: 100,
+      timeoutMsg:
+        "the native next/previous tab menu items did not become enabled",
+    },
+  );
 }
 
 describe("Plainroot native tab shortcuts", () => {
@@ -236,9 +188,9 @@ describe("Plainroot native tab shortcuts", () => {
       { timeout: 10_000 },
     );
 
-    // This is one focus-settlement boundary, not a retry. Each host OS key event
-    // below must succeed on its first attempt.
-    await browser.pause(1_000);
+    // Menu readiness and native foreground focus are observable preconditions.
+    // Each host OS key event below must still succeed on its first attempt.
+    await waitForNativeTabShortcutReadiness();
     await sendNativeTabShortcut("next");
     await browser.waitUntil(
       async () =>
@@ -251,7 +203,7 @@ describe("Plainroot native tab shortcuts", () => {
           "the platform-native next-tab accelerator did not activate the next tab",
       },
     );
-    await browser.pause(500);
+    await waitForNativeTabShortcutReadiness();
     await sendNativeTabShortcut("previous");
     await browser.waitUntil(
       async () =>

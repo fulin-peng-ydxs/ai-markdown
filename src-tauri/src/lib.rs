@@ -139,6 +139,8 @@ pub fn run() {
             window::set_workbench_window_title,
             menu::update_editor_menu_state,
             menu::reset_editor_menu_state,
+            #[cfg(feature = "e2e")]
+            menu::e2e_tab_shortcuts_ready,
             commands::files::start_workspace_scan,
             commands::files::poll_workspace_scan,
             commands::files::cancel_workspace_scan,

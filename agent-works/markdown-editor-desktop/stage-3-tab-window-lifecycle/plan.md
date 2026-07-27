@@ -6,7 +6,7 @@
 >
 > 当前阶段：阶段 3——多文档页签状态机、窗口会话恢复与全页签生命周期保护
 >
-> 计划状态：执行中（T35～T44 已完成；T45 本地实现与 macOS 验证已完成，远端迭代已修复 Windows CRLF 契约守卫并继续收口 Windows 专属 Clippy，双平台复验待补；T46 未实施）
+> 计划状态：执行中（T35～T44 已完成；T45 本地实现与 macOS 验证已完成，三轮远端依次暴露并修复 Windows CRLF 契约、平台字段 lint 与 Tauri 菜单前置探针问题，最新双平台复验待补；T46 未实施）
 >
 > 需求编号规则：完全沿用 `requirement.md` 的 R1～R34，不新增、重排或改变 R 编号含义。
 
@@ -573,7 +573,7 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 
 ### 6.11 任务 T45：真实桌面 E2E、双平台 CI 与页面验收
 
-- 状态：进行中（本地实现与 macOS 验证完成；第二次远端运行证明 CRLF 修复有效，同时发现并修正 Windows 专属死字段 lint，双平台 CI/artifact 待再次核验）。
+- 状态：进行中（本地实现与 macOS 验证完成；第三次远端运行证明 CRLF 与平台字段修复有效，并在真实桌面 E2E 暴露 HMENU 前置探针误判；当前已改用 E2E-only Tauri 菜单状态探针，双平台 CI/artifact 待再次核验）。
 - 依赖：T44。
 - 涉及文件/模块：`tests/e2e/`、fixtures、WDIO、`.github/workflows/ci.yml`、P1/P2、页面验收留痕。
 - 目标：用真实 Tauri IPC 在 macOS/Windows 验证页签、结算、窗口替换和恢复，而不是只依赖 jsdom/mock。
@@ -586,7 +586,7 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 - 实际落地情况：
   - `pnpm test:e2e` 现顺序启动四个相互隔离的桌面进程与状态目录：12 条 P1/P2 主链、1 条原生页签组合键、1 条重启前真实会话写入、1 条重启后恢复。重启编排在两个真实进程之间删除一个 fixture 文件，确认两个可读页签继续恢复、缺失页签进入可见 issue、活动项安全回退且非活动页签首次激活才读盘。
   - 主链新增真实窗口替换 intent：先制造本地 dirty 与磁盘外部变化，再通过 Rust `coordinate_workspace_open` 取得 `settlement_required`，确认安全替换弹层出现，并用真实 `resolve_window_settlement(allow=false)` 拒绝事务；原工作区绑定与内存内容保持不变。React 取消按钮接线仍由既有组件测试覆盖，本用例不把直接 IPC 拒绝冒充按钮点击证据。
-  - 两个平台的原生输入都先有界等待目标窗口可发现、目标进程成为前台且对应原生菜单项已启用，再只发送一次系统键盘事件，不做业务重试。macOS 通过 `osascript`/System Events 验证：`Cmd+Shift+]` 可触发但 `Cmd+Shift+[` 在最新 Tauri 二进制中不可触发，因此产品映射收敛为已实测双向有效的 `Cmd+Option+Right/Left`。Windows 分支通过进程窗口、Win32 前台窗口和原生菜单状态 API 建立同等前置门禁，继续使用 `Ctrl+Tab` / `Ctrl+Shift+Tab`，但仍等待 runner 实证。
+  - 两个平台的原生输入都先有界等待目标窗口可发现、目标进程成为前台且对应 Tauri 原生菜单项已启用，再只发送一次系统键盘事件，不做业务重试。macOS 通过 `osascript`/System Events 验证：`Cmd+Shift+]` 可触发但 `Cmd+Shift+[` 在最新 Tauri 二进制中不可触发，因此产品映射收敛为已实测双向有效的 `Cmd+Option+Right/Left`。第三次 Windows run 证明 Tauri 菜单不能假定为传统窗口 HMENU；当前 E2E flavor 通过只读 Rust 探针核对当前窗口 registry 和 Tauri `MenuItem::is_enabled`，Win32 仅负责窗口前台与一次 `Ctrl+Tab` / `Ctrl+Shift+Tab`，生产构建不注册该探针。
   - 页面矩阵在真实 P1/P2 中覆盖 1100/1050/820/760/740 px，不产生根级横向溢出；主命令、状态路径、页签条与其滚动归属保持可见。确定性流程不配置测试重试；每段失败立即停止后续阶段。
   - 本地 macOS 已在最新 E2E release 二进制上通过 15/15 桌面用例；CRLF 修复后的 `pnpm verify:non-desktop` 从头通过 30/30 Node、267/267 Vitest、206 项 no-default Rust 与 206 项 all-features Rust（均另 1 项手动探针忽略）、fmt、Clippy、typecheck、生产构建和许可证 727/511/0。完整证据与未验证项见 `t45-tab-desktop-e2e.md`。
   - 首次第三阶段远端 run `30272399213` 中 macOS 作业通过完整门禁、15 条桌面 E2E、生产构建与 artifact；Windows 在非桌面契约反向测试提前失败，根因为逐变体解析器只识别 LF、未兼容 checkout 的 CRLF。解析器现先归一行尾并新增 Windows 行尾回归，原字段错置 fail-loud 断言继续保留。修复提交尚待重新推送取得双平台结果，因此 T45 仍为进行中，不开始 T46。

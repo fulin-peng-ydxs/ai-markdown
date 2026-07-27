@@ -5,7 +5,7 @@
 - 对应任务：第三阶段 `T45`。
 - 对应需求：R1、R2、R3、R5、R6、R10、R11、R13、R14、R30、R31 的真实桌面验证子集。
 - 本次完成桌面测试编排、macOS 原生页签组合键、真实窗口替换拒绝和跨进程会话恢复；不进入 T46 阶段验收。
-- 最新实现已推送并触发首次第三阶段双平台运行；macOS 作业通过，Windows 在非桌面契约守卫阶段失败。失败已定位为契约测试解析器只识别 LF、未兼容 Windows checkout 的 CRLF，而不是产品链路通过。T45 状态保持“进行中”，修复提交必须重新取得双平台结果后才能完成。
+- 最新实现已推送并完成三轮第三阶段双平台运行。macOS 三轮均通过；Windows 依次真实暴露 CRLF 契约解析、Unix-only 字段 dead-code lint 和原生快捷键 E2E 前置探针错误。前两项已由后续 runner 证明修复有效，第三项已按根因修正并在本机完整 15/15 桌面链通过，但修正后的 Windows/远端结果尚未取得。T45 状态保持“进行中”。
 
 ## 2. 实际实现
 
@@ -40,7 +40,7 @@ P1 主链新增真实替换事务：
 原生快捷键用独立桌面进程和三个真实页签验证。测试先有界等待唯一 fixture 窗口进入系统可发现状态，再等待目标进程成为前台且对应原生菜单项已启用，最后执行系统级输入；每个方向只发送一次：
 
 - macOS：System Events `AXRaise` 后发送 `Cmd+Option+Right/Left`；
-- Windows：轮询 Win32 `GetForegroundWindow` 与原生菜单 `GetMenuState`，确认目标窗口前台且对应菜单项启用后发送 `Ctrl+Tab` / `Ctrl+Shift+Tab`。
+- Windows：E2E-only Rust 探针读取当前窗口的 `EditorMenuStateRegistry`，并通过 Tauri `MenuItem::is_enabled` 复核下一/上一页签菜单项真实启用；随后系统脚本轮询 Win32 `GetForegroundWindow`，确认目标窗口已成为前台后发送一次 `Ctrl+Tab` / `Ctrl+Shift+Tab`。生产构建不注册该只读探针。
 
 macOS 在最新重建的 Tauri E2E release 二进制上发现 `Cmd+Shift+]` 可触发，但 `Cmd+Shift+[` 不会到达菜单动作；因此没有保留不可用的对称外观，而是收敛为双向均实际通过的 `Cmd+Option+Right/Left`。Windows 映射保持平台常用组合，但尚未在 Windows runner 运行，不能记为通过。
 
@@ -75,7 +75,7 @@ React 没有新增全局 keydown；原生菜单仍通过唯一 `WORKBENCH_MENU_E
 - 旧 E2E 二进制曾造成快捷键结果失真；重新执行 `pnpm test:e2e:build` 后只采信最新产物；
 - 恢复用例错误地查询 `h3`，而公共 `AsyncStatePanel` 的标题契约是 `h2`；修正语义选择器后完整四段链从头通过。
 - 加入 760 px 档位后的首次完整复跑中，主链 12/12 通过，但原生下一页签未触发，整套真实返回非零；原因是固定 500 ms 延时不能证明目标进程和菜单已就绪。测试改为等待前台进程与菜单启用这两个可观察前置条件后仍只发送一次按键，随后四段链再次从头通过。
-- 同一前置条件也已应用到 Windows 分支：不再使用固定 500 ms 延时，而是通过 Win32 窗口与原生菜单状态等待就绪。该代码尚未在 Windows 执行，不能由 macOS 通过结果推断其可用。
+- 同一前置条件也已应用到 Windows 分支：不再使用固定 500 ms 延时。第三次远端运行证明 Tauri/Windows 菜单不应假设为传统窗口 HMENU，Win32 `GetMenu` 因此不能作为菜单就绪事实源；当前实现改由编译期隔离的 Rust 探针读取 Tauri 自身菜单项状态，Win32 只负责窗口前台与真实按键。该修正尚未取得 Windows runner 结果，不能由 macOS 通过结果推断其可用。
 - Windows 前置门禁整改后的首次 macOS 回归又真实暴露 System Events 单次枚举尚未发现新进程窗口的失败；窗口发现因此也改为有界等待。该等待只建立系统输入前置条件，不重复发送快捷键或重试业务断言；整改后完整四段链再次以 15/15 通过。
 
 WDIO Tauri service 在 macOS 会输出无法按动态文档标题切换原生窗口的告警，但 WebDriver 会话、断言与 spec 均完成；这些告警不被当成通过证据，也未通过关闭断言或业务重试掩盖。
@@ -116,10 +116,18 @@ GitHub Actions run `30272399213` 对提交 `ad04b5ffce04117add606795b38def5d8069
 
 整改不添加 lint 豁免，而是让 `root` 字段只在 Unix 目标存在；Windows 继续保留由 `root` 派生的 manifest/session 路径，不改变仓储格式或行为。该分支必须由下一次 Windows runner 的 Clippy、测试、E2E 与生产构建共同验证。
 
+第三次远端 run `30275676382` 对提交 `2c4fede` 给出新的有效证据：
+
+- macOS 作业继续通过完整门禁、15 条桌面 E2E、生产构建与 artifact；
+- Windows 已通过 TypeScript/前端门禁、Rust fmt/Clippy 和 Rust 测试，证明前两轮 CRLF 与平台字段整改均真实生效；
+- Windows 首次进入本阶段真实桌面 E2E，在原生页签快捷键用例发送按键前失败。日志显示 Win32 `GetMenu` 无法从 Tauri 窗口取得传统 HMENU，导致“菜单项未就绪”探针误判；当次没有发送 `Ctrl+Tab`，不能据此判断产品快捷键成功或失败。
+
+整改没有删除真实系统输入或放宽结果断言。E2E flavor 新增只读 `e2e_tab_shortcuts_ready`：同时检查聚焦窗口登记的页签状态与 Tauri 菜单项的实际 enabled 状态；Windows 系统脚本只建立前台窗口条件并发送一次按键。探针受 `e2e` feature 编译期隔离，默认生产 handler 不存在。修正后本机重新构建 E2E release 并完整通过 macOS 四段 15/15，其中原生下一/上一页签仍以真实系统事件首次触发成功；Windows 结果等待下一次远端运行。
+
 ## 4. 未验证项
 
-- 最新 Windows 专属字段修复尚未取得 GitHub Actions macOS/Windows 双绿与成对生产 artifact；run `30272399213` 和 `30274596446` 都是有效失败证据，但都不能作为 T45 通过证据。
-- Windows 第二次 run 已通过非桌面契约测试，但在 Clippy 阶段停止，因此完整 Rust 全门禁、WebView2 15 条桌面链、`Ctrl+Tab` / `Ctrl+Shift+Tab` 真实系统输入和生产构建仍未验证。
+- 最新 Windows 快捷键前置探针修复尚未取得 GitHub Actions macOS/Windows 双绿与成对生产 artifact；run `30272399213`、`30274596446`、`30275676382` 都是有效的递进失败证据，但都不能作为 T45 通过证据。
+- Windows 第三次 run 已通过非桌面契约、Clippy 与 Rust 测试并进入 WebView2 桌面链，但在发送原生按键前被错误的 HMENU 前置探针阻断；`Ctrl+Tab` / `Ctrl+Shift+Tab` 真实系统输入、完整 15 条桌面链和生产构建仍未取得通过证据。
 - Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍是人工项。
 - 真实多窗口整组退出、系统 IME、JS heap、长时峰值内存、休眠、网络卷和文件系统卸载仍无完整产品级证据。
 - macOS 本轮验证了替换 intent 的拒绝分支；多窗口整组退出与允许替换的完整系统级人工链仍留待 T46 汇总或后续平台验收。
@@ -136,4 +144,4 @@ GitHub Actions run `30272399213` 对提交 `ad04b5ffce04117add606795b38def5d8069
 
 ## 6. 当前结论
 
-T45 的本地实现、macOS 桌面证据和非桌面回归已闭合。两次第三阶段远端运行依次发现 Windows CRLF 契约解析和 Unix-only 字段在 Windows Clippy 下的真实缺口，均按根因收口且没有弱化门禁。完成标准仍要求最新修复提交在 macOS/Windows 远端双绿并可追溯 artifact。T45 继续保持“进行中”；T46 未开始。
+T45 的本地实现、macOS 桌面证据和非桌面回归已闭合。三次第三阶段远端运行依次发现 Windows CRLF 契约解析、Unix-only 字段 lint 和 Tauri 菜单被误当成传统 HMENU 的测试前置缺口；修复均针对事实源和跨平台边界，没有跳过真实输入、降低业务断言或加入重试。完成标准仍要求最新修复提交在 macOS/Windows 远端双绿并可追溯 artifact。T45 继续保持“进行中”；T46 未开始。

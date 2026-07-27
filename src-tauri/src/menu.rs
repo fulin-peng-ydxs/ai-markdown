@@ -417,6 +417,25 @@ pub fn reset_editor_menu_state<R: Runtime>(
     Ok(())
 }
 
+#[cfg(feature = "e2e")]
+#[tauri::command]
+pub fn e2e_tab_shortcuts_ready<R: Runtime>(
+    app: AppHandle<R>,
+    window: WebviewWindow<R>,
+    registry: State<'_, EditorMenuStateRegistry>,
+) -> Result<bool, DesktopError> {
+    let state = registry.state_for(window.label())?;
+    let policy = tab_menu_policy(state);
+    if !policy.next || !policy.previous {
+        return Ok(false);
+    }
+
+    let menu = app.menu().ok_or_else(menu_update_error)?;
+    let next = find_menu_item(&menu, NEXT_TAB_ID).ok_or_else(menu_update_error)?;
+    let previous = find_menu_item(&menu, PREVIOUS_TAB_ID).ok_or_else(menu_update_error)?;
+    Ok(menu_item_enabled(&next)? && menu_item_enabled(&previous)?)
+}
+
 pub fn apply_window_editor_menu_state<R: Runtime>(
     app: &AppHandle<R>,
     window_label: &str,
@@ -595,6 +614,18 @@ fn set_item_enabled<R: Runtime>(item: &MenuItemKind<R>, enabled: bool) -> Result
         MenuItemKind::Predefined(_) => return Err(menu_update_error()),
         MenuItemKind::Check(item) => item.set_enabled(enabled),
         MenuItemKind::Icon(item) => item.set_enabled(enabled),
+    };
+    result.map_err(|_| menu_update_error())
+}
+
+#[cfg(feature = "e2e")]
+fn menu_item_enabled<R: Runtime>(item: &MenuItemKind<R>) -> Result<bool, DesktopError> {
+    let result = match item {
+        MenuItemKind::MenuItem(item) => item.is_enabled(),
+        MenuItemKind::Submenu(item) => item.is_enabled(),
+        MenuItemKind::Predefined(_) => return Err(menu_update_error()),
+        MenuItemKind::Check(item) => item.is_enabled(),
+        MenuItemKind::Icon(item) => item.is_enabled(),
     };
     result.map_err(|_| menu_update_error())
 }
