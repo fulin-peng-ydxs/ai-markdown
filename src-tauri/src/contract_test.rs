@@ -75,9 +75,13 @@ pub fn assert_interface_matches(interface_name: &str, value: &impl Serialize) {
     );
 }
 
-fn typescript_tagged_variant_fields(type_name: &str) -> BTreeMap<String, BTreeSet<String>> {
+fn typescript_tagged_variant_fields_from(
+    contracts: &str,
+    type_name: &str,
+) -> BTreeMap<String, BTreeSet<String>> {
+    let normalized_contracts = contracts.replace("\r\n", "\n");
     let marker = format!("export type {type_name} =");
-    let body = TYPESCRIPT_CONTRACTS
+    let body = normalized_contracts
         .split_once(&marker)
         .unwrap_or_else(|| panic!("missing TypeScript type alias {type_name}"))
         .1
@@ -159,6 +163,10 @@ fn typescript_tagged_variant_fields(type_name: &str) -> BTreeMap<String, BTreeSe
         "TypeScript type alias {type_name} has no tagged variants"
     );
     variants
+}
+
+fn typescript_tagged_variant_fields(type_name: &str) -> BTreeMap<String, BTreeSet<String>> {
+    typescript_tagged_variant_fields_from(TYPESCRIPT_CONTRACTS, type_name)
 }
 
 pub fn assert_type_alias_matches_variants<T: Serialize>(type_name: &str, values: &[T]) {
@@ -248,5 +256,17 @@ fn tagged_variant_parity_rejects_a_field_on_the_wrong_variant() {
                 "to": 4
             }),
         ],
+    );
+}
+
+#[test]
+fn tagged_variant_parser_accepts_windows_line_endings() {
+    let windows_contracts = TYPESCRIPT_CONTRACTS
+        .replace("\r\n", "\n")
+        .replace('\n', "\r\n");
+
+    assert_eq!(
+        typescript_tagged_variant_fields_from(&windows_contracts, "WindowTabSelection"),
+        typescript_tagged_variant_fields("WindowTabSelection")
     );
 }

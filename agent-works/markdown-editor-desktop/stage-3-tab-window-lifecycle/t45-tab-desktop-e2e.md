@@ -5,7 +5,7 @@
 - 对应任务：第三阶段 `T45`。
 - 对应需求：R1、R2、R3、R5、R6、R10、R11、R13、R14、R30、R31 的真实桌面验证子集。
 - 本次完成桌面测试编排、macOS 原生页签组合键、真实窗口替换拒绝和跨进程会话恢复；不进入 T46 阶段验收。
-- 最新实现尚未推送，因此 Windows runner、远端双绿、run URL 和 artifact 摘要没有证据。T45 状态保持“进行中”，不得用 macOS 结果外推 Windows。
+- 最新实现已推送并触发首次第三阶段双平台运行；macOS 作业通过，Windows 在非桌面契约守卫阶段失败。失败已定位为契约测试解析器只识别 LF、未兼容 Windows checkout 的 CRLF，而不是产品链路通过。T45 状态保持“进行中”，修复提交必须重新取得双平台结果后才能完成。
 
 ## 2. 实际实现
 
@@ -86,8 +86,8 @@ WDIO Tauri service 在 macOS 会输出无法按动态文档标题切换原生窗
 
 - Node 独立回归：30/30；
 - Vitest：32 个文件、267/267；
-- Rust no-default-features：205 项通过，另 1 项手动性能探针忽略；
-- Rust all-features：205 项通过，另 1 项手动性能探针忽略；
+- Rust no-default-features：206 项通过，另 1 项手动性能探针忽略；
+- Rust all-features：206 项通过，另 1 项手动性能探针忽略；
 - Rust fmt：通过；
 - Rust all-targets/all-features Clippy `-D warnings`：通过；
 - TypeScript：通过；
@@ -96,10 +96,22 @@ WDIO Tauri service 在 macOS 会输出无法按动态文档标题切换原生窗
 
 构建仍有既有编辑器懒加载 chunk 超过 500 kB 的警告；T45 没有改变编辑器包体，不将该警告写成已解决。
 
+### 3.3 首次远端运行与跨平台契约修复
+
+GitHub Actions run `30272399213` 对提交 `ad04b5ffce04117add606795b38def5d8069f0c5` 给出了可追溯的首次第三阶段远端证据：
+
+- macOS 作业通过非桌面门禁、205 项 Rust 测试、15 条桌面 E2E、未签名生产构建和 artifact 上传；
+- Windows 作业在 `Type and frontend gates` 失败，后续 Rust、桌面 E2E 和生产构建因此未执行；
+- 失败用例为 `contract_test::tagged_variant_parity_rejects_a_field_on_the_wrong_variant`。逐变体 TypeScript 契约解析器用 `;\n\n` 识别类型别名结尾，在 Windows CRLF checkout 上提前报出 `TypeScript type alias should end with a semicolon`，没有到达测试期望的字段错置断言。
+
+修复将输入行尾先归一为 LF，再执行原有严格格式解析；新增 Windows CRLF 回归用例，同时保留字段放错变体时 fail-loud 的反向断言。该修复不修改生产 IPC、数据格式或业务状态，只修正跨平台测试守卫。修复后的远端双平台结果仍待重新推送核验。
+
+修复后本地 `pnpm verify:non-desktop` 已从头通过：30/30 Node、267/267 Vitest、206 项 no-default Rust 与 206 项 all-features Rust（均另 1 项手动探针忽略）、fmt、Clippy、typecheck、生产构建和许可证 727/511/0。
+
 ## 4. 未验证项
 
-- 最新实现提交尚未推送，GitHub Actions macOS/Windows 双绿、run URL 和 artifact 摘要未验证。
-- Windows Rust 编译、WebView2 15 条桌面链及 `Ctrl+Tab` / `Ctrl+Shift+Tab` 真实系统输入未验证。
+- 修复后的最新提交尚未取得 GitHub Actions macOS/Windows 双绿与成对生产 artifact；首次 run `30272399213` 不能作为 T45 通过证据。
+- Windows 首次 run 在非桌面契约守卫阶段停止，因此 Rust 全门禁、WebView2 15 条桌面链、`Ctrl+Tab` / `Ctrl+Shift+Tab` 真实系统输入和生产构建仍未验证。
 - Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍是人工项。
 - 真实多窗口整组退出、系统 IME、JS heap、长时峰值内存、休眠、网络卷和文件系统卸载仍无完整产品级证据。
 - macOS 本轮验证了替换 intent 的拒绝分支；多窗口整组退出与允许替换的完整系统级人工链仍留待 T46 汇总或后续平台验收。
@@ -116,4 +128,4 @@ WDIO Tauri service 在 macOS 会输出无法按动态文档标题切换原生窗
 
 ## 6. 当前结论
 
-T45 的本地实现、macOS 桌面证据和非桌面回归已闭合，但完成标准要求最新实现提交在 macOS/Windows 远端双绿并可追溯 artifact。由于本次未获推送授权，T45 仍为“进行中”；T46 未开始。
+T45 的本地实现、macOS 桌面证据和非桌面回归已闭合。首次第三阶段远端运行真实发现 Windows CRLF 下契约守卫提前失败，现已完成本地修复与针对性回归，但完成标准仍要求修复提交在 macOS/Windows 远端双绿并可追溯 artifact。T45 继续保持“进行中”；T46 未开始。
