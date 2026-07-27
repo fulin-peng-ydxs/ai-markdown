@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
@@ -75,7 +75,7 @@ pub fn assert_interface_matches(interface_name: &str, value: &impl Serialize) {
     );
 }
 
-pub fn assert_type_alias_matches_variants<T: Serialize>(type_name: &str, values: &[T]) {
+fn typescript_tagged_variant_fields(type_name: &str) -> BTreeMap<String, BTreeSet<String>> {
     let marker = format!("export type {type_name} =");
     let body = TYPESCRIPT_CONTRACTS
         .split_once(&marker)
@@ -83,17 +83,107 @@ pub fn assert_type_alias_matches_variants<T: Serialize>(type_name: &str, values:
         .1
         .split_once(";\n\n")
         .expect("TypeScript type alias should end with a semicolon");
-    let typescript_fields = body
-        .0
-        .lines()
-        .filter_map(|line| line.trim().split_once(':').map(|(name, _)| name))
-        .map(str::to_owned)
-        .collect::<BTreeSet<_>>();
-    let rust_variant_fields = values.iter().flat_map(rust_fields).collect::<BTreeSet<_>>();
+    let mut variants = BTreeMap::new();
+    let mut current_fields = None::<BTreeSet<String>>;
+    let mut current_tag = None::<String>;
+
+    for line in body.0.lines().map(str::trim) {
+        if line == "| {" {
+            assert!(
+                current_fields.is_none(),
+                "nested TypeScript tagged variant in {type_name}"
+            );
+            current_fields = Some(BTreeSet::new());
+            current_tag = None;
+            continue;
+        }
+        if line == "}" {
+            let fields = current_fields
+                .take()
+                .unwrap_or_else(|| panic!("closing unopened TypeScript variant in {type_name}"));
+            let tag = current_tag
+                .take()
+                .unwrap_or_else(|| panic!("TypeScript variant in {type_name} has no kind tag"));
+            assert!(
+                variants.insert(tag.clone(), fields).is_none(),
+                "duplicate TypeScript {type_name} variant tag {tag}"
+            );
+            continue;
+        }
+
+        let Some(fields) = current_fields.as_mut() else {
+            continue;
+        };
+        let Some((raw_name, raw_type)) = line.split_once(':') else {
+            continue;
+        };
+        let field_name = raw_name.trim_end_matches('?').to_owned();
+        fields.insert(field_name.clone());
+        if field_name != "kind" {
+            continue;
+        }
+
+        let tag_expression = raw_type.trim().trim_end_matches(';');
+        current_tag = Some(if tag_expression.starts_with('"') {
+            tag_expression.trim_matches('"').to_owned()
+        } else {
+            let indexed = tag_expression
+                .strip_prefix("(typeof ")
+                .and_then(|value| value.split_once(")["))
+                .unwrap_or_else(|| {
+                    panic!("unsupported TypeScript {type_name} kind expression {tag_expression}")
+                });
+            let index = indexed
+                .1
+                .trim_end_matches(']')
+                .parse::<usize>()
+                .expect("TypeScript tagged variant index should be numeric");
+            typescript_string_constant_values(indexed.0)
+                .get(index)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "TypeScript {type_name} kind index {index} is outside {}",
+                        indexed.0
+                    )
+                })
+                .clone()
+        });
+    }
+
+    assert!(
+        current_fields.is_none(),
+        "unterminated TypeScript tagged variant in {type_name}"
+    );
+    assert!(
+        !variants.is_empty(),
+        "TypeScript type alias {type_name} has no tagged variants"
+    );
+    variants
+}
+
+pub fn assert_type_alias_matches_variants<T: Serialize>(type_name: &str, values: &[T]) {
+    let mut rust_variants = BTreeMap::new();
+    for value in values {
+        let serialized =
+            serde_json::to_value(value).expect("Rust tagged contract fixture should serialize");
+        let object = serialized
+            .as_object()
+            .expect("Rust tagged contract fixture should be an object");
+        let tag = object
+            .get("kind")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_else(|| panic!("Rust tagged variant in {type_name} has no string kind"));
+        let fields = object.keys().cloned().collect::<BTreeSet<_>>();
+        assert!(
+            rust_variants.insert(tag.to_owned(), fields).is_none(),
+            "duplicate Rust {type_name} variant tag {tag}"
+        );
+    }
 
     assert_eq!(
-        rust_variant_fields, typescript_fields,
-        "Rust tagged variants and TypeScript {type_name} fields drifted"
+        rust_variants,
+        typescript_tagged_variant_fields(type_name),
+        "Rust tagged variants and TypeScript {type_name} per-variant fields drifted"
     );
 }
 
@@ -138,5 +228,25 @@ fn every_exported_typescript_contract_has_a_rust_parity_assertion() {
         typescript_export_names("export const "),
         rust_contract_assertion_names("typescript_string_constant_values"),
         "every exported TypeScript string constant must have a Rust enum/tag parity assertion"
+    );
+}
+
+#[test]
+#[should_panic(expected = "per-variant fields drifted")]
+fn tagged_variant_parity_rejects_a_field_on_the_wrong_variant() {
+    assert_type_alias_matches_variants(
+        "WindowTabSelection",
+        &[
+            serde_json::json!({
+                "kind": "visual",
+                "anchor": 1,
+                "head": 2
+            }),
+            serde_json::json!({
+                "kind": "source",
+                "from": 3,
+                "to": 4
+            }),
+        ],
     );
 }
