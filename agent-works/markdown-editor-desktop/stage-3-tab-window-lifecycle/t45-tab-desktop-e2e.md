@@ -41,6 +41,7 @@ P1 主链新增真实替换事务：
 
 - macOS：System Events `AXRaise` 后发送 `Cmd+Option+Right/Left`；
 - Windows：全部 E2E 隔离进程通过编译期隔离分支把原生标题固定为“工作区 — Plainroot”，避免 WDIO 随文档标题变化丢失 renderer；快捷键测试仍由 `e2e_tab_shortcuts_ready` 读取真实 `EditorMenuStateRegistry` 与 Tauri `MenuItem::is_enabled`，系统脚本确认前台窗口后只发送一次平台映射，最后由真实页签选中态断言结果。run `30293567676` 已证明策略与菜单启用态均可达，但 `Ctrl+Tab` 未触发 Windows/Tauri 原生菜单，故当前映射改为待验证的 `Ctrl+PageDown/PageUp`。生产构建不读取测试标志，也不注册探针。
+- run `30295225359` 继续证明策略与菜单启用态均可达，Windows Forms `SendKeys` 发送替代键后仍未切换页签。当前改用 Win32 `SendInput` 向已核验的前台窗口提交 Ctrl 与扩展 Page 键的四个按下/抬起事件，并检查系统实际接收数量；该路径仍是一次真实系统输入，不调用 WebView keydown、不直接触发业务命令、不增加重试。
 
 macOS 在最新重建的 Tauri E2E release 二进制上发现 `Cmd+Shift+]` 可触发，但 `Cmd+Shift+[` 不会到达菜单动作；因此没有保留不可用的对称外观，而是收敛为双向均实际通过的 `Cmd+Option+Right/Left`。Windows 映射保持平台常用组合，但固定标题测试缝尚未在 Windows runner 运行，不能记为通过。
 

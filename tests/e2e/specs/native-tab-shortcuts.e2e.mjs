@@ -158,18 +158,93 @@ async function sendNativeTabShortcut(direction) {
   }
 
   if (process.platform === "win32") {
-    const keys = direction === "next" ? "^{PGDN}" : "^{PGUP}";
+    const virtualKey = direction === "next" ? "0x22" : "0x21";
     const script = `
-Add-Type -AssemblyName System.Windows.Forms
 Add-Type @"
 using System;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 public static class PlainrootNativeInput {
+  private const uint INPUT_KEYBOARD = 1;
+  private const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
+  private const uint KEYEVENTF_KEYUP = 0x0002;
+  private const ushort VK_CONTROL = 0x11;
+
   [DllImport("user32.dll")]
   public static extern bool SetForegroundWindow(IntPtr hWnd);
 
   [DllImport("user32.dll")]
   public static extern IntPtr GetForegroundWindow();
+
+  [DllImport("user32.dll", SetLastError = true)]
+  private static extern uint SendInput(
+    uint inputCount,
+    INPUT[] inputs,
+    int inputSize
+  );
+
+  [StructLayout(LayoutKind.Sequential)]
+  private struct INPUT {
+    public uint type;
+    public INPUTUNION data;
+  }
+
+  [StructLayout(LayoutKind.Explicit)]
+  private struct INPUTUNION {
+    [FieldOffset(0)]
+    public KEYBDINPUT keyboard;
+
+    // Keep the native INPUT union at its Win32 size on both x86 and x64.
+    [FieldOffset(0)]
+    public MOUSEINPUT mouse;
+  }
+
+  [StructLayout(LayoutKind.Sequential)]
+  private struct KEYBDINPUT {
+    public ushort virtualKey;
+    public ushort scanCode;
+    public uint flags;
+    public uint time;
+    public UIntPtr extraInfo;
+  }
+
+  [StructLayout(LayoutKind.Sequential)]
+  private struct MOUSEINPUT {
+    public int x;
+    public int y;
+    public uint mouseData;
+    public uint flags;
+    public uint time;
+    public UIntPtr extraInfo;
+  }
+
+  private static INPUT Key(ushort virtualKey, uint flags) {
+    return new INPUT {
+      type = INPUT_KEYBOARD,
+      data = new INPUTUNION {
+        keyboard = new KEYBDINPUT {
+          virtualKey = virtualKey,
+          flags = flags
+        }
+      }
+    };
+  }
+
+  public static void SendCtrlPage(ushort pageVirtualKey) {
+    INPUT[] inputs = {
+      Key(VK_CONTROL, 0),
+      Key(pageVirtualKey, KEYEVENTF_EXTENDEDKEY),
+      Key(pageVirtualKey, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP),
+      Key(VK_CONTROL, KEYEVENTF_KEYUP)
+    };
+    uint sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT)));
+    if (sent != (uint)inputs.Length) {
+      throw new Win32Exception(
+        Marshal.GetLastWin32Error(),
+        "Plainroot native shortcut input was only partially delivered"
+      );
+    }
+  }
 }
 "@
 
@@ -200,7 +275,7 @@ do {
 if (-not $ready) {
   throw "Plainroot shortcut window did not become foreground"
 }
-[System.Windows.Forms.SendKeys]::SendWait("${keys}")
+[PlainrootNativeInput]::SendCtrlPage(${virtualKey})
 `;
     await execFileAsync("powershell.exe", [
       "-NoLogo",
