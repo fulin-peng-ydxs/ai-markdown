@@ -5,7 +5,7 @@
 - 对应任务：第三阶段 `T45`。
 - 对应需求：R1、R2、R3、R5、R6、R10、R11、R13、R14、R30、R31 的真实桌面验证子集。
 - 本次完成桌面测试编排、macOS 原生页签组合键、真实窗口替换拒绝和跨进程会话恢复；不进入 T46 阶段验收。
-- 最新实现已推送并完成五轮第三阶段双平台运行。第五轮 macOS 完整通过，Windows 已进入主桌面链并通过 10/12，随后真实暴露动态窗口标题下 WDIO Tauri service 将交互路由到错误渲染器的问题。当前修复保持 React、Tauri IPC 与磁盘链不变，只在当前渲染器内精确定位真实控件；本机主链连续两次 12/12，通过后的双平台远端证据仍待取得。T45 状态保持“进行中”。
+- 最新实现已推送并完成六轮第三阶段双平台运行。第六轮 macOS 完整通过，Windows 主桌面链 12/12 通过，随后在原生页签快捷键专项中暴露动态标题下 WDIO Tauri service 无法读取菜单就绪状态的问题。当前修复在 Windows 原生 UI Automation 树中等待菜单项启用，再发送一次系统按键并由原生窗口标题核验结果；双平台远端证据仍待取得。T45 状态保持“进行中”。
 
 ## 2. 实际实现
 
@@ -40,9 +40,9 @@ P1 主链新增真实替换事务：
 原生快捷键用独立桌面进程和三个真实页签验证。测试先有界等待唯一 fixture 窗口进入系统可发现状态，再等待目标进程成为前台且对应原生菜单项已启用，最后执行系统级输入；每个方向只发送一次：
 
 - macOS：System Events `AXRaise` 后发送 `Cmd+Option+Right/Left`；
-- Windows：E2E-only Rust 探针读取当前窗口的 `EditorMenuStateRegistry`，并通过 Tauri `MenuItem::is_enabled` 复核下一/上一页签菜单项真实启用；随后系统脚本轮询 Win32 `GetForegroundWindow`，确认目标窗口已成为前台后发送一次 `Ctrl+Tab` / `Ctrl+Shift+Tab`。生产构建不注册该只读探针。
+- Windows：系统脚本轮询 Win32 `GetForegroundWindow` 确认目标窗口已成为前台，并从 Windows UI Automation 原生可访问性树读取下一/上一页签菜单项真实启用状态；随后发送一次 `Ctrl+Tab` / `Ctrl+Shift+Tab`，再由原生窗口标题确认目标文档已激活。该链不依赖 WebView `keydown`、传统 HMENU 或动态标题下的 WDIO renderer 切换。
 
-macOS 在最新重建的 Tauri E2E release 二进制上发现 `Cmd+Shift+]` 可触发，但 `Cmd+Shift+[` 不会到达菜单动作；因此没有保留不可用的对称外观，而是收敛为双向均实际通过的 `Cmd+Option+Right/Left`。Windows 映射保持平台常用组合，但尚未在 Windows runner 运行，不能记为通过。
+macOS 在最新重建的 Tauri E2E release 二进制上发现 `Cmd+Shift+]` 可触发，但 `Cmd+Shift+[` 不会到达菜单动作；因此没有保留不可用的对称外观，而是收敛为双向均实际通过的 `Cmd+Option+Right/Left`。Windows 映射保持平台常用组合，但 UI Automation 就绪链尚未在 Windows runner 运行，不能记为通过。
 
 React 没有新增全局 keydown；原生菜单仍通过唯一 `WORKBENCH_MENU_EVENT` 路由到现有 `WorkspaceTabManager`。
 
@@ -143,10 +143,21 @@ GitHub Actions run `30280357578` 对提交 `a471a43` 给出新的有效证据：
 
 整改没有把磁盘链替换成测试命令或 mock。`desktop-shell.e2e.mjs` 在当前 WebView 文档内等待并点击真实文件树按钮、按 `aria-labelledby` 精确限定生产弹层、派发真实 `input`/`change` 事件，然后继续等待真实页签、Tauri IPC 和磁盘字节结果；每个失败仍立即终止，不增加业务重试。失败清理也只通过现有取消按钮关闭残留生产弹层。修复后本机主桌面 spec 已连续两次通过 12/12；第五轮已经远端通过的 macOS 原生快捷键、重启种子和恢复实现没有修改。本轮因本机无 bundle WebDriver 的辅助功能窗口身份不可激活，未把新的本机原生快捷键试验计入证据，最终仍以最新远端两平台完整执行为完成门禁。
 
+### 3.5 第六次远端运行与 Windows 原生菜单就绪整改
+
+GitHub Actions run `30285162108` 对提交 `bdc4c215d80c85bd95adcfb709ff2205a051a4ce` 给出新的有效证据：
+
+- macOS 再次通过完整门禁、15 条桌面 E2E、未签名生产构建和 artifact 上传；`plainroot-macos-30285162108` 的 SHA-256 为 `48029701e808050719577f75b90d5350ecc48363a2453a2dee19449e5fccf521`；
+- Windows 已通过非桌面门禁、Rust fmt/Clippy、Rust 测试和主桌面链 12/12，证明第五轮 WebView2 当前渲染器整改真实闭合；
+- Windows 随后在原生页签快捷键专项发送按键之前失败。日志持续报告 WDIO Tauri service 无法按动态文档标题切换活动 renderer，`e2e_tab_shortcuts_ready` 因此无法取得菜单状态；当次没有发送 `Ctrl+Tab`，不能据此判定产品快捷键失败；
+- Windows 诊断 artifact `plainroot-windows-30285162108` 的 SHA-256 为 `3ae0cc1a117e93f369cee25c0df528af81215ab49767f966dc5773c87db35aba`。
+
+当前整改仅调整 Windows 原生快捷键测试的可观察前置条件：目标进程成为前台后，从 UI Automation 原生可访问性树等待对应页签菜单项启用；随后仍只发送一次系统按键，并通过原生窗口标题确认切换结果。macOS 保持第六轮已通过的 System Events + Rust/Tauri 菜单探针路径不变。该修复不修改产品菜单、命令路由、IPC、权限或快捷键映射，必须由下一轮 Windows runner 验证。
+
 ## 4. 未验证项
 
-- 最新 WebView2 渲染器定位修复尚未取得 GitHub Actions macOS/Windows 双绿与成对生产 artifact；run `30272399213`、`30274596446`、`30275676382`、`30278252178`、`30280357578` 都是有效的递进证据，但没有一轮可作为 T45 双平台通过证据。
-- Windows 第五次 run 已通过非桌面契约、Clippy 与 Rust 测试，主桌面链为 10/12；`Ctrl+Tab` / `Ctrl+Shift+Tab`、跨进程恢复、完整 15 条桌面链和生产构建仍未在同一最新提交上取得通过证据。
+- 最新 Windows 原生 UI Automation 就绪修复尚未取得 GitHub Actions macOS/Windows 双绿与成对生产 artifact；run `30272399213`、`30274596446`、`30275676382`、`30278252178`、`30280357578`、`30285162108` 都是有效的递进证据，但没有一轮可作为 T45 双平台通过证据。
+- Windows 第六次 run 已通过非桌面门禁、Clippy、Rust 测试和主桌面链 12/12；`Ctrl+Tab` / `Ctrl+Shift+Tab`、跨进程恢复、完整 15 条桌面链和生产构建仍未在同一最新提交上取得通过证据。
 - Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍是人工项。
 - 真实多窗口整组退出、系统 IME、JS heap、长时峰值内存、休眠、网络卷和文件系统卸载仍无完整产品级证据。
 - macOS 本轮验证了替换 intent 的拒绝分支；多窗口整组退出与允许替换的完整系统级人工链仍留待 T46 汇总或后续平台验收。
@@ -163,4 +174,4 @@ GitHub Actions run `30280357578` 对提交 `a471a43` 给出新的有效证据：
 
 ## 6. 当前结论
 
-T45 的本地实现、macOS 桌面证据和非桌面回归已闭合。五次第三阶段远端运行依次发现 Windows CRLF 契约解析、Unix-only 字段 lint、Tauri 菜单测试前置、WebView 刷新与动态标题渲染器定位问题；整改均针对事实源和跨平台边界，没有跳过真实输入、降低业务断言或加入业务重试。当前主桌面修复已在本机连续两次 12/12，完成标准仍要求最新修复提交在 macOS/Windows 远端双绿并可追溯 artifact。T45 继续保持“进行中”；T46 未开始。
+T45 的本地实现、macOS 桌面证据和非桌面回归已闭合。六次第三阶段远端运行依次发现 Windows CRLF 契约解析、Unix-only 字段 lint、Tauri 菜单测试前置、WebView 刷新、动态标题渲染器定位与 Windows 菜单就绪读取问题；整改均针对事实源和跨平台边界，没有跳过真实输入、降低业务断言或加入业务重试。第六轮已证明 Windows 主桌面链 12/12 通过，完成标准仍要求最新修复提交在 macOS/Windows 远端双绿并可追溯 artifact。T45 继续保持“进行中”；T46 未开始。

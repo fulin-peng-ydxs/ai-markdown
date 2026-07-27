@@ -573,7 +573,7 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 
 ### 6.11 任务 T45：真实桌面 E2E、双平台 CI 与页面验收
 
-- 状态：进行中（本地实现与 macOS 验证完成；第五次远端 macOS 完整通过，Windows 已通过非桌面门禁并在 12 条主链中通过 10 条，剩余失败定位为动态窗口标题下 WDIO Tauri service 错选渲染器；测试现以当前渲染器内真实 React 事件继续驱动 Tauri IPC 和磁盘链，最新双平台 CI/artifact 待再次核验）。
+- 状态：进行中（本地实现与 macOS 验证完成；第六次远端 macOS 完整通过，Windows 已通过非桌面门禁和 12/12 主桌面链，随后在原生页签快捷键专项中因动态标题下 WDIO Tauri service 无法读取菜单就绪状态而失败；当前 Windows 测试改由原生 UI Automation 菜单状态与窗口标题形成闭环，最新双平台 CI/artifact 待再次核验）。
 - 依赖：T44。
 - 涉及文件/模块：`tests/e2e/`、fixtures、WDIO、`.github/workflows/ci.yml`、P1/P2、页面验收留痕。
 - 目标：用真实 Tauri IPC 在 macOS/Windows 验证页签、结算、窗口替换和恢复，而不是只依赖 jsdom/mock。
@@ -586,13 +586,14 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 - 实际落地情况：
   - `pnpm test:e2e` 现顺序启动四个相互隔离的桌面进程与状态目录：12 条 P1/P2 主链、1 条原生页签组合键、1 条重启前真实会话写入、1 条重启后恢复。重启编排在两个真实进程之间删除一个 fixture 文件，确认两个可读页签继续恢复、缺失页签进入可见 issue、活动项安全回退且非活动页签首次激活才读盘。
   - 主链新增真实窗口替换 intent：先制造本地 dirty 与磁盘外部变化，再通过 Rust `coordinate_workspace_open` 取得 `settlement_required`，确认安全替换弹层出现，并用真实 `resolve_window_settlement(allow=false)` 拒绝事务；原工作区绑定与内存内容保持不变。React 取消按钮接线仍由既有组件测试覆盖，本用例不把直接 IPC 拒绝冒充按钮点击证据。
-  - 两个平台的原生输入都先有界发现目标窗口并将进程置于前台，再等待对应 Tauri 原生菜单项启用，最后只发送一次系统键盘事件，不做业务重试。macOS 通过 `osascript`/System Events 验证：`Cmd+Shift+]` 可触发但 `Cmd+Shift+[` 在最新 Tauri 二进制中不可触发，因此产品映射收敛为已实测双向有效的 `Cmd+Option+Right/Left`。第三次 Windows run 证明 Tauri 菜单不能假定为传统窗口 HMENU；第四次双平台 run 又证明菜单状态只在窗口聚焦后应用，不能在建立前台条件前读取。当前 E2E flavor 先按窗口标题建立前台条件，再通过只读 Rust 探针核对当前窗口 registry 和 Tauri `MenuItem::is_enabled`；Win32/System Events 最后只发送一次 `Ctrl+Tab` / `Ctrl+Shift+Tab` 或 macOS 对应组合键，生产构建不注册该探针。
+  - 两个平台的原生输入都先有界发现目标窗口并将进程置于前台，再等待对应原生菜单项启用，最后只发送一次系统键盘事件，不做业务重试。macOS 通过 `osascript`/System Events 与只读 Rust/Tauri 菜单探针验证，并使用已实测双向有效的 `Cmd+Option+Right/Left`。Windows 不使用传统 HMENU，也不在动态标题变化后依赖 WDIO renderer：当前测试从 UI Automation 原生可访问性树读取 `Ctrl+Tab` / `Ctrl+Shift+Tab` 菜单项启用态，发送按键后以原生窗口标题确认活动文档。
   - 页面矩阵在真实 P1/P2 中覆盖 1100/1050/820/760/740 px，不产生根级横向溢出；主命令、状态路径、页签条与其滚动归属保持可见。确定性流程不配置测试重试；每段失败立即停止后续阶段。
   - 最新整改后，本地 macOS 已重新从头运行四个隔离桌面进程并通过 15/15：12 条主链、1 条真实原生页签组合键、1 条重启种子和 1 条跨进程恢复；此前 CRLF 修复后的 `pnpm verify:non-desktop` 从头通过 30/30 Node、267/267 Vitest、206 项 no-default Rust 与 206 项 all-features Rust（均另 1 项手动探针忽略）、fmt、Clippy、typecheck、生产构建和许可证 727/511/0。完整证据与未验证项见 `t45-tab-desktop-e2e.md`。
   - 首次第三阶段远端 run `30272399213` 中 macOS 作业通过完整门禁、15 条桌面 E2E、生产构建与 artifact；Windows 在非桌面契约反向测试提前失败，根因为逐变体解析器只识别 LF、未兼容 checkout 的 CRLF。解析器现先归一行尾并新增 Windows 行尾回归，原字段错置 fail-loud 断言继续保留。修复提交尚待重新推送取得双平台结果，因此 T45 仍为进行中，不开始 T46。
   - 第二次远端 run `30274596446` 的 macOS 作业再次完整通过，Windows 也已通过此前失败的非桌面契约门禁，随后在全 target Clippy 阶段发现 `WindowSessionStore.root` 仅由 Unix 权限分支读取、Windows 结构体保留后触发 `dead_code`。实现改为只在 Unix 编译该字段，不用 `allow`/`expect` 绕过门禁；第三次双平台复验前仍不开始 T46。
   - 第四次远端 run `30278252178` 已上传 macOS/Windows 诊断 artifact：`plainroot-macos-30278252178`（SHA-256 `e9758037104c586f904074326f186e6abceaa61ee84f53a74a74858f626ab70c`）与 `plainroot-windows-30278252178`（SHA-256 `26cff25d996b95ad52afcbeb6774f1dc61f0ef0aa0fc20028e4aeb82dff45f93`）。macOS 主链在保存后的 `browser.refresh()` 场景失败；本机完整复现表明，动态窗口标题变化后刷新 WebView 会使 WDIO Tauri service 持续寻找旧标题并级联影响后续用例。Windows 已通过非桌面门禁和 12/12 主链，进入原生页签快捷键用例后，因只读菜单探针在系统脚本建立前台窗口条件之前执行而持续返回未启用；当次没有发送按键。用例现以真实页签关闭/重开替代非应用重启的 WebView 刷新，并在读取菜单状态前先建立目标窗口前台条件；本机原生快捷键专项已以真实系统输入通过。整改没有增加业务重试或放宽内容断言，仍须由下一轮双平台远端执行验证。
   - 第五次远端 run `30280357578` 对提交 `a471a43` 再次证明 macOS 完整门禁、15 条桌面 E2E、生产构建和 artifact 可用；`plainroot-macos-30280357578` 的 SHA-256 为 `ab4772d4a174194c1c9f450af93b292af3eae5f685c19e6fdf6935f1d943f0f6`。Windows 已通过非桌面门禁并在主桌面链通过 10/12，随后“真实改名/移动/删除”和目录移动风险取消用例失败；`plainroot-windows-30280357578` 的 SHA-256 为 `15c6bfd89a5c263128a75e6adb80dde3fa553beb38701baedf3257e755350ebc`。日志与截图证明动态文档标题下 WDIO Tauri service 把点击路由到错误渲染器，实际打开了上一项移动弹层并遗留结算弹层，不是 Rust 磁盘命令失败。当前测试用受控 helper 在当前 WebView 文档内定位树项、精确 `aria-labelledby` 弹层和按钮，并触发真实 DOM `click`/`input` 事件；React handler、Tauri IPC、Rust 磁盘操作和磁盘断言均未替换为 mock。修复后本机主桌面链已连续两次通过 12/12；macOS 原生快捷键、重启种子和恢复脚本保持第五次远端已通过的实现不变。最新双平台远端结果仍是 T45 完成前置。
+  - 第六次远端 run `30285162108` 对提交 `bdc4c215d80c85bd95adcfb709ff2205a051a4ce` 证明 macOS 再次完整通过，Windows 也已通过非桌面门禁、Rust 门禁和主桌面链 12/12，上一轮 WebView2 当前渲染器修复真实闭合。Windows 随后在原生快捷键专项发送按键前失败：动态标题使 WDIO Tauri service 无法取得 `e2e_tab_shortcuts_ready`，不是快捷键动作已发送但无效。`plainroot-macos-30285162108` 的 SHA-256 为 `48029701e808050719577f75b90d5350ecc48363a2453a2dee19449e5fccf521`，Windows 诊断 artifact 为 `3ae0cc1a117e93f369cee25c0df528af81215ab49767f966dc5773c87db35aba`。当前 Windows 用例改由 UI Automation 菜单启用态与原生窗口标题验证真实系统按键，仍待下一轮 runner 复验。
 
 ### 6.12 任务 T46：整体复核、架构文档与阶段验收
 

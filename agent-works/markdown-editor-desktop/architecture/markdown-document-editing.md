@@ -182,7 +182,7 @@ UTF-8 BOM 与单一 LF/CRLF/CR 优先沿用原文件；mixed 或不支持编码�
 - `pnpm test:roundtrip` 使用生产 adapter 验证 CommonMark/GFM、图片、受支持 HTML 与 source-only 语料。
 - Rust 契约测试登记所有 TypeScript 导出 interface 和字符串枚举/tag，防止 Rust↔TypeScript 字段漂移。
 - `pnpm test:e2e` 当前本地 macOS 以四个隔离桌面进程通过 15 条真桌面用例，覆盖既有 P1/P2、编辑、保存、图片、恢复、目录风险和单 adapter/RSS 门禁，并新增窗口替换拒绝、系统原生 `Cmd+Option+Right/Left` 页签切换，以及跨真实进程的会话恢复与缺失项隔离。页面宽度矩阵为 1100/1050/820/760/740 px。
-- 远端 GitHub Actions run `30082725332` 仍只证明第二阶段提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 的 9/9 桌面 E2E。T45 当前本地为 267 项 Vitest、205 个 Rust 通过且 1 项手动探针忽略、15/15 macOS 桌面回归；第三阶段尚未推送，Windows `Ctrl+Tab` / `Ctrl+Shift+Tab`、远端双绿和 artifact 未验证，不能沿用旧运行宣称双平台通过。
+- 第二阶段提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 的 run `30082725332` 已提供 9/9 双平台桌面基线。第三阶段 T45 的 run `30285162108` 已证明 macOS 完整通过、Windows 非桌面门禁与主桌面链 12/12 通过；Windows 原生 `Ctrl+Tab` / `Ctrl+Shift+Tab`、后续跨进程恢复/生产构建和同轮双平台 artifact 尚未通过，因此仍不能宣称第三阶段双平台完成。
 
 ## 9. 已知边界
 

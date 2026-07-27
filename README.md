@@ -1,6 +1,6 @@
 # Plainroot
 
-Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成桌面底座验收；第二阶段 T18～T34 已完成单文档编辑阶段验收及目录图片移动风险、编辑工作台信息层级补强。第三阶段 T35～T44 已建立页签模型、内容无关窗口会话仓储、Rust 平台路径身份、P1 多 session runtime、可见页签、最近关闭、全页签结算、窗口生命周期保护、打开偏好、已有会话恢复、聚焦窗口原生页签菜单和统一非桌面门禁。T45 本地实现已在 macOS 以 15 条隔离桌面用例验证真实窗口替换拒绝、原生页签组合键和跨进程恢复；Windows 与最新提交远端双平台 CI/artifact 尚未验证，因此 T45、R13/R14/R30 和第三阶段仍不能表述为完成。
+Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成桌面底座验收；第二阶段 T18～T34 已完成单文档编辑阶段验收及目录图片移动风险、编辑工作台信息层级补强。第三阶段 T35～T44 已建立页签模型、内容无关窗口会话仓储、Rust 平台路径身份、P1 多 session runtime、可见页签、最近关闭、全页签结算、窗口生命周期保护、打开偏好、已有会话恢复、聚焦窗口原生页签菜单和统一非桌面门禁。T45 本地实现已在 macOS 以 15 条隔离桌面用例验证真实窗口替换拒绝、原生页签组合键和跨进程恢复；Windows 远端已通过非桌面门禁和 12/12 主桌面链，原生页签快捷键、跨进程恢复、生产构建及最新提交双平台 artifact 尚待同轮验证，因此 T45、R13/R14/R30 和第三阶段仍不能表述为完成。
 
 ## 工具链
 
@@ -47,7 +47,7 @@ pnpm tauri build --bundles app
 
 `pnpm test:tabs` 包含可失败的页签身份、状态、容量、序列化和 runtime manager 门禁；`pnpm test:stage-3:contracts` 组合页签/工作台专项与完整 Rust 服务测试；`pnpm verify:non-desktop` 是提交前一键非桌面门禁，串联 Node、Vitest、两种 Rust feature 口径、fmt、Clippy、类型、生产构建和许可证检查。`pnpm test:tabs:performance` 只输出当前机器的纯 reducer 基准样本。真实单 editor adapter 与进程 RSS 门禁由隔离的 Tauri/WebKit E2E 承载。
 
-`pnpm test:e2e` 会构建独立 identifier/capability 的测试版本，并顺序运行四个隔离桌面进程：12 条 P1/P2 主链、1 条平台原生页签组合键、1 条重启前会话写入和 1 条重启后恢复。每段使用独立临时状态目录与复制工作区；跨进程恢复会在两次启动之间删除一个 fixture 文件，验证失败项隔离和其他页签继续可用。当前 macOS 本地 15/15 通过，并覆盖 1100/1050/820/760/740 px、真实窗口替换拒绝和 `Cmd+Option+Right/Left` 首次系统输入；确定性业务流程重试为 0。Windows 保留 `Ctrl+Tab` / `Ctrl+Shift+Tab`，尚待远端 runner 实证。测试 feature 默认关闭，生产前端产物和 release 二进制均不包含 WDIO、fixture 或 E2E 命令。最新远端证据仍是提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 的 GitHub Actions run `30082725332`，只覆盖第二阶段 9/9；第三阶段最新提交尚未推送。
+`pnpm test:e2e` 会构建独立 identifier/capability 的测试版本，并顺序运行四个隔离桌面进程：12 条 P1/P2 主链、1 条平台原生页签组合键、1 条重启前会话写入和 1 条重启后恢复。每段使用独立临时状态目录与复制工作区；跨进程恢复会在两次启动之间删除一个 fixture 文件，验证失败项隔离和其他页签继续可用。当前 macOS 本地 15/15 通过，并覆盖 1100/1050/820/760/740 px、真实窗口替换拒绝和 `Cmd+Option+Right/Left` 首次系统输入；确定性业务流程重试为 0。Windows 保留 `Ctrl+Tab` / `Ctrl+Shift+Tab`，第六次远端运行已通过非桌面门禁和 12/12 主桌面链，原生快捷键与后续恢复/构建仍待最新 runner 实证。测试 feature 默认关闭，生产前端产物和 release 二进制均不包含 WDIO、fixture 或 E2E 命令。第三阶段递进证据见 T45 留痕；尚无一轮同一最新提交的 macOS/Windows 双绿与成对生产 artifact。
 
 开发模式在依赖安装完成后运行：
 
