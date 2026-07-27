@@ -87,11 +87,14 @@ import {
 } from "../tabs/tabPathImpact";
 import type { WorkspaceTabPathIdentity } from "../tabs/tabPath";
 import { WorkspaceTabSessionPersistence } from "../tabs/tabSessionPersistence";
+import { workspaceTabsNeedPersistence } from "../tabs/tabReducer";
 import type {
   WorkspaceTabId,
   WorkspaceTabSettlementReason,
 } from "../tabs/tabTypes";
 import type { WorkspaceTabSessionGateway } from "../tabs/tabSessionGateway";
+import { WorkspaceOpenDecisionDialog } from "../workspace-open/WorkspaceOpenDecisionDialog";
+import { WorkspaceOpenPreferenceDialog } from "../workspace-open/WorkspaceOpenPreferenceDialog";
 import { WorkspaceTree } from "./WorkspaceTree";
 import { isSameOrInside, parentPath, replacePrefix } from "./workspacePath";
 import {
@@ -193,6 +196,8 @@ export function WorkspaceWorkbench({
       >,
     ) => Promise<void>) | null
   >(null);
+  const settlementCancelRef = useRef<(() => Promise<void>) | null>(null);
+  const windowSettlementIntentRef = useRef<string | null>(null);
   const [pageError, setPageError] = useState<DesktopError | null>(null);
   const [operation, setOperation] = useState<PendingOperation | null>(null);
   const [operationError, setOperationError] = useState<DesktopError | null>(null);
@@ -204,6 +209,9 @@ export function WorkspaceWorkbench({
   >([]);
   const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
   const [decision, setDecision] = useState<PendingDecision | null>(null);
+  const [decisionError, setDecisionError] = useState<DesktopError | null>(null);
+  const [decisionProcessing, setDecisionProcessing] = useState(false);
+  const [openPreferenceOpen, setOpenPreferenceOpen] = useState(false);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [lifecycleNotice, setLifecycleNotice] = useState<string | null>(null);
   const [conflictOpen, setConflictOpen] = useState(false);
@@ -597,6 +605,9 @@ export function WorkspaceWorkbench({
     void gateway.listenMenu((action) => {
       if (action === "file.open_folder") void selectOtherWorkspaceRef.current("folder");
       if (action === "file.open_markdown") void selectOtherWorkspaceRef.current("markdown");
+      if (action === "app.workspace_open_preferences") {
+        setOpenPreferenceOpen(true);
+      }
     }).then((stop) => {
       unlisten = stop;
     }).catch(() => undefined);
@@ -816,6 +827,7 @@ export function WorkspaceWorkbench({
         WorkspaceTabExplicitResolution
       >,
     ) => Promise<void>,
+    cancel?: () => Promise<void>,
   ): Promise<boolean> {
     const manager = tabManagerRef.current;
     if (!manager || settlementBatch) return false;
@@ -836,29 +848,41 @@ export function WorkspaceWorkbench({
         setClosingTabIds(new Set());
         return true;
       } catch {
-        closingTabIdsRef.current.clear();
-        setClosingTabIds(new Set());
+        settlementCommitRef.current = commit;
+        settlementCancelRef.current = cancel ?? null;
+        setSettlementResolutions(new Map());
+        setSettlementFinalLabel(finalLabel);
+        setSettlementBatch(batch);
         setLifecycleNotice(
-          "页签内容在操作提交前发生变化；没有关闭该页签，请重新处理。",
+          "最终动作没有完成；全部页签与当前内容仍保留，可重试或取消。",
         );
         return false;
       }
     }
     settlementCommitRef.current = commit;
+    settlementCancelRef.current = cancel ?? null;
     setSettlementResolutions(new Map());
     setSettlementFinalLabel(finalLabel);
     setSettlementBatch(batch);
     return false;
   }
 
-  function cancelTabSettlement() {
+  async function cancelTabSettlement() {
+    const cancel = settlementCancelRef.current;
     settlementCommitRef.current = null;
+    settlementCancelRef.current = null;
     setSettlementBatch(null);
     setSettlementResolutions(new Map());
     setSettlementChild(null);
     closingTabIdsRef.current.clear();
     setClosingTabIds(new Set());
     setLifecycleNotice("操作已取消；全部页签仍保持打开。");
+    if (!cancel) return;
+    try {
+      await cancel();
+    } catch (reason) {
+      setPageError(normalizeDesktopError(reason, "window_close_failed"));
+    }
   }
 
   async function retryTabSettlement(tabId: WorkspaceTabId) {
@@ -928,6 +952,7 @@ export function WorkspaceWorkbench({
         settlementResolutions,
       );
       settlementCommitRef.current = null;
+      settlementCancelRef.current = null;
       setSettlementBatch(null);
       setSettlementResolutions(new Map());
       closingTabIdsRef.current.clear();
@@ -987,20 +1012,6 @@ export function WorkspaceWorkbench({
       setLifecycleNotice(settlementMessage(result));
     }
     return result;
-  }
-
-  async function settleAllDocuments(): Promise<DocumentSaveOutcome> {
-    const result = await tabManagerRef.current?.settleAll();
-    if (!result || result.status === "settled") {
-      return { status: "already_safe" };
-    }
-    const outcome = result.outcome ?? {
-      status: "blocked" as const,
-      reason: "failed" as const,
-    };
-    if (outcome.status !== "blocked") return { status: "already_safe" };
-    setLifecycleNotice(settlementMessage(outcome));
-    return outcome;
   }
 
   async function reloadConflictFromDisk() {
@@ -1177,24 +1188,92 @@ export function WorkspaceWorkbench({
   }
 
   async function resolveSettlementIntent(intent: WindowSettlementIntent) {
-    const settlement = await settleAllDocuments();
-    try {
-      const outcome = await gateway.resolveSettlement(
-        intent.intentId,
-        settlement.status !== "blocked",
+    if (windowSettlementIntentRef.current === intent.intentId) return;
+    if (windowSettlementIntentRef.current || settlementBatch) {
+      await gateway.resolveSettlement(intent.intentId, false).catch((reason) => {
+        setPageError(normalizeDesktopError(reason, "window_close_failed"));
+      });
+      setLifecycleNotice(
+        "另一个页签安全操作仍在进行；本次窗口动作已取消。",
       );
-      if (outcome.status === "opened_current") {
-        onWorkspaceChanged(outcome.workspace);
+      return;
+    }
+    windowSettlementIntentRef.current = intent.intentId;
+    const manager = tabManagerRef.current;
+    const tabIds = manager?.snapshot().collection.orderedTabIds ?? [];
+    const reason: WorkspaceTabSettlementReason =
+      intent.kind === "replace_workspace"
+        ? "replace_workspace"
+        : intent.kind === "quit_app"
+          ? "quit_app"
+          : "close_window";
+    const finalLabel =
+      intent.kind === "replace_workspace"
+        ? "安全替换当前窗口"
+        : intent.kind === "quit_app"
+          ? "安全退出 Plainroot"
+          : "安全关闭窗口";
+
+    const cancel = async () => {
+      try {
+        await gateway.resolveSettlement(intent.intentId, false);
+      } finally {
+        windowSettlementIntentRef.current = null;
       }
-    } catch (reason) {
-      setPageError(
-        normalizeDesktopError(
-          reason,
-          intent.kind === "replace_workspace"
-            ? "window_create_failed"
-            : "window_close_failed",
-        ),
-      );
+    };
+    const commit = async () => {
+      await persistTabSessionBeforeWindowAction();
+      try {
+        const outcome = await gateway.resolveSettlement(intent.intentId, true);
+        windowSettlementIntentRef.current = null;
+        if (outcome.status === "opened_current") {
+          onWorkspaceChanged(outcome.workspace);
+        }
+      } catch (reason) {
+        setPageError(
+          normalizeDesktopError(
+            reason,
+            intent.kind === "replace_workspace"
+              ? "window_create_failed"
+              : "window_close_failed",
+          ),
+        );
+        throw reason;
+      }
+    };
+
+    if (tabIds.length === 0) {
+      try {
+        await commit();
+      } catch {
+        windowSettlementIntentRef.current = null;
+      }
+      return;
+    }
+    await requestTabSettlement(
+      tabIds,
+      reason,
+      finalLabel,
+      async () => commit(),
+      cancel,
+    );
+  }
+
+  async function persistTabSessionBeforeWindowAction() {
+    const manager = tabManagerRef.current;
+    const persistence = tabPersistenceRef.current;
+    if (!manager || !persistence) return;
+    const snapshot = manager.snapshot();
+    persistence.observe(snapshot);
+    if (!workspaceTabsNeedPersistence(snapshot.collection)) return;
+    const status = persistence.currentStatus();
+    if (status === "deferred_existing_session") {
+      // T42 owns restoring and unfreezing an older content-free session. Keeping that
+      // recoverable snapshot is safer than overwriting it from the pre-restore UI.
+      return;
+    }
+    if (status !== "ready" || !(await persistence.flush())) {
+      throw normalizeDesktopError(null, "window_session_write_failed");
     }
   }
 
@@ -1722,6 +1801,7 @@ export function WorkspaceWorkbench({
   ) {
     const outcome = await gateway.open(workspaceId, disposition);
     if (outcome.status === "decision_required") {
+      setDecisionError(null);
       setDecision({ outcome });
       return;
     }
@@ -1730,17 +1810,39 @@ export function WorkspaceWorkbench({
     }
   }
 
-  async function chooseDisposition(disposition: WorkspaceOpenDisposition) {
+  async function chooseDisposition(
+    disposition: WorkspaceOpenDisposition,
+    remember: boolean,
+  ) {
     if (!decision) return;
+    if (disposition === "cancel") {
+      setDecision(null);
+      setDecisionError(null);
+      return;
+    }
     const pending = decision;
-    setDecision(null);
-    setBusyLabel(disposition === "new_window" ? "正在创建新窗口" : "正在替换当前工作区");
+    setDecisionProcessing(true);
+    setDecisionError(null);
+    if (remember) {
+      try {
+        await gateway.setOpenPreference(disposition);
+      } catch (reason) {
+        setDecisionError(
+          normalizeDesktopError(reason, "preferences_write_failed"),
+        );
+        setDecisionProcessing(false);
+        return;
+      }
+    }
     try {
       await coordinate(pending.outcome.workspace.id, disposition);
+      setDecision(null);
     } catch (reason) {
-      setPageError(normalizeDesktopError(reason, "window_create_failed"));
+      setDecisionError(
+        normalizeDesktopError(reason, "window_create_failed"),
+      );
     } finally {
-      setBusyLabel(null);
+      setDecisionProcessing(false);
     }
   }
 
@@ -1856,7 +1958,7 @@ export function WorkspaceWorkbench({
         batch={settlementChild ? null : settlementBatch}
         busyTabIds={settlementBusyTabIds}
         finalActionLabel={settlementFinalLabel}
-        onCancel={cancelTabSettlement}
+        onCancel={() => void cancelTabSettlement()}
         onCommit={() => void commitTabSettlement()}
         onDiscard={resolveTabSettlementByDiscard}
         onResolveConflict={(tabId) =>
@@ -2161,15 +2263,21 @@ export function WorkspaceWorkbench({
         <div className="workbench-dialog-copy"><h2 id="workbench-scope-title">确认新的本地访问范围</h2><p id="workbench-scope-description">当前工作区保持不变，直到你完成后续窗口选择。</p><dl><dt>所选位置</dt><dd>{confirmation?.proposal.selectedPath}</dd><dt>实际范围</dt><dd>{confirmation?.proposal.canonicalRoot}</dd></dl></div>
       </AppDialog>
 
-      <AppDialog
-        actions={<><button className="plainroot-button" onClick={() => void chooseDisposition("cancel")} type="button">取消</button><button className="plainroot-button" onClick={() => void chooseDisposition("new_window")} type="button">在新窗口打开</button><button className="plainroot-button plainroot-button--primary" onClick={() => void chooseDisposition("current_window")} type="button">替换当前窗口</button></>}
-        describedBy="workbench-decision-description"
-        labelledBy="workbench-decision-title"
-        onRequestClose={() => void chooseDisposition("cancel")}
+      <WorkspaceOpenDecisionDialog
+        error={decisionError}
+        onChoose={(disposition, remember) =>
+          void chooseDisposition(disposition, remember)
+        }
         open={Boolean(decision)}
-      >
-        <div className="workbench-dialog-copy"><h2 id="workbench-decision-title">在哪里打开“{decision?.outcome.workspace.displayName}”？</h2><p id="workbench-decision-description">当前阶段还没有编辑页签，因此替换只提交根工作区会话；后续页签阶段会在这里增加完整保存检查。</p></div>
-      </AppDialog>
+        outcome={decision?.outcome ?? null}
+        processing={decisionProcessing}
+      />
+
+      <WorkspaceOpenPreferenceDialog
+        gateway={gateway}
+        onClose={() => setOpenPreferenceOpen(false)}
+        open={openPreferenceOpen}
+      />
     </main>
   );
 }

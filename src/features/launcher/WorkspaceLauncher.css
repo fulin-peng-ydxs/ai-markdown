@@ -45,6 +45,31 @@ button, input { font: inherit; }
 
 .launcher__header p,
 .launcher__footer { margin: 0; font: var(--font-ui-sm); }
+.launcher__header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+.launcher__settings {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: var(--color-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.launcher__settings:hover {
+  color: var(--color-heading);
+  background: var(--color-chrome-strong);
+  border-color: var(--color-line);
+}
+.launcher__settings:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
 
 .launcher__brand { display: flex; align-items: center; gap: var(--space-sm); }
 .launcher__brand span {

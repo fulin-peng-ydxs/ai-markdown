@@ -119,10 +119,10 @@ export function desktopErrorMessage(error: DesktopError): string {
     case "preferences_read_failed":
     case "preferences_unsupported_version":
     case "invalid_preferences_data":
-      return "无法读取当前工作区的资源目录偏好。Markdown 文件和已有资源没有受到影响。";
+      return "无法读取 Plainroot 的本机偏好。Markdown 文件和已有资源没有受到影响。";
     case "preferences_write_failed":
     case "preferences_backup_failed":
-      return "资源目录偏好没有保存，原有设置仍保持不变。";
+      return "Plainroot 偏好没有保存，原有设置仍保持不变。";
     case "invalid_asset_directory":
       return "资源目录必须是工作区内的安全相对目录，且不能经过符号链接。";
     case "asset_upload_not_found":

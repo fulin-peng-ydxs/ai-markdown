@@ -1,0 +1,87 @@
+.workspace-open-dialog {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.workspace-open-dialog h2,
+.workspace-open-dialog p {
+  margin: 0;
+}
+
+.workspace-open-dialog h2 {
+  color: var(--color-heading);
+  font-size: 18px;
+}
+
+.workspace-open-dialog > p:not(.workspace-open-dialog__eyebrow) {
+  color: var(--color-muted);
+  line-height: 1.6;
+}
+
+.workspace-open-dialog__eyebrow {
+  color: var(--color-accent);
+  font: 600 11px/16px var(--font-code);
+  letter-spacing: .11em;
+}
+
+.workspace-open-dialog__check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-text);
+}
+
+.workspace-open-dialog__options {
+  display: grid;
+  gap: var(--space-sm);
+  padding: 0;
+  margin: var(--space-xs) 0 0;
+  border: 0;
+}
+
+.workspace-open-dialog__options label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: var(--color-paper-deep);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.workspace-open-dialog__options label:has(input:checked) {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent);
+}
+
+.workspace-open-dialog__options span {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.workspace-open-dialog__options strong {
+  color: var(--color-heading);
+}
+
+.workspace-open-dialog__options small {
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+.workspace-open-dialog__status,
+.workspace-open-dialog__error {
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+}
+
+.workspace-open-dialog__status {
+  background: var(--color-paper-deep);
+}
+
+.workspace-open-dialog__error {
+  color: var(--color-danger);
+  background: var(--color-paper-deep);
+  border-left: 3px solid var(--color-danger);
+}

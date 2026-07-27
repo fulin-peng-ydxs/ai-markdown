@@ -17,6 +17,9 @@ use crate::fs::{
     resolve_existing_workspace_path, WorkspaceDescriptor, WorkspaceId, WorkspaceRelativePath,
     WorkspaceRootResolution,
 };
+use crate::preferences::{
+    PreferencesRepository, WorkspaceOpenPreference, WorkspaceOpenPreferenceState,
+};
 use crate::state::{
     PersistentAppState, PlainrootStateV1, RecentWorkspace, WorkspaceAvailability,
     WorkspaceRegistry, MAX_RECENT_WORKSPACES,
@@ -86,6 +89,28 @@ pub struct WorkspaceLauncherSnapshot {
 pub struct WorkspaceWorkbenchSnapshot {
     pub workspace: WorkspaceDescriptor,
     pub window_label: String,
+}
+
+#[tauri::command]
+pub fn get_workspace_open_preference(
+    preferences: State<'_, PreferencesRepository>,
+) -> Result<WorkspaceOpenPreferenceState, DesktopError> {
+    preferences.get_workspace_open_preference()
+}
+
+#[tauri::command]
+pub fn set_workspace_open_preference(
+    disposition: WorkspaceOpenPreference,
+    preferences: State<'_, PreferencesRepository>,
+) -> Result<WorkspaceOpenPreferenceState, DesktopError> {
+    preferences.set_workspace_open_preference(disposition)
+}
+
+#[tauri::command]
+pub fn reset_workspace_open_preference(
+    preferences: State<'_, PreferencesRepository>,
+) -> Result<WorkspaceOpenPreferenceState, DesktopError> {
+    preferences.reset_workspace_open_preference()
 }
 
 #[derive(Debug, Clone)]

@@ -3,20 +3,25 @@ import type {
   WorkspaceId,
   WorkspaceLauncherSnapshot,
   WorkspaceOpenDisposition,
+  WorkspaceOpenPreference,
+  WorkspaceOpenPreferenceState,
   WorkspaceOpenOutcome,
   WorkspaceSelectionOutcome,
 } from "../../services/desktop/contracts";
 import {
   authorizeWorkspaceSelection,
   cancelWorkspaceSelection,
-  coordinateWorkspaceOpen,
+  coordinateWorkspaceOpenUsingPreference,
+  getWorkspaceOpenPreference,
   getWorkspaceLauncherSnapshot,
   listenForLauncherMenu,
   resetEditorMenuState,
+  resetWorkspaceOpenPreference,
   removeRecentWorkspace,
   removeWorkspaceSession,
   selectMarkdownFile,
   selectWorkspaceFolder,
+  setWorkspaceOpenPreference,
   validateRecentWorkspace,
   type LauncherMenuAction,
 } from "../../services/desktop/workspace";
@@ -36,6 +41,11 @@ export interface WorkspaceLauncherGateway {
     workspaceId: WorkspaceId,
     disposition?: WorkspaceOpenDisposition,
   ): Promise<WorkspaceOpenOutcome>;
+  getOpenPreference(): Promise<WorkspaceOpenPreferenceState>;
+  setOpenPreference(
+    disposition: WorkspaceOpenPreference,
+  ): Promise<WorkspaceOpenPreferenceState>;
+  resetOpenPreference(): Promise<WorkspaceOpenPreferenceState>;
   removeRecent(workspaceId: WorkspaceId): Promise<boolean>;
   removeSession(workspaceId: WorkspaceId): Promise<boolean>;
   listenMenu(listener: (action: LauncherMenuAction) => void): Promise<() => void>;
@@ -50,7 +60,10 @@ export const desktopWorkspaceLauncherGateway: WorkspaceLauncherGateway = {
   validateRecent: validateRecentWorkspace,
   authorize: authorizeWorkspaceSelection,
   cancelSelection: cancelWorkspaceSelection,
-  open: coordinateWorkspaceOpen,
+  open: coordinateWorkspaceOpenUsingPreference,
+  getOpenPreference: getWorkspaceOpenPreference,
+  setOpenPreference: setWorkspaceOpenPreference,
+  resetOpenPreference: resetWorkspaceOpenPreference,
   removeRecent: removeRecentWorkspace,
   removeSession: removeWorkspaceSession,
   listenMenu: listenForLauncherMenu,

@@ -27,6 +27,7 @@ pub const REDO_ID: &str = "edit.redo";
 pub const FIND_ID: &str = "edit.find";
 pub const VISUAL_MODE_ID: &str = "view.visual";
 pub const SOURCE_MODE_ID: &str = "view.source";
+pub const WORKSPACE_OPEN_PREFERENCES_ID: &str = "app.workspace_open_preferences";
 pub const HELP_ID: &str = "help.plainroot";
 pub const LAUNCHER_MENU_EVENT: &str = "plainroot://launcher-menu";
 pub const WORKBENCH_MENU_EVENT: &str = "plainroot://workbench-menu";
@@ -123,6 +124,12 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
     )?;
     let save = custom_item(app, SAVE_ID, "保存", Some("CmdOrCtrl+S"))?;
     let save_copy = custom_item(app, SAVE_COPY_ID, "另存副本…", Some("CmdOrCtrl+Shift+S"))?;
+    let workspace_open_preferences = custom_item(
+        app,
+        WORKSPACE_OPEN_PREFERENCES_ID,
+        "工作区打开方式…",
+        Some("CmdOrCtrl+,"),
+    )?;
 
     let file_builder = SubmenuBuilder::new(app, "文件")
         .item(&new_window)
@@ -134,7 +141,11 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         .separator()
         .item(&close_window);
     #[cfg(not(target_os = "macos"))]
-    let file_builder = file_builder.separator().quit_with_text("退出 Plainroot");
+    let file_builder = file_builder
+        .separator()
+        .item(&workspace_open_preferences)
+        .separator()
+        .quit_with_text("退出 Plainroot");
     let file_menu = file_builder.build()?;
 
     let edit_menu = SubmenuBuilder::new(app, "编辑")
@@ -210,6 +221,8 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         let app_menu = SubmenuBuilder::new(app, APP_NAME)
             .about_with_text("关于 Plainroot", Some(about_metadata(app)))
             .separator()
+            .item(&workspace_open_preferences)
+            .separator()
             .services_with_text("服务")
             .separator()
             .hide_with_text("隐藏 Plainroot")
@@ -277,11 +290,12 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
                 }
             })
         }
-        OPEN_FOLDER_ID | OPEN_MARKDOWN_ID => focused_window(app).and_then(|window| {
-            window
-                .emit(LAUNCHER_MENU_EVENT, id)
-                .map_err(|_| DesktopError::new(DesktopErrorCode::WindowFocusFailed, true, true))
-        }),
+        OPEN_FOLDER_ID | OPEN_MARKDOWN_ID | WORKSPACE_OPEN_PREFERENCES_ID => focused_window(app)
+            .and_then(|window| {
+                window
+                    .emit(LAUNCHER_MENU_EVENT, id)
+                    .map_err(|_| DesktopError::new(DesktopErrorCode::WindowFocusFailed, true, true))
+            }),
         action if WORKBENCH_ACTION_IDS.contains(&action) => {
             focused_window(app).and_then(|window| {
                 window
@@ -375,7 +389,11 @@ fn custom_check_item<R: Runtime>(
 fn custom_menu_enabled(id: &str) -> bool {
     matches!(
         id,
-        NEW_WINDOW_ID | CLOSE_WINDOW_ID | OPEN_FOLDER_ID | OPEN_MARKDOWN_ID
+        NEW_WINDOW_ID
+            | CLOSE_WINDOW_ID
+            | OPEN_FOLDER_ID
+            | OPEN_MARKDOWN_ID
+            | WORKSPACE_OPEN_PREFERENCES_ID
     )
 }
 
@@ -480,6 +498,7 @@ mod tests {
     use super::{
         custom_menu_enabled, editor_menu_policy, EditorMenuMode, EditorMenuState,
         CLOSE_WINDOW_ACCELERATOR, CLOSE_WINDOW_ID, NEW_WINDOW_ID, OPEN_FOLDER_ID, OPEN_MARKDOWN_ID,
+        WORKSPACE_OPEN_PREFERENCES_ID,
     };
 
     #[test]
@@ -488,6 +507,7 @@ mod tests {
         assert!(custom_menu_enabled(CLOSE_WINDOW_ID));
         assert!(custom_menu_enabled(OPEN_FOLDER_ID));
         assert!(custom_menu_enabled(OPEN_MARKDOWN_ID));
+        assert!(custom_menu_enabled(WORKSPACE_OPEN_PREFERENCES_ID));
         assert!(!custom_menu_enabled("edit.copy"));
         assert!(!custom_menu_enabled("file.save"));
         assert!(!custom_menu_enabled("view.search"));

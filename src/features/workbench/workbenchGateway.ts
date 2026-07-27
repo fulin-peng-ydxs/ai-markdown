@@ -6,6 +6,8 @@ import type {
   WorkspaceMoveRisk,
   WorkspaceMutationResult,
   WorkspaceOpenDisposition,
+  WorkspaceOpenPreference,
+  WorkspaceOpenPreferenceState,
   WorkspaceOpenOutcome,
   WorkspaceRelativePath,
   WorkspaceTabPathContract,
@@ -41,14 +43,17 @@ import {
 import {
   authorizeWorkspaceSelection,
   cancelWorkspaceSelection,
-  coordinateWorkspaceOpen,
+  coordinateWorkspaceOpenUsingPreference,
+  getWorkspaceOpenPreference,
   listenForWindowSettlement,
   listenForWorkbenchMenu,
   listenForLauncherMenu,
   resetEditorMenuState,
+  resetWorkspaceOpenPreference,
   resolveWindowSettlement,
   selectMarkdownFile,
   selectWorkspaceFolder,
+  setWorkspaceOpenPreference,
   setWorkbenchWindowTitle,
   updateEditorMenuState,
   type LauncherMenuAction,
@@ -102,6 +107,11 @@ export interface WorkspaceWorkbenchGateway extends EditorDocumentGateway {
   authorize(selectionId: string, confirmed: boolean): Promise<WorkspaceDescriptor>;
   cancelSelection(selectionId: string): Promise<boolean>;
   open(workspaceId: WorkspaceId, disposition?: WorkspaceOpenDisposition): Promise<WorkspaceOpenOutcome>;
+  getOpenPreference(): Promise<WorkspaceOpenPreferenceState>;
+  setOpenPreference(
+    disposition: WorkspaceOpenPreference,
+  ): Promise<WorkspaceOpenPreferenceState>;
+  resetOpenPreference(): Promise<WorkspaceOpenPreferenceState>;
   setTitle(path: WorkspaceRelativePath | null): Promise<void>;
   listenMenu(listener: (action: LauncherMenuAction) => void): Promise<() => void>;
   listenWorkbenchMenu(
@@ -144,7 +154,10 @@ export const desktopWorkspaceWorkbenchGateway: WorkspaceWorkbenchGateway = {
   selectMarkdown: selectMarkdownFile,
   authorize: authorizeWorkspaceSelection,
   cancelSelection: cancelWorkspaceSelection,
-  open: coordinateWorkspaceOpen,
+  open: coordinateWorkspaceOpenUsingPreference,
+  getOpenPreference: getWorkspaceOpenPreference,
+  setOpenPreference: setWorkspaceOpenPreference,
+  resetOpenPreference: resetWorkspaceOpenPreference,
   setTitle: async (path) => {
     await setWorkbenchWindowTitle(path);
   },

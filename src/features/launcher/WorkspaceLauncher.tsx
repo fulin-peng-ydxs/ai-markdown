@@ -30,6 +30,8 @@ import {
   type RestorableWorkspace,
 } from "./launcherState";
 import { RecoveryDialog } from "../editor/recovery/RecoveryDialog";
+import { WorkspaceOpenDecisionDialog } from "../workspace-open/WorkspaceOpenDecisionDialog";
+import { WorkspaceOpenPreferenceDialog } from "../workspace-open/WorkspaceOpenPreferenceDialog";
 
 import "./WorkspaceLauncher.css";
 
@@ -79,6 +81,9 @@ export function WorkspaceLauncher({
   const [error, setError] = useState<DesktopError | null>(null);
   const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
   const [decision, setDecision] = useState<PendingDecision | null>(null);
+  const [decisionError, setDecisionError] = useState<DesktopError | null>(null);
+  const [decisionProcessing, setDecisionProcessing] = useState(false);
+  const [openPreferenceOpen, setOpenPreferenceOpen] = useState(false);
   const [invalidRecent, setInvalidRecent] = useState<RecentWorkspace | null>(null);
   const [removeTarget, setRemoveTarget] = useState<RecentWorkspace | null>(null);
   const [restoreItems, setRestoreItems] = useState<RestoreItem[]>([]);
@@ -162,6 +167,9 @@ export function WorkspaceLauncher({
       .listenMenu((action) => {
         if (action === "file.open_folder") openFolder();
         if (action === "file.open_markdown") openMarkdown();
+        if (action === "app.workspace_open_preferences") {
+          setOpenPreferenceOpen(true);
+        }
       })
       .then((next) => {
         unlisten = next;
@@ -290,19 +298,41 @@ export function WorkspaceLauncher({
     await gateway.cancelSelection(id).catch(() => false);
   }
 
-  async function chooseDisposition(disposition: WorkspaceOpenDisposition) {
+  async function chooseDisposition(
+    disposition: WorkspaceOpenDisposition,
+    remember: boolean,
+  ) {
     if (!decision) return;
+    if (disposition === "cancel") {
+      setDecision(null);
+      setDecisionError(null);
+      return;
+    }
     const pending = decision;
-    setDecision(null);
     retryActionRef.current = () =>
       coordinate(pending.outcome.workspace.id, disposition, pending.source);
-    setBusy({ title: "正在打开工作区", description: "正在提交窗口与本地会话状态。" });
+    setDecisionProcessing(true);
+    setDecisionError(null);
+    if (remember) {
+      try {
+        await gateway.setOpenPreference(disposition);
+      } catch (reason) {
+        setDecisionError(
+          normalizeDesktopError(reason, "preferences_write_failed"),
+        );
+        setDecisionProcessing(false);
+        return;
+      }
+    }
     try {
       await coordinate(pending.outcome.workspace.id, disposition, pending.source);
+      setDecision(null);
     } catch (reason) {
-      setError(normalizeDesktopError(reason, "window_create_failed"));
+      setDecisionError(
+        normalizeDesktopError(reason, "window_create_failed"),
+      );
     } finally {
-      setBusy(null);
+      setDecisionProcessing(false);
     }
   }
 
@@ -427,7 +457,18 @@ export function WorkspaceLauncher({
           <span aria-hidden="true">~/</span>
           <strong>Plainroot</strong>
         </div>
-        <p>本地优先的 Markdown 工作空间</p>
+        <div className="launcher__header-actions">
+          <p>本地优先的 Markdown 工作空间</p>
+          <button
+            aria-label="设置工作区打开方式"
+            className="launcher__settings"
+            onClick={() => setOpenPreferenceOpen(true)}
+            title="设置工作区打开方式"
+            type="button"
+          >
+            ⚙
+          </button>
+        </div>
       </header>
 
       <section className="launcher__content">
@@ -574,15 +615,21 @@ export function WorkspaceLauncher({
         <div className="launcher-dialog-text"><p className="launcher__eyebrow">授权范围确认</p><h2 id="scope-title">允许访问“{confirmation?.proposal.displayName}”？</h2><p id="scope-description">Plainroot 将访问下列本地目录。打开单个 Markdown 文件时，也需要访问它所在的目录。</p><dl><dt>所选位置</dt><dd>{confirmation?.proposal.selectedPath}</dd><dt>实际范围</dt><dd>{confirmation?.proposal.canonicalRoot}</dd></dl></div>
       </AppDialog>
 
-      <AppDialog
-        describedBy="decision-description"
-        labelledBy="decision-title"
-        onRequestClose={() => void chooseDisposition("cancel")}
+      <WorkspaceOpenDecisionDialog
+        error={decisionError}
+        onChoose={(disposition, remember) =>
+          void chooseDisposition(disposition, remember)
+        }
         open={Boolean(decision)}
-        actions={<><button className="plainroot-button" onClick={() => void chooseDisposition("cancel")} type="button">取消</button><button className="plainroot-button" onClick={() => void chooseDisposition("new_window")} type="button">在新窗口打开</button><button className="plainroot-button plainroot-button--primary" onClick={() => void chooseDisposition("current_window")} type="button">替换当前窗口</button></>}
-      >
-        <div className="launcher-dialog-text"><p className="launcher__eyebrow">选择打开位置</p><h2 id="decision-title">当前窗口已有工作区</h2><p id="decision-description">“{decision?.outcome.currentWorkspaceName}”正在当前窗口中。你想在哪里打开“{decision?.outcome.workspace.displayName}”？</p></div>
-      </AppDialog>
+        outcome={decision?.outcome ?? null}
+        processing={decisionProcessing}
+      />
+
+      <WorkspaceOpenPreferenceDialog
+        gateway={gateway}
+        onClose={() => setOpenPreferenceOpen(false)}
+        open={openPreferenceOpen}
+      />
 
       <AppDialog
         describedBy="invalid-description"

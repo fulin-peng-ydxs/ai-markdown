@@ -625,6 +625,19 @@ export const WORKSPACE_OPEN_DISPOSITIONS = [
 export type WorkspaceOpenDisposition =
   (typeof WORKSPACE_OPEN_DISPOSITIONS)[number];
 
+export const WORKSPACE_OPEN_PREFERENCES = [
+  "ask",
+  "current_window",
+  "new_window",
+] as const;
+
+export type WorkspaceOpenPreference =
+  (typeof WORKSPACE_OPEN_PREFERENCES)[number];
+
+export interface WorkspaceOpenPreferenceState {
+  disposition: WorkspaceOpenPreference;
+}
+
 export const WORKSPACE_OPEN_STATUSES = [
   "decision_required",
   "opened_current",

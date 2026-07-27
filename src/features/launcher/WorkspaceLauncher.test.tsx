@@ -41,6 +41,9 @@ function gateway(overrides: Partial<WorkspaceLauncherGateway> = {}): WorkspaceLa
     authorize: vi.fn(),
     cancelSelection: vi.fn().mockResolvedValue(true),
     open: vi.fn().mockResolvedValue({ status: "focused_existing", workspaceId: "workspace-a", windowLabel: "plainroot-window-2" }),
+    getOpenPreference: vi.fn().mockResolvedValue({ disposition: "ask" }),
+    setOpenPreference: vi.fn().mockImplementation(async (disposition) => ({ disposition })),
+    resetOpenPreference: vi.fn().mockResolvedValue({ disposition: "ask" }),
     removeRecent: vi.fn().mockResolvedValue(true),
     removeSession: vi.fn().mockResolvedValue(false),
     listenMenu: vi.fn().mockResolvedValue(() => undefined),
@@ -118,7 +121,7 @@ describe("WorkspaceLauncher", () => {
     await waitFor(() => expect(onWorkspaceOpened).toHaveBeenCalledWith(expect.objectContaining({ id: "workspace-demo" })));
   });
 
-  it("maps the two native menu events to their real selectors", async () => {
+  it("maps native open and preference menu events to real actions", async () => {
     let menuListener: Parameters<WorkspaceLauncherGateway["listenMenu"]>[0] | null = null;
     const api = gateway({
       listenMenu: vi.fn().mockImplementation(async (listener) => {
@@ -137,6 +140,73 @@ describe("WorkspaceLauncher", () => {
       menuListener?.("file.open_markdown");
     });
     await waitFor(() => expect(api.selectMarkdown).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      menuListener?.("app.workspace_open_preferences");
+    });
+    expect(
+      await screen.findByRole("heading", { name: "选择默认打开方式" }),
+    ).toBeTruthy();
+  });
+
+  it("persists a remembered disposition before opening the requested window", async () => {
+    const target = {
+      id: "workspace-b",
+      selectedPath: "/tmp/research",
+      canonicalRoot: "/tmp/research",
+      displayName: "research",
+      writable: true,
+      initialFile: null,
+    };
+    const calls: string[] = [];
+    const api = gateway({
+      validateRecent: vi.fn().mockResolvedValue({
+        status: "already_open",
+        workspaceId: "workspace-a",
+        initialFile: null,
+      }),
+      open: vi
+        .fn()
+        .mockResolvedValueOnce({
+          status: "decision_required",
+          workspace: target,
+          currentWorkspaceId: "workspace-current",
+          currentWorkspaceName: "current",
+        })
+        .mockImplementationOnce(async () => {
+          calls.push("open");
+          return {
+            status: "opened_new",
+            workspace: target,
+            windowLabel: "plainroot-window-2",
+          };
+        }),
+      setOpenPreference: vi.fn().mockImplementation(async (disposition) => {
+        calls.push(`preference:${disposition}`);
+        return { disposition };
+      }),
+    });
+    const user = userEvent.setup();
+    render(<WorkspaceLauncher gateway={api} />);
+
+    await screen.findByText("Research Notes");
+    const recentButton = screen
+      .getAllByRole("button")
+      .find(
+        (button) =>
+          button.classList.contains("launcher__recent-main") &&
+          button.textContent?.includes("Research Notes"),
+      );
+    expect(recentButton).toBeTruthy();
+    await user.click(recentButton!);
+    await user.click(
+      await screen.findByRole("checkbox", { name: "记住这次选择" }),
+    );
+    await user.click(screen.getByRole("button", { name: "在新窗口打开" }));
+
+    await waitFor(() =>
+      expect(api.open).toHaveBeenLastCalledWith("workspace-b", "new_window"),
+    );
+    expect(calls).toEqual(["preference:new_window", "open"]);
   });
 
   it("allows only one native selector while an open action is in flight", async () => {

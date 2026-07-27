@@ -137,6 +137,9 @@ function gateway(overrides: Partial<WorkspaceWorkbenchGateway> = {}): WorkspaceW
     authorize: vi.fn(),
     cancelSelection: vi.fn().mockResolvedValue(true),
     open: vi.fn().mockResolvedValue({ status: "cancelled" }),
+    getOpenPreference: vi.fn().mockResolvedValue({ disposition: "ask" }),
+    setOpenPreference: vi.fn().mockImplementation(async (disposition) => ({ disposition })),
+    resetOpenPreference: vi.fn().mockResolvedValue({ disposition: "ask" }),
     setTitle: vi.fn().mockResolvedValue(undefined),
     listenMenu: vi.fn().mockResolvedValue(() => undefined),
     listenWorkbenchMenu: vi.fn().mockResolvedValue(() => undefined),
@@ -220,6 +223,169 @@ describe("WorkspaceWorkbench", () => {
     await waitFor(() =>
       expect(resolveSettlement).toHaveBeenCalledWith("settlement-1", true),
     );
+  });
+
+  it("reuses the mixed tab settlement batch for cancel and workspace replacement", async () => {
+    let settlementListener:
+      | ((intent: WindowSettlementIntent) => void)
+      | undefined;
+    const nextWorkspace = {
+      ...workspace,
+      id: "workspace-b",
+      displayName: "research",
+      selectedPath: "/tmp/research",
+      canonicalRoot: "/tmp/research",
+    };
+    const resolveSettlement = vi.fn().mockImplementation(
+      async (intentId: string, allow: boolean) =>
+        allow && intentId === "replace-1"
+          ? {
+              status: "opened_current",
+              workspace: nextWorkspace,
+              windowLabel: "plainroot-window-1",
+            }
+          : { status: "cancelled" },
+    );
+    const recoveryMetadata = {
+      snapshotId: "snapshot-readonly",
+      workspaceId: "workspace-a",
+      relativePath: "note.md",
+      baseRevision: {
+        modifiedAt: 1,
+        size: 8,
+        contentHash: "hash:note.md",
+        encoding: "utf8" as const,
+        lineEnding: "lf" as const,
+      },
+      contentHash: "recovered",
+      createdAt: 1,
+      updatedAt: 2,
+      expiresAt: 3,
+      sizeBytes: 24,
+    };
+    const api = gateway({
+      pollScan: vi.fn().mockResolvedValue({
+        scanId: "scan-1",
+        processed: 2,
+        entries: [note, secondNote],
+        issues: [],
+        complete: true,
+        cancelled: false,
+      }),
+      read: vi.fn().mockImplementation(async (_workspaceId, path) => ({
+        relativePath: path,
+        status: "ready",
+        content: path === "note.md" ? "# Read only" : "# Writable",
+        revision: {
+          modifiedAt: 1,
+          size: 8,
+          contentHash: `hash:${path}`,
+          encoding: "utf8",
+          lineEnding: "lf",
+        },
+      })),
+      listenSettlement: vi.fn().mockImplementation(async (
+        listener: (intent: WindowSettlementIntent) => void,
+      ) => {
+        settlementListener = listener;
+        return () => undefined;
+      }),
+      resolveSettlement,
+    });
+    vi.mocked(api.recoveryGateway.list).mockResolvedValue([recoveryMetadata]);
+    vi.mocked(api.recoveryGateway.get).mockResolvedValue({
+      metadata: recoveryMetadata,
+      content: "# Unsaved read only",
+    });
+    vi.mocked(api.saveGateway.write).mockRejectedValue({
+      code: "safe_write_failed",
+      messageKey: "error.desktop.safe_write_failed",
+      pathHint: "note.md",
+      contentSafe: true,
+      retryable: true,
+    });
+    const onWorkspaceChanged = vi.fn();
+    const user = userEvent.setup();
+    const rendered = render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={onWorkspaceChanged}
+      />,
+    );
+
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await user.click(
+      await screen.findByRole("button", { name: "恢复到编辑区" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByText("未保存")
+          .some((node) => node.closest(".document-save-status")),
+      ).toBe(true),
+    );
+    await user.click(screen.getByRole("treeitem", { name: /second\.md/ }));
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+    await waitFor(() => expect(settlementListener).toBeDefined());
+
+    await act(async () => {
+      settlementListener?.({
+        intentId: "quit-1",
+        kind: "quit_app",
+        windowLabel: "plainroot-window-1",
+      });
+    });
+    await waitFor(() =>
+      expect(
+        rendered.container.querySelector(".tab-settlement__header h2")
+          ?.textContent,
+      ).toBe("处理 2 个页签后继续"),
+    );
+    const cancelButton = [...rendered.container.querySelectorAll("button")].find(
+      (button) => button.textContent === "取消并保持全部页签",
+    );
+    expect(cancelButton).toBeTruthy();
+    fireEvent.click(cancelButton!);
+    await waitFor(() =>
+      expect(resolveSettlement).toHaveBeenCalledWith("quit-1", false),
+    );
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+
+    await act(async () => {
+      settlementListener?.({
+        intentId: "replace-1",
+        kind: "replace_workspace",
+        windowLabel: "plainroot-window-1",
+      });
+    });
+    await waitFor(() =>
+      expect(
+        [...rendered.container.querySelectorAll("button")].some(
+          (button) => button.textContent === "放弃修改",
+        ),
+      ).toBe(true),
+    );
+    fireEvent.click(
+      [...rendered.container.querySelectorAll("button")].find(
+        (button) => button.textContent === "放弃修改",
+      )!,
+    );
+    fireEvent.click(
+      [...rendered.container.querySelectorAll("button")].find(
+        (button) => button.textContent === "确认放弃这个页签的修改",
+      )!,
+    );
+    fireEvent.click(
+      [...rendered.container.querySelectorAll("button")].find(
+        (button) => button.textContent === "安全替换当前窗口",
+      )!,
+    );
+
+    await waitFor(() =>
+      expect(resolveSettlement).toHaveBeenCalledWith("replace-1", true),
+    );
+    expect(onWorkspaceChanged).toHaveBeenCalledWith(nextWorkspace);
   });
 
   it("reads a real tree entry and shows only the returned Markdown content", async () => {

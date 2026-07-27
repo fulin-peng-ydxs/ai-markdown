@@ -10,6 +10,8 @@ import type {
   WorkspaceLauncherSnapshot,
   WorkspaceWorkbenchSnapshot,
   WorkspaceOpenDisposition,
+  WorkspaceOpenPreference,
+  WorkspaceOpenPreferenceState,
   WorkspaceOpenOutcome,
   WorkspaceSelectionOutcome,
   WindowSettlementIntent,
@@ -58,6 +60,36 @@ export function coordinateWorkspaceOpen(
     workspaceId,
     disposition: disposition ?? null,
   });
+}
+
+export function getWorkspaceOpenPreference(): Promise<WorkspaceOpenPreferenceState> {
+  return invoke<WorkspaceOpenPreferenceState>("get_workspace_open_preference");
+}
+
+export function setWorkspaceOpenPreference(
+  disposition: WorkspaceOpenPreference,
+): Promise<WorkspaceOpenPreferenceState> {
+  return invoke<WorkspaceOpenPreferenceState>("set_workspace_open_preference", {
+    disposition,
+  });
+}
+
+export function resetWorkspaceOpenPreference(): Promise<WorkspaceOpenPreferenceState> {
+  return invoke<WorkspaceOpenPreferenceState>("reset_workspace_open_preference");
+}
+
+export async function coordinateWorkspaceOpenUsingPreference(
+  workspaceId: WorkspaceId,
+  disposition?: WorkspaceOpenDisposition,
+): Promise<WorkspaceOpenOutcome> {
+  if (disposition) return coordinateWorkspaceOpen(workspaceId, disposition);
+  const preference = await getWorkspaceOpenPreference().catch(
+    () => ({ disposition: "ask" as const }),
+  );
+  return coordinateWorkspaceOpen(
+    workspaceId,
+    preference.disposition === "ask" ? undefined : preference.disposition,
+  );
 }
 
 export function createPlainrootWindow(): Promise<WindowActionResult> {
@@ -112,7 +144,8 @@ export function removeWorkspaceSession(workspaceId: WorkspaceId): Promise<boolea
 
 export type LauncherMenuAction =
   | "file.open_folder"
-  | "file.open_markdown";
+  | "file.open_markdown"
+  | "app.workspace_open_preferences";
 
 export function listenForLauncherMenu(
   listener: (action: LauncherMenuAction) => void,
@@ -120,7 +153,8 @@ export function listenForLauncherMenu(
   return listen<LauncherMenuAction>("plainroot://launcher-menu", (event) => {
     if (
       event.payload === "file.open_folder" ||
-      event.payload === "file.open_markdown"
+      event.payload === "file.open_markdown" ||
+      event.payload === "app.workspace_open_preferences"
     ) {
       listener(event.payload);
     }

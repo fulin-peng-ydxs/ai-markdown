@@ -28,6 +28,21 @@ pub struct WorkspaceAssetPreference {
     pub asset_directory: WorkspaceRelativePath,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceOpenPreference {
+    #[default]
+    Ask,
+    CurrentWindow,
+    NewWindow,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceOpenPreferenceState {
+    pub disposition: WorkspaceOpenPreference,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredWorkspacePreferences {
@@ -38,6 +53,8 @@ struct StoredWorkspacePreferences {
 #[serde(rename_all = "camelCase")]
 struct PlainrootPreferencesV1 {
     schema_version: u32,
+    #[serde(default)]
+    workspace_open_disposition: WorkspaceOpenPreference,
     workspaces: BTreeMap<String, StoredWorkspacePreferences>,
 }
 
@@ -45,6 +62,7 @@ impl Default for PlainrootPreferencesV1 {
     fn default() -> Self {
         Self {
             schema_version: PREFERENCES_SCHEMA_VERSION,
+            workspace_open_disposition: WorkspaceOpenPreference::Ask,
             workspaces: BTreeMap::new(),
         }
     }
@@ -135,6 +153,35 @@ impl PreferencesRepository {
             workspace_id: workspace_id.clone(),
             asset_directory,
         })
+    }
+
+    pub fn get_workspace_open_preference(
+        &self,
+    ) -> Result<WorkspaceOpenPreferenceState, DesktopError> {
+        let state = self.lock_state()?;
+        let preferences = ready_preferences(&state)?;
+        Ok(WorkspaceOpenPreferenceState {
+            disposition: preferences.workspace_open_disposition,
+        })
+    }
+
+    pub fn set_workspace_open_preference(
+        &self,
+        disposition: WorkspaceOpenPreference,
+    ) -> Result<WorkspaceOpenPreferenceState, DesktopError> {
+        let mut state = self.lock_state()?;
+        let current = ready_preferences(&state)?;
+        let mut next = current.clone();
+        next.workspace_open_disposition = disposition;
+        self.store.save(&next)?;
+        *state = PreferencesState::Ready(next);
+        Ok(WorkspaceOpenPreferenceState { disposition })
+    }
+
+    pub fn reset_workspace_open_preference(
+        &self,
+    ) -> Result<WorkspaceOpenPreferenceState, DesktopError> {
+        self.set_workspace_open_preference(WorkspaceOpenPreference::Ask)
     }
 
     pub fn set_asset_directory(
@@ -511,7 +558,7 @@ fn preferences_error(code: DesktopErrorCode, retryable: bool) -> DesktopError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contract_test::assert_interface_matches;
+    use crate::contract_test::{assert_interface_matches, typescript_string_constant_values};
     use crate::test_support::TestDirectory;
 
     #[test]
@@ -544,6 +591,61 @@ mod tests {
         assert_interface_matches(
             "WorkspaceAssetPreference",
             &reloaded.get(&workspace_id).unwrap(),
+        );
+    }
+
+    #[test]
+    fn workspace_open_preference_is_backward_compatible_persisted_and_resettable() {
+        let root = TestDirectory::create("workspace-open-preference");
+        let legacy_path = root.path().join(PREFERENCES_FILE_NAME);
+        fs::write(&legacy_path, br#"{"schemaVersion":1,"workspaces":{}}"#).unwrap();
+        let repository = PreferencesRepository::initialize_at(root.path().to_path_buf());
+        assert_eq!(
+            repository
+                .get_workspace_open_preference()
+                .unwrap()
+                .disposition,
+            WorkspaceOpenPreference::Ask
+        );
+
+        repository
+            .set_workspace_open_preference(WorkspaceOpenPreference::NewWindow)
+            .unwrap();
+        let reloaded = PreferencesRepository::initialize_at(root.path().to_path_buf());
+        assert_eq!(
+            reloaded
+                .get_workspace_open_preference()
+                .unwrap()
+                .disposition,
+            WorkspaceOpenPreference::NewWindow
+        );
+        assert_eq!(
+            reloaded
+                .reset_workspace_open_preference()
+                .unwrap()
+                .disposition,
+            WorkspaceOpenPreference::Ask
+        );
+        assert_interface_matches(
+            "WorkspaceOpenPreferenceState",
+            &reloaded.get_workspace_open_preference().unwrap(),
+        );
+        assert_eq!(
+            typescript_string_constant_values("WORKSPACE_OPEN_PREFERENCES"),
+            [
+                WorkspaceOpenPreference::Ask,
+                WorkspaceOpenPreference::CurrentWindow,
+                WorkspaceOpenPreference::NewWindow,
+            ]
+            .into_iter()
+            .map(|value| {
+                serde_json::to_value(value)
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect::<Vec<_>>()
         );
     }
 
@@ -647,6 +749,20 @@ mod tests {
         assert_eq!(
             repository.get(&workspace_id).unwrap().asset_directory,
             default_asset_directory()
+        );
+        assert_eq!(
+            repository
+                .set_workspace_open_preference(WorkspaceOpenPreference::NewWindow)
+                .unwrap_err()
+                .code,
+            DesktopErrorCode::PreferencesWriteFailed
+        );
+        assert_eq!(
+            repository
+                .get_workspace_open_preference()
+                .unwrap()
+                .disposition,
+            WorkspaceOpenPreference::Ask
         );
     }
 }
