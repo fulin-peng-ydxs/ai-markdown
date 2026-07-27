@@ -26,6 +26,7 @@ import "./WorkspaceTabBar.css";
 
 interface WorkspaceTabBarProps {
   closingTabIds?: ReadonlySet<WorkspaceTabId>;
+  overflowRequest?: number;
   onActivate(tabId: WorkspaceTabId): void;
   onClose(tabId: WorkspaceTabId): void | Promise<void>;
   onCloseMany(
@@ -48,6 +49,7 @@ interface ContextTarget {
 
 export function WorkspaceTabBar({
   closingTabIds = new Set(),
+  overflowRequest = 0,
   onActivate,
   onClose,
   onCloseMany,
@@ -129,6 +131,18 @@ export function WorkspaceTabBar({
       return next.size === current.size ? current : next;
     });
   }, [snapshot?.collection.recentlyClosed]);
+
+  useEffect(() => {
+    if (
+      overflowRequest <= 0 ||
+      (tabs.length === 0 &&
+        (snapshot?.collection.recentlyClosed.length ?? 0) === 0)
+    ) {
+      return;
+    }
+    setContextTarget(null);
+    setOverflowOpen(true);
+  }, [overflowRequest, snapshot?.collection.recentlyClosed.length, tabs.length]);
 
   const activeTab = tabs.find((tab) => tab.tabId === activeTabId) ?? null;
   const activeStatus = activeTab

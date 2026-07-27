@@ -170,6 +170,7 @@ export function WorkspaceWorkbench({
   const tabManagerSnapshotRef = useRef<WorkspaceTabManagerSnapshot | null>(null);
   const [tabSnapshot, setTabSnapshot] =
     useState<WorkspaceTabManagerSnapshot | null>(null);
+  const [tabOverflowRequest, setTabOverflowRequest] = useState(0);
   const [closingTabIds, setClosingTabIds] = useState<Set<WorkspaceTabId>>(
     new Set(),
   );
@@ -259,6 +260,16 @@ export function WorkspaceWorkbench({
     documentState.status === "empty" ? null : documentState.relativePath;
   const activeTab = tabSnapshot?.activeTab ?? null;
   const editorMenuState = useMemo<EditorMenuState>(() => {
+    const orderedTabIds = tabSnapshot?.collection.orderedTabIds ?? [];
+    const activeTabIndex = tabSnapshot?.collection.activeTabId
+      ? orderedTabIds.indexOf(tabSnapshot.collection.activeTabId)
+      : -1;
+    const tabs = {
+      tabCount: orderedTabIds.length,
+      activeTabIndex: activeTabIndex >= 0 ? activeTabIndex : null,
+      recentlyClosedCount:
+        tabSnapshot?.collection.recentlyClosed.length ?? 0,
+    };
     if (documentState.status !== "ready") {
       return {
         hasDocument: false,
@@ -270,6 +281,7 @@ export function WorkspaceWorkbench({
         canUndo: false,
         canRedo: false,
         mode: null,
+        tabs,
       };
     }
     const saveBusy = documentState.saveState.kind === "saving";
@@ -284,12 +296,14 @@ export function WorkspaceWorkbench({
       canUndo: documentState.history.past.length > 0,
       canRedo: documentState.history.future.length > 0,
       mode: documentState.mode,
+      tabs,
     };
   }, [
     busyLabel,
     documentState,
     editorRuntime.busy,
     mutationProcessing,
+    tabSnapshot,
   ]);
 
   const commitDocument = useCallback((next: DocumentSessionState) => {
@@ -642,6 +656,64 @@ export function WorkspaceWorkbench({
         return;
       case "view.source":
         editorHandleRef.current?.switchMode("source");
+        return;
+      case "tab.close_current": {
+        const activeTabId =
+          tabManagerSnapshotRef.current?.collection.activeTabId;
+        if (activeTabId) void closeWorkspaceTab(activeTabId);
+        return;
+      }
+      case "tab.reopen_closed": {
+        const recent =
+          tabManagerSnapshotRef.current?.collection.recentlyClosed[0];
+        if (recent) void reopenWorkspaceTab(recent.pathIdentity);
+        return;
+      }
+      case "tab.next":
+      case "tab.previous": {
+        const collection = tabManagerSnapshotRef.current?.collection;
+        if (!collection?.activeTabId || collection.orderedTabIds.length < 2) {
+          return;
+        }
+        const currentIndex = collection.orderedTabIds.indexOf(
+          collection.activeTabId,
+        );
+        if (currentIndex < 0) return;
+        const direction = action === "tab.next" ? 1 : -1;
+        const nextIndex =
+          (currentIndex + direction + collection.orderedTabIds.length) %
+          collection.orderedTabIds.length;
+        const nextTabId = collection.orderedTabIds[nextIndex];
+        if (nextTabId) activateWorkspaceTab(nextTabId);
+        return;
+      }
+      case "tab.close_others":
+      case "tab.close_right":
+      case "tab.close_all": {
+        const collection = tabManagerSnapshotRef.current?.collection;
+        if (!collection?.activeTabId) return;
+        const activeIndex = collection.orderedTabIds.indexOf(
+          collection.activeTabId,
+        );
+        const tabIds =
+          action === "tab.close_all"
+            ? collection.orderedTabIds
+            : action === "tab.close_right"
+              ? collection.orderedTabIds.slice(activeIndex + 1)
+              : collection.orderedTabIds.filter(
+                  (tabId) => tabId !== collection.activeTabId,
+                );
+        const reason =
+          action === "tab.close_all"
+            ? "close_all"
+            : action === "tab.close_right"
+              ? "close_right"
+              : "close_others";
+        void closeWorkspaceTabs(tabIds, reason);
+        return;
+      }
+      case "tab.show_all":
+        setTabOverflowRequest((current) => current + 1);
     }
   };
 
@@ -2038,6 +2110,7 @@ export function WorkspaceWorkbench({
 
       <WorkspaceTabBar
         closingTabIds={closingTabIds}
+        overflowRequest={tabOverflowRequest}
         onActivate={activateWorkspaceTab}
         onClose={closeWorkspaceTab}
         onCloseMany={closeWorkspaceTabs}
@@ -2503,21 +2576,37 @@ function workbenchMenuActionAvailable(
   state: EditorMenuState,
   action: WorkbenchMenuAction,
 ): boolean {
-  if (!state.hasDocument || state.busy) return false;
+  if (state.busy) return false;
   switch (action) {
     case "file.save":
-      return !state.readOnly;
+      return state.hasDocument && !state.readOnly;
     case "file.save_copy":
     case "edit.find":
-      return true;
+      return state.hasDocument;
     case "edit.undo":
-      return !state.readOnly && state.canUndo;
+      return state.hasDocument && !state.readOnly && state.canUndo;
     case "edit.redo":
-      return !state.readOnly && state.canRedo;
+      return state.hasDocument && !state.readOnly && state.canRedo;
     case "view.visual":
-      return state.mode !== "visual";
+      return state.hasDocument && state.mode !== "visual";
     case "view.source":
-      return state.mode !== "source";
+      return state.hasDocument && state.mode !== "source";
+    case "tab.close_current":
+    case "tab.close_all":
+      return state.tabs.activeTabIndex !== null;
+    case "tab.reopen_closed":
+      return state.tabs.recentlyClosedCount > 0;
+    case "tab.next":
+    case "tab.previous":
+    case "tab.close_others":
+      return state.tabs.activeTabIndex !== null && state.tabs.tabCount > 1;
+    case "tab.close_right":
+      return (
+        state.tabs.activeTabIndex !== null &&
+        state.tabs.activeTabIndex < state.tabs.tabCount - 1
+      );
+    case "tab.show_all":
+      return state.tabs.tabCount > 0 || state.tabs.recentlyClosedCount > 0;
   }
 }
 

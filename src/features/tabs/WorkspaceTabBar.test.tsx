@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { useState } from "react";
 
 import type { FileRevision, WorkspaceRelativePath } from "../../services/desktop/contracts";
 import {
@@ -171,6 +172,40 @@ describe("WorkspaceTabBar", () => {
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it("opens the shared overflow menu when the native command requests the tab list", async () => {
+    function Harness() {
+      const [request, setRequest] = useState(0);
+      return (
+        <>
+          <button onClick={() => setRequest((value) => value + 1)} type="button">
+            原生命令
+          </button>
+          <WorkspaceTabBar
+            onActivate={vi.fn()}
+            onClose={vi.fn()}
+            onCloseMany={vi.fn()}
+            onDiscardRecent={vi.fn()}
+            onMove={vi.fn()}
+            onReopen={vi.fn().mockResolvedValue({
+              status: "opened" as const,
+              tabId: "reopened-tab",
+            })}
+            overflowRequest={request}
+            snapshot={tabSnapshot(["note.md", "second.md"])}
+          />
+        </>
+      );
+    }
+
+    render(<Harness />);
+    await userEvent.click(screen.getByRole("button", { name: "原生命令" }));
+    const menu = await screen.findByRole("menu", {
+      name: "所有页签与最近关闭",
+    });
+    expect(menu).toBeTruthy();
+    expect(document.activeElement?.getAttribute("role")).toBe("menuitem");
   });
 
   it("routes context batch-close actions through the shared settlement callback", async () => {

@@ -27,6 +27,14 @@ pub const REDO_ID: &str = "edit.redo";
 pub const FIND_ID: &str = "edit.find";
 pub const VISUAL_MODE_ID: &str = "view.visual";
 pub const SOURCE_MODE_ID: &str = "view.source";
+pub const CLOSE_CURRENT_TAB_ID: &str = "tab.close_current";
+pub const REOPEN_CLOSED_TAB_ID: &str = "tab.reopen_closed";
+pub const NEXT_TAB_ID: &str = "tab.next";
+pub const PREVIOUS_TAB_ID: &str = "tab.previous";
+pub const CLOSE_OTHER_TABS_ID: &str = "tab.close_others";
+pub const CLOSE_RIGHT_TABS_ID: &str = "tab.close_right";
+pub const CLOSE_ALL_TABS_ID: &str = "tab.close_all";
+pub const SHOW_ALL_TABS_ID: &str = "tab.show_all";
 pub const WORKSPACE_OPEN_PREFERENCES_ID: &str = "app.workspace_open_preferences";
 pub const HELP_ID: &str = "help.plainroot";
 pub const LAUNCHER_MENU_EVENT: &str = "plainroot://launcher-menu";
@@ -41,6 +49,14 @@ const WORKBENCH_ACTION_IDS: &[&str] = &[
     FIND_ID,
     VISUAL_MODE_ID,
     SOURCE_MODE_ID,
+    CLOSE_CURRENT_TAB_ID,
+    REOPEN_CLOSED_TAB_ID,
+    NEXT_TAB_ID,
+    PREVIOUS_TAB_ID,
+    CLOSE_OTHER_TABS_ID,
+    CLOSE_RIGHT_TABS_ID,
+    CLOSE_ALL_TABS_ID,
+    SHOW_ALL_TABS_ID,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,6 +64,14 @@ const WORKBENCH_ACTION_IDS: &[&str] = &[
 pub enum EditorMenuMode {
     Visual,
     Source,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TabMenuState {
+    pub tab_count: u32,
+    pub active_tab_index: Option<u32>,
+    pub recently_closed_count: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -59,6 +83,7 @@ pub struct EditorMenuState {
     pub can_undo: bool,
     pub can_redo: bool,
     pub mode: Option<EditorMenuMode>,
+    pub tabs: TabMenuState,
 }
 
 impl Default for EditorMenuState {
@@ -70,6 +95,7 @@ impl Default for EditorMenuState {
             can_undo: false,
             can_redo: false,
             mode: None,
+            tabs: TabMenuState::default(),
         }
     }
 }
@@ -199,6 +225,50 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
     let view_builder = view_builder.separator().fullscreen_with_text("进入全屏");
     let view_menu = view_builder.build()?;
 
+    let tab_menu = SubmenuBuilder::new(app, "页签")
+        .item(&custom_item(
+            app,
+            CLOSE_CURRENT_TAB_ID,
+            "关闭当前页签",
+            Some("CmdOrCtrl+W"),
+        )?)
+        .item(&custom_item(
+            app,
+            REOPEN_CLOSED_TAB_ID,
+            "重新打开最近关闭的页签",
+            Some("CmdOrCtrl+Shift+T"),
+        )?)
+        .separator()
+        .item(&custom_item(
+            app,
+            NEXT_TAB_ID,
+            "下一个页签",
+            Some("Ctrl+Tab"),
+        )?)
+        .item(&custom_item(
+            app,
+            PREVIOUS_TAB_ID,
+            "上一个页签",
+            Some("Ctrl+Shift+Tab"),
+        )?)
+        .separator()
+        .item(&custom_item(
+            app,
+            CLOSE_OTHER_TABS_ID,
+            "关闭其他页签",
+            None,
+        )?)
+        .item(&custom_item(
+            app,
+            CLOSE_RIGHT_TABS_ID,
+            "关闭右侧页签",
+            None,
+        )?)
+        .item(&custom_item(app, CLOSE_ALL_TABS_ID, "关闭全部页签", None)?)
+        .separator()
+        .item(&custom_item(app, SHOW_ALL_TABS_ID, "所有页签…", None)?)
+        .build()?;
+
     let window_builder = SubmenuBuilder::new(app, "窗口")
         .minimize_with_text("最小化")
         .maximize_with_text("缩放");
@@ -240,6 +310,7 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         .item(&file_menu)
         .item(&edit_menu)
         .item(&view_menu)
+        .item(&tab_menu)
         .item(&window_menu)
         .item(&help_menu)
         .build()
@@ -408,6 +479,18 @@ struct EditorMenuPolicy {
     source: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TabMenuPolicy {
+    close_current: bool,
+    reopen_closed: bool,
+    next: bool,
+    previous: bool,
+    close_others: bool,
+    close_right: bool,
+    close_all: bool,
+    show_all: bool,
+}
+
 fn editor_menu_policy(state: EditorMenuState) -> EditorMenuPolicy {
     let available = state.has_document && !state.busy;
     let editable = available && !state.read_only;
@@ -422,12 +505,32 @@ fn editor_menu_policy(state: EditorMenuState) -> EditorMenuPolicy {
     }
 }
 
+fn tab_menu_policy(state: EditorMenuState) -> TabMenuPolicy {
+    let active_index = state.tabs.active_tab_index;
+    let has_active = active_index.is_some_and(|index| index < state.tabs.tab_count);
+    let multiple = has_active && state.tabs.tab_count > 1;
+    let available = !state.busy;
+    TabMenuPolicy {
+        close_current: available && has_active,
+        reopen_closed: available && state.tabs.recently_closed_count > 0,
+        next: available && multiple,
+        previous: available && multiple,
+        close_others: available && multiple,
+        close_right: available
+            && has_active
+            && active_index.is_some_and(|index| index < state.tabs.tab_count.saturating_sub(1)),
+        close_all: available && has_active,
+        show_all: available && (state.tabs.tab_count > 0 || state.tabs.recently_closed_count > 0),
+    }
+}
+
 fn apply_editor_menu_state<R: Runtime>(
     app: &AppHandle<R>,
     state: EditorMenuState,
 ) -> Result<(), DesktopError> {
     let menu = app.menu().ok_or_else(menu_update_error)?;
     let policy = editor_menu_policy(state);
+    let tab_policy = tab_menu_policy(state);
     for (id, enabled) in [
         (SAVE_ID, policy.save),
         (SAVE_COPY_ID, policy.save_copy),
@@ -436,6 +539,14 @@ fn apply_editor_menu_state<R: Runtime>(
         (FIND_ID, policy.find),
         (VISUAL_MODE_ID, policy.visual),
         (SOURCE_MODE_ID, policy.source),
+        (CLOSE_CURRENT_TAB_ID, tab_policy.close_current),
+        (REOPEN_CLOSED_TAB_ID, tab_policy.reopen_closed),
+        (NEXT_TAB_ID, tab_policy.next),
+        (PREVIOUS_TAB_ID, tab_policy.previous),
+        (CLOSE_OTHER_TABS_ID, tab_policy.close_others),
+        (CLOSE_RIGHT_TABS_ID, tab_policy.close_right),
+        (CLOSE_ALL_TABS_ID, tab_policy.close_all),
+        (SHOW_ALL_TABS_ID, tab_policy.show_all),
     ] {
         let item = find_menu_item(&menu, id).ok_or_else(menu_update_error)?;
         set_item_enabled(&item, enabled)?;
@@ -496,8 +607,9 @@ fn menu_update_error() -> DesktopError {
 #[cfg(test)]
 mod tests {
     use super::{
-        custom_menu_enabled, editor_menu_policy, EditorMenuMode, EditorMenuState,
-        CLOSE_WINDOW_ACCELERATOR, CLOSE_WINDOW_ID, NEW_WINDOW_ID, OPEN_FOLDER_ID, OPEN_MARKDOWN_ID,
+        custom_menu_enabled, editor_menu_policy, tab_menu_policy, EditorMenuMode, EditorMenuState,
+        EditorMenuStateRegistry, TabMenuState, CLOSE_CURRENT_TAB_ID, CLOSE_WINDOW_ACCELERATOR,
+        CLOSE_WINDOW_ID, NEW_WINDOW_ID, OPEN_FOLDER_ID, OPEN_MARKDOWN_ID, SHOW_ALL_TABS_ID,
         WORKSPACE_OPEN_PREFERENCES_ID,
     };
 
@@ -510,6 +622,8 @@ mod tests {
         assert!(custom_menu_enabled(WORKSPACE_OPEN_PREFERENCES_ID));
         assert!(!custom_menu_enabled("edit.copy"));
         assert!(!custom_menu_enabled("file.save"));
+        assert!(!custom_menu_enabled(CLOSE_CURRENT_TAB_ID));
+        assert!(!custom_menu_enabled(SHOW_ALL_TABS_ID));
         assert!(!custom_menu_enabled("view.search"));
     }
 
@@ -527,6 +641,11 @@ mod tests {
             can_undo: true,
             can_redo: false,
             mode: Some(EditorMenuMode::Visual),
+            tabs: TabMenuState {
+                tab_count: 3,
+                active_tab_index: Some(1),
+                recently_closed_count: 1,
+            },
         };
         let policy = editor_menu_policy(ready);
         assert!(policy.save);
@@ -564,7 +683,102 @@ mod tests {
     }
 
     #[test]
+    fn tab_menu_policy_tracks_the_focused_windows_collection() {
+        let state = EditorMenuState {
+            tabs: TabMenuState {
+                tab_count: 3,
+                active_tab_index: Some(1),
+                recently_closed_count: 2,
+            },
+            ..EditorMenuState::default()
+        };
+        assert_eq!(
+            tab_menu_policy(state),
+            super::TabMenuPolicy {
+                close_current: true,
+                reopen_closed: true,
+                next: true,
+                previous: true,
+                close_others: true,
+                close_right: true,
+                close_all: true,
+                show_all: true,
+            }
+        );
+
+        let last = tab_menu_policy(EditorMenuState {
+            tabs: TabMenuState {
+                active_tab_index: Some(2),
+                ..state.tabs
+            },
+            ..state
+        });
+        assert!(!last.close_right);
+
+        let busy = tab_menu_policy(EditorMenuState {
+            busy: true,
+            ..state
+        });
+        assert_eq!(
+            busy,
+            super::TabMenuPolicy {
+                close_current: false,
+                reopen_closed: false,
+                next: false,
+                previous: false,
+                close_others: false,
+                close_right: false,
+                close_all: false,
+                show_all: false,
+            }
+        );
+
+        let invalid_active = tab_menu_policy(EditorMenuState {
+            tabs: TabMenuState {
+                active_tab_index: Some(u32::MAX),
+                ..state.tabs
+            },
+            ..state
+        });
+        assert!(!invalid_active.close_current);
+        assert!(!invalid_active.close_right);
+        assert!(!invalid_active.next);
+    }
+
+    #[test]
+    fn menu_state_registry_keeps_each_windows_tab_state_independent() {
+        let registry = EditorMenuStateRegistry::default();
+        let first = EditorMenuState {
+            tabs: TabMenuState {
+                tab_count: 2,
+                active_tab_index: Some(0),
+                recently_closed_count: 1,
+            },
+            ..EditorMenuState::default()
+        };
+        let second = EditorMenuState {
+            tabs: TabMenuState {
+                tab_count: 1,
+                active_tab_index: Some(0),
+                recently_closed_count: 0,
+            },
+            ..EditorMenuState::default()
+        };
+
+        registry.update("first", first).unwrap();
+        registry.update("second", second).unwrap();
+
+        assert_eq!(registry.state_for("first").unwrap(), first);
+        assert_eq!(registry.state_for("second").unwrap(), second);
+        assert_eq!(
+            registry.state_for("launcher").unwrap(),
+            EditorMenuState::default()
+        );
+    }
+
+    #[test]
     fn editor_menu_state_contract_matches_typescript() {
+        crate::contract_test::assert_interface_matches("TabMenuState", &TabMenuState::default());
         crate::contract_test::assert_interface_matches(
             "EditorMenuState",
             &EditorMenuState::default(),

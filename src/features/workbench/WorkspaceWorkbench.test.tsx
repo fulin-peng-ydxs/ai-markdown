@@ -808,6 +808,11 @@ describe("WorkspaceWorkbench", () => {
           hasDocument: true,
           readOnly: false,
           mode: "visual",
+          tabs: {
+            tabCount: 1,
+            activeTabIndex: 0,
+            recentlyClosedCount: 0,
+          },
         }),
       ),
     );
@@ -828,6 +833,122 @@ describe("WorkspaceWorkbench", () => {
         name: "保存一份独立的 Markdown 副本",
       }),
     ).toBeTruthy();
+  });
+
+  it("routes native tab commands through the shared manager, menus and settlement path", async () => {
+    let menuListener:
+      | Parameters<WorkspaceWorkbenchGateway["listenWorkbenchMenu"]>[0]
+      | undefined;
+    const api = gateway({
+      pollScan: vi.fn().mockResolvedValue({
+        scanId: "scan-1",
+        processed: 2,
+        entries: [note, secondNote],
+        issues: [],
+        complete: true,
+        cancelled: false,
+      }),
+      read: vi.fn().mockImplementation(async (_workspaceId, path) => ({
+        relativePath: path,
+        status: "ready",
+        content: path === "note.md" ? "# First" : "# Second",
+        revision: {
+          modifiedAt: 1,
+          size: 8,
+          contentHash: `hash:${path}`,
+          encoding: "utf8",
+          lineEnding: "lf",
+        },
+      })),
+      listenWorkbenchMenu: vi.fn().mockImplementation(async (listener) => {
+        menuListener = listener;
+        return () => undefined;
+      }),
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByText("First");
+    await user.click(screen.getByRole("treeitem", { name: /second\.md/ }));
+    await screen.findByText("Second");
+    await waitFor(() =>
+      expect(api.updateEditorMenu).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tabs: {
+            tabCount: 2,
+            activeTabIndex: 1,
+            recentlyClosedCount: 0,
+          },
+        }),
+      ),
+    );
+
+    act(() => menuListener?.("tab.previous"));
+    expect(
+      screen.getByRole("tab", { name: /note\.md/ }).getAttribute(
+        "aria-selected",
+      ),
+    ).toBe("true");
+
+    act(() => menuListener?.("tab.show_all"));
+    expect(
+      await screen.findByRole("menu", {
+        name: "所有页签与最近关闭",
+      }),
+    ).toBeTruthy();
+    await user.keyboard("{Escape}");
+
+    act(() => menuListener?.("tab.close_current"));
+    await waitFor(() =>
+      expect(screen.queryByRole("tab", { name: /note\.md/ })).toBeNull(),
+    );
+    await waitFor(() =>
+      expect(api.updateEditorMenu).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tabs: {
+            tabCount: 1,
+            activeTabIndex: 0,
+            recentlyClosedCount: 1,
+          },
+        }),
+      ),
+    );
+
+    act(() => menuListener?.("tab.reopen_closed"));
+    expect(await screen.findByRole("tab", { name: /note\.md/ })).toBeTruthy();
+    expect(await screen.findByText("First")).toBeTruthy();
+
+    act(() => menuListener?.("tab.previous"));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: /second\.md/ }).getAttribute(
+          "aria-selected",
+        ),
+      ).toBe("true"),
+    );
+    act(() => menuListener?.("tab.close_right"));
+    await waitFor(() =>
+      expect(screen.queryByRole("tab", { name: /note\.md/ })).toBeNull(),
+    );
+
+    act(() => menuListener?.("tab.reopen_closed"));
+    expect(await screen.findByRole("tab", { name: /note\.md/ })).toBeTruthy();
+    act(() => menuListener?.("tab.close_others"));
+    await waitFor(() =>
+      expect(screen.queryByRole("tab", { name: /second\.md/ })).toBeNull(),
+    );
+
+    act(() => menuListener?.("tab.reopen_closed"));
+    expect(await screen.findByRole("tab", { name: /second\.md/ })).toBeTruthy();
+    act(() => menuListener?.("tab.close_all"));
+    await waitFor(() => expect(screen.queryAllByRole("tab")).toHaveLength(0));
   });
 
   it("shows mode, save, counts, source format and cursor in the real status bar", async () => {

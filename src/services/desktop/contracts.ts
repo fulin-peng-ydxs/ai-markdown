@@ -9,10 +9,24 @@ export const WORKBENCH_MENU_ACTIONS = [
   "edit.find",
   "view.visual",
   "view.source",
+  "tab.close_current",
+  "tab.reopen_closed",
+  "tab.next",
+  "tab.previous",
+  "tab.close_others",
+  "tab.close_right",
+  "tab.close_all",
+  "tab.show_all",
 ] as const;
 
 export type WorkbenchMenuAction = (typeof WORKBENCH_MENU_ACTIONS)[number];
 export type EditorMenuMode = "visual" | "source";
+
+export interface TabMenuState {
+  tabCount: number;
+  activeTabIndex: number | null;
+  recentlyClosedCount: number;
+}
 
 export interface EditorMenuState {
   hasDocument: boolean;
@@ -21,6 +35,7 @@ export interface EditorMenuState {
   canUndo: boolean;
   canRedo: boolean;
   mode: EditorMenuMode | null;
+  tabs: TabMenuState;
 }
 
 export const DESKTOP_ERROR_CODES = [
