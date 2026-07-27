@@ -64,7 +64,7 @@ flowchart LR
 | 隔离桌面回归 | `tests/e2e/specs/desktop-shell.e2e.mjs`、`tests/e2e/wdio.conf.mjs`、`tests/support/workspace-fixture.mjs` | 以独立状态目录和每套件临时复制工作区驱动真实 Tauri IPC；覆盖 P2/P1、两模式编辑、资源上传、保存重开、外部修改与恢复；确定性业务流程禁用 Mocha 重试 | E2E feature 与临时命令编译期隔离，生产前端和 release 二进制不得包含；WebView 文件事件不等于系统剪贴板/Finder 原生拖入，macOS 结果不外推 Windows |
 | Rust 命令入口 | `src-tauri/src/commands/` | 对外暴露选择、授权、扫描、读取、CRUD、删除、监听和安全写命令 | 命令只接收受控标识与相对路径，磁盘成功后才返回可提交结果 |
 | 文件系统服务 | `src-tauri/src/fs/` | 路径与身份、扫描、读取、变更、删除、监听、原子替换和安全写 | 默认不跟随根内符号链接；平台差异由适配层收口 |
-| 窗口与菜单 | `src-tauri/src/window.rs`、`src-tauri/src/menu.rs` | 一目录一窗口、当前/新窗口决策、根会话协调、单实例转交、原生菜单、按窗口保存编辑菜单状态，以及系统关闭/菜单关闭/当前窗口根替换/应用退出的非阻塞结算意图 | P1 已把窗口 intent 接入混合阻塞批次与一次性提交；取消显式拒绝，最终允许前先持久化内容无关页签会话；coordinator mutex 不跨越前端等待；只有聚焦窗口活动 session 可消费的菜单项启用 |
+| 窗口与菜单 | `src-tauri/src/window.rs`、`src-tauri/src/menu.rs` | 一目录一窗口、当前/新窗口决策、根会话协调、单实例转交、原生菜单、按窗口保存编辑菜单状态，以及系统关闭/菜单关闭/当前窗口根替换/应用退出的非阻塞结算意图 | P1 已把窗口 intent 接入混合阻塞批次与一次性提交；取消显式拒绝，最终允许前尽力持久化内容无关页签会话，元数据失败只提示恢复可能退回较早状态，不阻断已安全正文的关闭；coordinator mutex 不跨越前端等待；只有聚焦窗口活动 session 可消费的菜单项启用 |
 | 版本化状态 | `src-tauri/src/state.rs` | 最近工作区与根窗口会话的原子持久化、损坏备份和未知版本保护 | 不保存 Markdown 正文、打开偏好、账号或远端状态 |
 | 版本化窗口页签会话 | `src-tauri/src/window_session.rs`、`commands/window_session.rs`、`src/services/desktop/windowSession.ts`、`src/features/tabs/tabSessionPersistence.ts` | 以独立 manifest/session 保存工作区相对路径、页签顺序、活动路径、模式、选择/锚点和最近关闭；前端对当前会话防抖投影，Rust 提供 CAS、进程内原子回滚、崩溃中间态前滚、损坏隔离、未知版本保护、非敏感 launcher 摘要和平台路径身份 | 不保存 Markdown、history、恢复正文、绝对路径、窗口像素或布局；完整读取/写入必须匹配当前窗口绑定与授权工作区，P2 不获得文件名；已有非空会话在 T42 恢复前不由当前页面覆盖 |
 | 版本化恢复 | `src-tauri/src/editor/recovery.rs`、`commands/editor.rs`、`src/services/desktop/recovery.ts` | app data 内最新单文档快照、活动脏会话保护、锁外大正文 I/O、并发读取租约、期限/条目/容量清理、损坏隔离和 IPC/TS 契约；P1/P2 已提供受控查询和恢复入口 | 不替代工作区 `.md`；恢复只进入 dirty session；正文读取与删除必须匹配已授权 workspace、snapshot id 与相对路径 |
@@ -105,7 +105,7 @@ flowchart LR
 
 ### 4.3 窗口与状态事务
 
-- 当前窗口有页签时，系统关闭、菜单关闭和当前窗口根替换先创建一次性结算 intent，并交给 P1 的同一不可变全页签结算批次。只有所有目标通过 incarnation/generation/editVersion 复核、内容无关会话元数据持久化成功并允许 intent 后，Rust 才继续原窗口事务；取消、保存失败、偏好写失败或失效 intent 均保留原窗口与全部页签。
+- 当前窗口有页签时，系统关闭、菜单关闭和当前窗口根替换先创建一次性结算 intent，并交给 P1 的同一不可变全页签结算批次。所有目标必须通过 incarnation/generation/editVersion 复核并完成正文安全结算；内容无关会话元数据只做尽力持久化，初始化中或写失败时明确提示下次可能恢复到较早状态，但不困住已经安全的窗口。取消、正文保存失败、偏好写失败或失效 intent 仍保留原窗口与全部页签。
 - 应用退出对所有已绑定工作区窗口创建同一组结算 intent；任一窗口拒绝即取消整组，全部允许后才设置退出 bypass。结算协调锁只保护意图登记与解析，不持有锁等待 WebView 回应。
 - 当前窗口替换在结算通过后再完成窗口/工作区协调和持久状态提交，随后更新内存授权映射；失败时保留原窗口状态。
 - 新窗口创建若后续持久化失败，会关闭未提交窗口并释放目标授权，不留下第二个可写映射。

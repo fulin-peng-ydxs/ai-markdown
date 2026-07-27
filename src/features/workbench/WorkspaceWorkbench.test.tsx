@@ -225,6 +225,59 @@ describe("WorkspaceWorkbench", () => {
     );
   });
 
+  it("allows a safe window close when tab-session metadata persistence fails", async () => {
+    let settlementListener:
+      | ((intent: WindowSettlementIntent) => void)
+      | undefined;
+    const resolveSettlement = vi
+      .fn()
+      .mockResolvedValue({ status: "closed", windowLabel: "plainroot-window-1" });
+    const api = gateway({
+      listenSettlement: vi.fn().mockImplementation(async (
+        listener: (intent: WindowSettlementIntent) => void,
+      ) => {
+        settlementListener = listener;
+        return () => undefined;
+      }),
+      saveTabSession: vi
+        .fn()
+        .mockRejectedValue(new Error("injected tab-session write failure")),
+      resolveSettlement,
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await screen.findByText("磁盘版本");
+    await waitFor(() => expect(api.saveTabSession).toHaveBeenCalled());
+    await waitFor(() => expect(settlementListener).toBeDefined());
+
+    await act(async () => {
+      settlementListener?.({
+        intentId: "settlement-metadata-failed",
+        kind: "close_window",
+        windowLabel: "plainroot-window-1",
+      });
+    });
+
+    await waitFor(() =>
+      expect(resolveSettlement).toHaveBeenCalledWith(
+        "settlement-metadata-failed",
+        true,
+      ),
+    );
+    expect(
+      screen.getByText(
+        "文档内容已安全；页签恢复信息未能更新，下次打开可能恢复到较早的页签状态。",
+      ),
+    ).toBeTruthy();
+  });
+
   it("reuses the mixed tab settlement batch for cancel and workspace replacement", async () => {
     let settlementListener:
       | ((intent: WindowSettlementIntent) => void)

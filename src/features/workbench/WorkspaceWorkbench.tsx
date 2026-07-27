@@ -1273,7 +1273,12 @@ export function WorkspaceWorkbench({
       return;
     }
     if (status !== "ready" || !(await persistence.flush())) {
-      throw normalizeDesktopError(null, "window_session_write_failed");
+      // Markdown content has already passed the settlement gate. Tab-session metadata
+      // is content-free and best-effort, so a failed snapshot must not trap the user
+      // in a window that can no longer close safely.
+      setLifecycleNotice(
+        "文档内容已安全；页签恢复信息未能更新，下次打开可能恢复到较早的页签状态。",
+      );
     }
   }
 

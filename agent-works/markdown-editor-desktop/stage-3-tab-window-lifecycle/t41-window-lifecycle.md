@@ -15,7 +15,7 @@ T41 承接 R1、R5、R14、R30 与 R31 的第三阶段子集，目标是在既�
 - `src-tauri/src/commands/workspace.rs`、`src-tauri/src/lib.rs` 与 `src/services/desktop/workspace.ts` 增加偏好读取、设置、重置 IPC；默认打开调用先读取偏好，读取失败安全回到询问，不阻止用户继续打开工作区。
 - `src-tauri/src/menu.rs` 增加“工作区打开方式…”入口：macOS 放在应用菜单，其他桌面平台放在文件菜单，并通过既有 launcher menu event 发送给当前聚焦窗口。
 - `src/features/workspace-open/` 新增 P1/P2 共用的 `WorkspaceOpenDecisionDialog` 与 `WorkspaceOpenPreferenceDialog`。决策弹层支持“记住这次选择”；偏好写失败时保留弹层且不继续打开，窗口提交失败时保留真实错误与重试入口。
-- `WorkspaceWorkbench` 将 `replace_workspace`、`close_window`、`quit_app` intent 映射到 T40 的同一页签结算批次。取消显式向 Rust 提交 `allow=false`；全部页签安全后，先刷新并持久化当前内容无关页签会话，再提交 `allow=true`。最终提交失败时保留页签和结算批次，用户可重试或取消。
+- `WorkspaceWorkbench` 将 `replace_workspace`、`close_window`、`quit_app` intent 映射到 T40 的同一页签结算批次。取消显式向 Rust 提交 `allow=false`；全部页签安全后，先刷新并尽力持久化当前内容无关页签会话，再提交 `allow=true`。页签会话仓储仍在初始化或写失败时显示非阻断提示并继续安全关闭，最坏只在下次启动恢复到较早页签状态；最终窗口提交失败仍保留页签和结算批次，用户可重试或取消。
 - `WorkspaceLauncher` 的设置图标升级为真实偏好入口；P1/P2 的当前窗口/新窗口决策共用同一组件和 gateway 契约。
 - T42 尚未消费的既有非空页签会话继续处于 `deferred_existing_session`，T41 不覆盖这份可恢复元数据。
 
@@ -35,17 +35,18 @@ T41 承接 R1、R5、R14、R30 与 R31 的第三阶段子集，目标是在既�
 1. Rust 继续产生一次性窗口 settlement intent，前端不另建窗口事务协调器。
 2. P1 将 intent 的 kind 映射为 `replace_workspace/close_window/quit_app` 结算原因，并以当前 ordered tab IDs 创建 T40 的不可变目标批次。
 3. 批次逐项复用现有 `DocumentSaveController`、冲突和另存能力；最终动作继续绑定页签 incarnation、generation 与 editVersion。
-4. 用户取消时清理页面 busy/closing 状态并拒绝 Rust intent；用户提交时先确认批次仍安全、持久化页签元数据，再允许 Rust 完成窗口事务。
+4. 用户取消时清理页面 busy/closing 状态并拒绝 Rust intent；用户提交时先确认批次仍安全、尽力持久化页签元数据，再允许 Rust 完成窗口事务。正文内容安全是硬门禁；不含正文的恢复元数据写失败只显示明确降级提示，不能困住已经安全的窗口。
 5. 提交阶段失败不清空批次、不移除页签，也不宣称已经回滚真实成功的磁盘保存。
 
 ### 复用判断
 
 - P1 与 P2 第二次出现同职责的打开位置决策和偏好设置后，抽取 `src/features/workspace-open/`，共同消费 `AppDialog`、`plainroot-button` 和语义 token；没有保留页面私有弹层副本。
 - 窗口替换、关闭、退出直接消费 T40 的 `TabSettlementDialog`、`settleTabs` 与固定目标证据，不建立第二套保存检查。
+- 元数据持久化失败继续复用既有 `WorkspaceTabSessionPersistence` 错误通道与工作台 `lifecycleNotice`，没有新增平行错误弹层或第二套窗口协调器；该差异只改变最终提交的阻断级别，不值得抽取新的组件或 hook。
 - 全局打开偏好与资源目录偏好共用 `PreferencesRepository` 的版本化原子仓储；没有新增 Store、数据库或第二个配置文件。
 - P1/P2 gateway 的命令集合不同，保留各自薄接口；共享的 UI gateway 只抽取到 `WorkspaceOpenPreferenceGateway`，避免为两个页面制造带大量可选字段的通用 gateway。
 
-最终实现与 T41 计划一致。唯一验证边界是：本任务运行了现有 11 条 macOS 真桌面回归证明无回退，但没有新增覆盖真实双窗口 replace/quit 的 E2E；该增量覆盖仍按计划归入 T45。
+最终实现与 T41 计划一致。评审后补充的健壮性修复明确了正文与辅助恢复元数据的不同安全等级：正文未结算继续阻断，页签元数据写失败则告警后继续。唯一验证边界是：本任务运行了现有 11 条 macOS 真桌面回归证明无回退，但没有新增覆盖真实双窗口 replace/quit 的 E2E；该增量覆盖仍按计划归入 T45。
 
 ## 上线部署操作
 
@@ -58,7 +59,7 @@ T41 承接 R1、R5、R14、R30 与 R31 的第三阶段子集，目标是在既�
 
 本次实际执行并通过：
 
-- `pnpm test:ui`：32 个文件、254 项通过。
+- `pnpm test:ui`：32 个文件、255 项通过；新增用例注入页签会话写失败，验证已安全窗口仍提交 `allow=true` 并展示恢复信息降级提示。
 - `pnpm test:tabs`：8 个文件、63 项通过。
 - Rust 非桌面服务门禁：201 项通过，1 项手动性能探针忽略。
 - Node 独立回归：许可证策略 4/4、永久删除反馈 4/4、工作区路径 3/3、文件树 18/18、fixture 1/1，共 30/30。
