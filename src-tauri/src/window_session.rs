@@ -759,6 +759,7 @@ enum WindowSessionFault {
 
 #[derive(Debug)]
 struct WindowSessionStore {
+    #[cfg(unix)]
     root: PathBuf,
     manifest_path: PathBuf,
     sessions_path: PathBuf,
@@ -767,10 +768,13 @@ struct WindowSessionStore {
 
 impl WindowSessionStore {
     fn new(root: PathBuf, fault: WindowSessionFault) -> Self {
+        let manifest_path = root.join(WINDOW_SESSION_MANIFEST_FILE_NAME);
+        let sessions_path = root.join(SESSION_DIRECTORY_NAME);
         Self {
-            manifest_path: root.join(WINDOW_SESSION_MANIFEST_FILE_NAME),
-            sessions_path: root.join(SESSION_DIRECTORY_NAME),
+            #[cfg(unix)]
             root,
+            manifest_path,
+            sessions_path,
             fault,
         }
     }

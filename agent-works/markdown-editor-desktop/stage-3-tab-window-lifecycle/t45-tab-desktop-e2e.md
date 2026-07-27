@@ -108,10 +108,18 @@ GitHub Actions run `30272399213` 对提交 `ad04b5ffce04117add606795b38def5d8069
 
 修复后本地 `pnpm verify:non-desktop` 已从头通过：30/30 Node、267/267 Vitest、206 项 no-default Rust 与 206 项 all-features Rust（均另 1 项手动探针忽略）、fmt、Clippy、typecheck、生产构建和许可证 727/511/0。
 
+第二次远端 run `30274596446` 对修复提交 `8f2a922050f14cee1629b5d0bd3eb253e6be92f9` 的结果进一步确认：
+
+- macOS 作业再次通过完整门禁、15 条桌面 E2E、生产构建与 artifact；
+- Windows 已通过首次失败的 TypeScript/Rust 契约门禁，证明 CRLF 修复生效；
+- Windows 随后在 `Rust format and lint gates` 被 `-D warnings` 阻断：`WindowSessionStore.root` 只在 `#[cfg(unix)]` 权限收紧分支读取，但此前仍作为 Windows 结构体字段编译，因此触发 `dead_code`。
+
+整改不添加 lint 豁免，而是让 `root` 字段只在 Unix 目标存在；Windows 继续保留由 `root` 派生的 manifest/session 路径，不改变仓储格式或行为。该分支必须由下一次 Windows runner 的 Clippy、测试、E2E 与生产构建共同验证。
+
 ## 4. 未验证项
 
-- 修复后的最新提交尚未取得 GitHub Actions macOS/Windows 双绿与成对生产 artifact；首次 run `30272399213` 不能作为 T45 通过证据。
-- Windows 首次 run 在非桌面契约守卫阶段停止，因此 Rust 全门禁、WebView2 15 条桌面链、`Ctrl+Tab` / `Ctrl+Shift+Tab` 真实系统输入和生产构建仍未验证。
+- 最新 Windows 专属字段修复尚未取得 GitHub Actions macOS/Windows 双绿与成对生产 artifact；run `30272399213` 和 `30274596446` 都是有效失败证据，但都不能作为 T45 通过证据。
+- Windows 第二次 run 已通过非桌面契约测试，但在 Clippy 阶段停止，因此完整 Rust 全门禁、WebView2 15 条桌面链、`Ctrl+Tab` / `Ctrl+Shift+Tab` 真实系统输入和生产构建仍未验证。
 - Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍是人工项。
 - 真实多窗口整组退出、系统 IME、JS heap、长时峰值内存、休眠、网络卷和文件系统卸载仍无完整产品级证据。
 - macOS 本轮验证了替换 intent 的拒绝分支；多窗口整组退出与允许替换的完整系统级人工链仍留待 T46 汇总或后续平台验收。
@@ -128,4 +136,4 @@ GitHub Actions run `30272399213` 对提交 `ad04b5ffce04117add606795b38def5d8069
 
 ## 6. 当前结论
 
-T45 的本地实现、macOS 桌面证据和非桌面回归已闭合。首次第三阶段远端运行真实发现 Windows CRLF 下契约守卫提前失败，现已完成本地修复与针对性回归，但完成标准仍要求修复提交在 macOS/Windows 远端双绿并可追溯 artifact。T45 继续保持“进行中”；T46 未开始。
+T45 的本地实现、macOS 桌面证据和非桌面回归已闭合。两次第三阶段远端运行依次发现 Windows CRLF 契约解析和 Unix-only 字段在 Windows Clippy 下的真实缺口，均按根因收口且没有弱化门禁。完成标准仍要求最新修复提交在 macOS/Windows 远端双绿并可追溯 artifact。T45 继续保持“进行中”；T46 未开始。
