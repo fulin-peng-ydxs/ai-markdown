@@ -29,6 +29,83 @@ async function invoke(command, args = {}) {
   return result.value;
 }
 
+async function focusNativeTabShortcutWindow() {
+  if (process.platform === "darwin") {
+    await execFileAsync("osascript", [
+      "-e",
+      `on run argv
+        set expectedTitle to item 1 of argv
+        repeat 50 times
+          tell application "System Events"
+            repeat with candidate in (application processes whose background only is false)
+              repeat with candidateWindow in windows of candidate
+                if name of candidateWindow contains expectedTitle then
+                  set frontmost of candidate to true
+                  perform action "AXRaise" of candidateWindow
+                  return
+                end if
+              end repeat
+            end repeat
+          end tell
+          delay 0.1
+        end repeat
+        error "Plainroot shortcut fixture window was not found"
+      end run`,
+      workspaceName,
+    ]);
+    return;
+  }
+
+  if (process.platform === "win32") {
+    const script = `
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class PlainrootNativeFocus {
+  [DllImport("user32.dll")]
+  public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  public static extern IntPtr GetForegroundWindow();
+}
+"@
+
+$expectedTitle = [IO.Path]::GetFileName($env:PLAINROOT_E2E_WORKSPACE_ROOT)
+$process = $null
+$discoveryDeadline = [DateTime]::UtcNow.AddSeconds(5)
+do {
+  $process = Get-Process plainroot -ErrorAction SilentlyContinue | Where-Object {
+    $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like "*$expectedTitle*"
+  } | Select-Object -First 1
+  if ($null -eq $process) { Start-Sleep -Milliseconds 100 }
+} while ($null -eq $process -and [DateTime]::UtcNow -lt $discoveryDeadline)
+if ($null -eq $process) { throw "Plainroot native window was not found" }
+
+$deadline = [DateTime]::UtcNow.AddSeconds(5)
+do {
+  if ([PlainrootNativeFocus]::GetForegroundWindow() -ne $process.MainWindowHandle) {
+    [void][PlainrootNativeFocus]::SetForegroundWindow($process.MainWindowHandle)
+  }
+  if ([PlainrootNativeFocus]::GetForegroundWindow() -eq $process.MainWindowHandle) {
+    exit 0
+  }
+  Start-Sleep -Milliseconds 100
+} while ([DateTime]::UtcNow -lt $deadline)
+throw "Plainroot shortcut window did not become foreground"
+`;
+    await execFileAsync("powershell.exe", [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      script,
+    ]);
+    return;
+  }
+
+  throw new Error(`native tab shortcut is not supported on ${process.platform}`);
+}
+
 async function sendNativeTabShortcut(direction) {
   if (process.platform === "darwin") {
     const keyCode = direction === "next" ? 124 : 123;
@@ -41,7 +118,7 @@ async function sendNativeTabShortcut(direction) {
         set targetFound to false
         repeat 50 times
           tell application "System Events"
-            repeat with candidate in (application processes whose name is "plainroot")
+            repeat with candidate in (application processes whose background only is false)
               repeat with candidateWindow in windows of candidate
                 if name of candidateWindow contains expectedTitle then
                   set frontmost of candidate to true
@@ -190,6 +267,7 @@ describe("Plainroot native tab shortcuts", () => {
 
     // Menu readiness and native foreground focus are observable preconditions.
     // Each host OS key event below must still succeed on its first attempt.
+    await focusNativeTabShortcutWindow();
     await waitForNativeTabShortcutReadiness();
     await sendNativeTabShortcut("next");
     await browser.waitUntil(
@@ -203,6 +281,7 @@ describe("Plainroot native tab shortcuts", () => {
           "the platform-native next-tab accelerator did not activate the next tab",
       },
     );
+    await focusNativeTabShortcutWindow();
     await waitForNativeTabShortcutReadiness();
     await sendNativeTabShortcut("previous");
     await browser.waitUntil(

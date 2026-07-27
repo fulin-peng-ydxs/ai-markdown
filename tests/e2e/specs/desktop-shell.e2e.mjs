@@ -861,7 +861,12 @@ describe("Plainroot desktop shell", () => {
     );
     assert.match(persisted, /!\[t31-image]\(assets\/t31-image\.png\)/);
 
-    await browser.refresh();
+    // Close and reopen the saved tab through production UI. A WebView refresh is
+    // not an application restart and can invalidate WDIO's dynamic window-title
+    // tracking; cross-process session restoration has its own isolated specs.
+    const closeTab = await $('button[aria-label="关闭 note.md"]');
+    await closeTab.click();
+    await closeTab.waitForExist({ reverse: true });
     await openFixtureDocument();
     await switchToSource();
     const reopened = await editorText('[aria-label="Markdown 源码编辑区"]');
