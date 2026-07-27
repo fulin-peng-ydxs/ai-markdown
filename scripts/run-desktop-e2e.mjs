@@ -31,6 +31,9 @@ async function runDesktopSpec(spec, dataDirectory, extraEnvironment = {}) {
     {
       env: {
         ...process.env,
+        ...(process.platform === "win32"
+          ? { PLAINROOT_E2E_FIXED_WINDOW_TITLE: "1" }
+          : {}),
         ...extraEnvironment,
         PLAINROOT_E2E_DATA_DIR: dataDirectory,
         PLAINROOT_E2E_SPEC: spec,
@@ -71,9 +74,6 @@ try {
       "tests/e2e/specs/native-tab-shortcuts.e2e.mjs",
       shortcutDataDirectory,
       {
-        ...(process.platform === "win32"
-          ? { PLAINROOT_E2E_FIXED_WINDOW_TITLE: "1" }
-          : {}),
         PLAINROOT_E2E_WORKSPACE_ROOT: shortcutFixture.root,
       },
     );

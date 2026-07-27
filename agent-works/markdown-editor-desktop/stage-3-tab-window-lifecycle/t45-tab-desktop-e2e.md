@@ -5,7 +5,7 @@
 - 对应任务：第三阶段 `T45`。
 - 对应需求：R1、R2、R3、R5、R6、R10、R11、R13、R14、R30、R31 的真实桌面验证子集。
 - 本次完成桌面测试编排、macOS 原生页签组合键、真实窗口替换拒绝和跨进程会话恢复；不进入 T46 阶段验收。
-- 最新实现已推送并完成八轮第三阶段双平台运行。第八轮 macOS 完整通过，Windows 再次通过主桌面链 12/12，并证明 Tauri/Windows 菜单子项在该 WebDriver 会话中不由 UI Automation 暴露。当前仅在 Windows 快捷键 E2E 进程冻结动态文档标题，消除 WDIO renderer 选择干扰，恢复消费真实 Rust/Tauri 菜单 enabled 探针、一次系统按键和真实活动页签断言；双平台远端证据仍待取得。T45 状态保持“进行中”。
+- 最新实现已推送并完成九轮第三阶段双平台运行。第九轮 macOS 完整通过，Windows 非桌面门禁通过、主桌面链完成 10/12，两个失败均由动态文档标题再次令 WDIO 丢失 renderer 引起，快捷键专项尚未执行。当前在全部 Windows E2E 隔离进程冻结动态文档标题，测试仍消费真实 React/IPC/磁盘链、Rust/Tauri 菜单 enabled 探针、一次系统按键和真实活动页签断言；双平台远端证据仍待取得。T45 状态保持“进行中”。
 
 ## 2. 实际实现
 
@@ -40,7 +40,7 @@ P1 主链新增真实替换事务：
 原生快捷键用独立桌面进程和三个真实页签验证。测试先有界等待唯一 fixture 窗口进入系统可发现状态，再等待目标进程成为前台且对应原生菜单项已启用，最后执行系统级输入；每个方向只发送一次：
 
 - macOS：System Events `AXRaise` 后发送 `Cmd+Option+Right/Left`；
-- Windows：快捷键专用 E2E 进程通过编译期隔离分支把原生标题固定为“工作区 — Plainroot”，避免 WDIO 随文档标题变化丢失 renderer；测试仍由 `e2e_tab_shortcuts_ready` 读取真实 `EditorMenuStateRegistry` 与 Tauri `MenuItem::is_enabled`，系统脚本确认前台窗口后只发送一次 `Ctrl+Tab` / `Ctrl+Shift+Tab`，最后由真实页签选中态断言结果。生产构建不读取该测试标志，也不注册探针。
+- Windows：全部 E2E 隔离进程通过编译期隔离分支把原生标题固定为“工作区 — Plainroot”，避免 WDIO 随文档标题变化丢失 renderer；快捷键测试仍由 `e2e_tab_shortcuts_ready` 读取真实 `EditorMenuStateRegistry` 与 Tauri `MenuItem::is_enabled`，系统脚本确认前台窗口后只发送一次 `Ctrl+Tab` / `Ctrl+Shift+Tab`，最后由真实页签选中态断言结果。生产构建不读取该测试标志，也不注册探针。
 
 macOS 在最新重建的 Tauri E2E release 二进制上发现 `Cmd+Shift+]` 可触发，但 `Cmd+Shift+[` 不会到达菜单动作；因此没有保留不可用的对称外观，而是收敛为双向均实际通过的 `Cmd+Option+Right/Left`。Windows 映射保持平台常用组合，但固定标题测试缝尚未在 Windows runner 运行，不能记为通过。
 
@@ -171,11 +171,21 @@ GitHub Actions run `30288530855` 对提交 `89fb7bd8c8dbd582a2d41afd283bc9b868c7
 - Windows 再次通过非桌面门禁、Rust 门禁和主桌面链 12/12；主动展开顶层菜单后，UI Automation 仍未暴露目标子菜单项，快捷键专项在发送按键前安全失败；
 - Windows 诊断 artifact `plainroot-windows-30288530855` 的 SHA-256 为 `9d8f0d69242fbf7544ef94fa23d99032df2d6cf06f20de18d8a721d6a79ffbf9`。
 
-当前整改不再把测试正确性建立在 Tauri/Windows 未暴露的 HMENU 或 UI Automation 子树上。`PLAINROOT_E2E_FIXED_WINDOW_TITLE` 只由 Windows 原生快捷键隔离进程注入，且只在 `e2e` feature 编译分支读取；它把本用例中与快捷键无关的文档标题变化固定为工作区标题，使 WDIO 能持续调用既有只读菜单探针并读取真实页签选中态。产品菜单状态、快捷键、命令路由和页签标题逻辑在默认构建中不变。
+当前整改不再把测试正确性建立在 Tauri/Windows 未暴露的 HMENU 或 UI Automation 子树上。`PLAINROOT_E2E_FIXED_WINDOW_TITLE` 由 Windows E2E 隔离进程注入，且只在 `e2e` feature 编译分支读取；它把与业务断言无关的文档标题变化固定为工作区标题，使 WDIO 能持续读取同一真实 renderer、调用既有只读菜单探针并读取真实页签选中态。产品菜单状态、快捷键、命令路由和页签标题逻辑在默认构建中不变。
+
+### 3.8 第九次远端运行与全 Windows E2E 标题隔离
+
+GitHub Actions run `30290219296` 对提交 `a280f978f38e8eed1ddb82fa69f86eae358097e9` 给出新的有效证据：
+
+- macOS 再次完整通过并上传 `plainroot-macos-30290219296`，SHA-256 为 `c530f11bc23ed3748eba7e635dafec009ec80ee8ded58acf02163eea64307eec`；
+- Windows 通过非桌面门禁、Rust 门禁并在主桌面链完成 10/12；手动保存和恢复副本两项在动态标题变化后由 WDIO 路由到失效 renderer，真实磁盘保存已经发生，但后续可见状态/源码断言无法读取；
+- 原生快捷键专项尚未运行；Windows 诊断 artifact `plainroot-windows-30290219296` 的 SHA-256 为 `b1a5d2518672b8659efba8fc7e18a2963d04c8ff10098d4a2d0817facdbb0f99`。
+
+因此固定标题测试缝现由 `runDesktopSpec` 为每个 Windows E2E 隔离进程统一注入，而非仅覆盖快捷键进程。该变更不替换 React handler、Tauri IPC、Rust 磁盘操作、恢复仓储、菜单状态或系统输入，只稳定 WebDriver 与实际 WebView2 renderer 的连接。
 
 ## 4. 未验证项
 
-- 最新 Windows 快捷键测试标题隔离修复尚未取得 GitHub Actions macOS/Windows 双绿与成对生产 artifact；run `30272399213`、`30274596446`、`30275676382`、`30278252178`、`30280357578`、`30285162108`、`30287098572`、`30288530855` 都是有效的递进证据，但没有一轮可作为 T45 双平台通过证据。
+- 最新 Windows 全流程标题隔离修复尚未取得 GitHub Actions macOS/Windows 双绿与成对生产 artifact；run `30272399213`、`30274596446`、`30275676382`、`30278252178`、`30280357578`、`30285162108`、`30287098572`、`30288530855`、`30290219296` 都是有效的递进证据，但没有一轮可作为 T45 双平台通过证据。
 - Windows 第六次 run 已通过非桌面门禁、Clippy、Rust 测试和主桌面链 12/12；`Ctrl+Tab` / `Ctrl+Shift+Tab`、跨进程恢复、完整 15 条桌面链和生产构建仍未在同一最新提交上取得通过证据。
 - Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍是人工项。
 - 真实多窗口整组退出、系统 IME、JS heap、长时峰值内存、休眠、网络卷和文件系统卸载仍无完整产品级证据。
@@ -193,4 +203,4 @@ GitHub Actions run `30288530855` 对提交 `89fb7bd8c8dbd582a2d41afd283bc9b868c7
 
 ## 6. 当前结论
 
-T45 的本地实现、macOS 桌面证据和非桌面回归已闭合。八次第三阶段远端运行依次发现 Windows CRLF 契约解析、Unix-only 字段 lint、Tauri 菜单测试前置、WebView 刷新、动态标题渲染器定位，以及 Windows 原生菜单不暴露 HMENU/UI Automation 子项的问题；整改均针对事实源和跨平台边界，没有跳过真实输入、降低业务断言或加入业务重试。第六至八轮均证明 Windows 主桌面链 12/12 通过，完成标准仍要求最新修复提交在 macOS/Windows 远端双绿并可追溯 artifact。T45 继续保持“进行中”；T46 未开始。
+T45 的本地实现、macOS 桌面证据和非桌面回归已闭合。九次第三阶段远端运行依次发现 Windows CRLF 契约解析、Unix-only 字段 lint、Tauri 菜单测试前置、WebView 刷新、动态标题渲染器定位，以及 Windows 原生菜单不暴露 HMENU/UI Automation 子项的问题；整改均针对事实源和跨平台边界，没有跳过真实输入、降低业务断言或加入业务重试。第六至八轮证明 Windows 主桌面链 12/12 通过，第九轮再次证明动态标题影响不只存在于快捷键专项，因此标题隔离现覆盖全部 Windows E2E 进程。完成标准仍要求最新修复提交在 macOS/Windows 远端双绿并可追溯 artifact。T45 继续保持“进行中”；T46 未开始。
