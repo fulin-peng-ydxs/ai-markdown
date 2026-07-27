@@ -419,6 +419,45 @@ describe("WorkspaceWorkbench", () => {
     );
   });
 
+  it("unfreezes metadata after a fatal restore invariant error", async () => {
+    const api = gateway({
+      getTabSession: vi.fn().mockResolvedValue({
+        schemaVersion: 1,
+        workspaceId: "workspace-b",
+        windowStateRef: "window-session-a",
+        revision: 3,
+        tabs: [],
+        activeRelativePath: null,
+        recentlyClosed: [],
+        updatedAt: 3,
+        issues: [],
+      }),
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    expect(
+      await screen.findByText(/无法读取该窗口的页签会话/),
+    ).toBeTruthy();
+    await user.click(await screen.findByRole("treeitem", { name: /note\.md/ }));
+    await waitFor(() =>
+      expect(api.saveTabSession).toHaveBeenCalledWith(
+        "workspace-a",
+        "window-session-a",
+        3,
+        expect.objectContaining({
+          tabs: [expect.objectContaining({ relativePath: "note.md" })],
+        }),
+      ),
+    );
+  });
+
   it("resolves a native close intent only after the current document is safe", async () => {
     let settlementListener:
       | ((intent: WindowSettlementIntent) => void)

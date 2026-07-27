@@ -46,7 +46,7 @@
 ### 2.1 工程与验证基线
 
 - 当前技术基线为 Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以清单和锁文件为准。
-- 2026-07-27 已在 T42 当前本地状态重新执行门禁：Node 独立回归 30/30、Vitest 32 个文件 263/263、Rust 201 项通过且 1 项手动性能探针忽略、类型检查、生产构建和许可证 727/511/0 通过；页签专项为 68/68。T42 新增测试覆盖有序轻量恢复、既有会话接管后 CAS 写入解冻、问题项清理写回、仅加载活动页签、首次激活惰性加载、活动项失败后的安全回退、P2 摘要与单窗口失败隔离、P1 跳过/重试，以及接管后元数据写失败仍允许安全关闭。Rust 未改动，本任务未重跑 fmt/Clippy；macOS Tauri/WebKit 11/11 仍是 T41 已取得的既有回归，本任务未新增重启恢复桌面 E2E，完整双平台验收仍属 T45。各任务留痕中的测试数字只是当时的历史快照。最新远端证据仍为 GitHub Actions run `30082725332` 在 macOS/Windows 通过第二阶段 9 条套件，尚未覆盖第三阶段本地提交。
+- 2026-07-27 已在 T42 当前本地状态重新执行门禁：Node 独立回归 30/30、Vitest 32 个文件 265/265、Rust 201 项通过且 1 项手动性能探针忽略、类型检查、生产构建和许可证 727/511/0 通过；页签专项为 69/69。T42 新增测试覆盖有序轻量恢复、既有会话接管后 CAS 写入解冻、问题项清理写回、重复/畸形 opaque identity 逐项隔离、致命恢复异常后解除冻结、仅加载活动页签、首次激活惰性加载、活动项失败后的安全回退、P2 摘要与单窗口失败隔离、P1 跳过/重试，以及接管后元数据写失败仍允许安全关闭。Rust 未改动，本任务未重跑 fmt/Clippy；macOS Tauri/WebKit 11/11 仍是 T41 已取得的既有回归，本任务未新增重启恢复桌面 E2E，完整双平台验收仍属 T45。各任务留痕中的测试数字只是当时的历史快照。最新远端证据仍为 GitHub Actions run `30082725332` 在 macOS/Windows 通过第二阶段 9 条套件，尚未覆盖第三阶段本地提交。
 - 第三阶段不得删除、降低或用重试掩盖上述基线。新增页签测试必须加入统一 `pnpm test`、真实桌面 E2E 和双平台 CI。
 - 当前产品依赖已能实现页签状态、拖动、菜单和持久化；T37 只为真实桌面内存门禁在 `e2e` feature 增加可选 `sysinfo`，默认产品构建不注册对应命令。若后续确认必须引入拖拽或状态库，先补许可证、包体、复用理由和回滚方案，再修改清单。
 
@@ -526,11 +526,11 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 - 验证方式：多窗口、多页签、active tab、模式/选择/锚点、missing、permission-denied、corrupt、recovery dirty 和跳过/重试测试。
 - 完成标准：根恢复不再代替页签恢复，失败不会修改磁盘或阻塞安全窗口。
 - 实际落地情况：
-  - `WorkspaceTabManager.restoreSession` 只消费 Rust 已解析的规范化相对路径和 opaque identity，把顺序、活动路径、模式、选择/锚点和最近关闭恢复为轻量 descriptor；初始只读取首选活动页签，读取失败按顺序选择下一可用页签，其他页签保持 `unloaded`，首次鼠标或键盘激活时才创建 runtime 并读盘。
-  - `WorkspaceTabSessionPersistence` 将既有 revision、页签、最近项或路径问题统一冻结为 `deferred_existing_session`；P1 完成恢复投影后显式 `resumeAfterRestore`，接管后继续以既有 repository revision 执行防抖/CAS 写入。Rust 已隔离的问题项会触发一次清理投影写回；写失败仍沿用 T41 的非阻断降级，不影响已经安全的窗口关闭。
+  - `WorkspaceTabManager.restoreSession` 只消费 Rust 已解析的规范化相对路径和 opaque identity，把顺序、活动路径、模式、选择/锚点和最近关闭恢复为轻量 descriptor；前端再次发现重复或畸形 identity 时保留首个并把其余项降级为 `window_session_corrupt` issue，不让单项结构异常冻结整个会话。初始只读取首选活动页签，读取失败按顺序选择下一可用页签，其他页签保持 `unloaded`，首次鼠标或键盘激活时才创建 runtime 并读盘。
+  - `WorkspaceTabSessionPersistence` 将既有 revision、页签、最近项或路径问题统一冻结为 `deferred_existing_session`；P1 完成恢复投影后显式 `resumeAfterRestore`，接管后继续以既有 repository revision 执行防抖/CAS 写入。Rust/前端已隔离的问题项会触发一次清理投影写回；即使发生更底层的致命恢复不变量异常也会解除冻结，后续真实打开能够覆盖旧会话。写失败仍沿用 T41 的非阻断降级，不影响已经安全的窗口关闭。
   - P1 复用 `AsyncStatePanel` 呈现逐项 missing/permission/error，支持“重新核对”与“跳过”，任一失败不修改 Markdown 或阻断其他页签；P2 复用既有恢复列表显示页签数量、会话 revision 和摘要错误，批量恢复跳过已知损坏项但继续恢复其他窗口。
   - 没有新增第二套恢复仓储、页签状态机或弹层；P1 活动文档恢复继续消费第二阶段 recovery snapshot 匹配逻辑。没有新增数据库、SQL、seed、capability、菜单、产品配置、环境变量、依赖或初始化数据。
-  - 本地验证通过：68/68 页签专项、263/263 Vitest、201/201 Rust（另 1 项手动性能探针忽略）、30/30 Node 独立回归、类型检查、生产构建、许可证 727/511/0 和 `git diff --check`。T42 未修改 Rust，未重跑 fmt/Clippy；未执行真实重启、多窗口恢复桌面 E2E、Windows 或远端 CI，这些仍由 T45～T46 承接。完整证据见 `t42-tab-session-restore.md`。
+  - 本地验证通过：69/69 页签专项、265/265 Vitest、201/201 Rust（另 1 项手动性能探针忽略）、30/30 Node 独立回归、类型检查、生产构建、许可证 727/511/0 和 `git diff --check`。T42 未修改 Rust，未重跑 fmt/Clippy；未执行真实重启、多窗口恢复桌面 E2E、Windows 或远端 CI，这些仍由 T45～T46 承接。完整证据见 `t42-tab-session-restore.md`。
 
 ### 6.9 任务 T43：原生页签菜单、快捷键与焦点路由
 

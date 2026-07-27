@@ -504,7 +504,7 @@ export function WorkspaceWorkbench({
         const stored = persistence.pendingRestore();
         if (stored) {
           try {
-            await manager.restoreSession(
+            const restored = await manager.restoreSession(
               stored,
               (relativePath) =>
                 nextWorkspace.writable &&
@@ -516,13 +516,17 @@ export function WorkspaceWorkbench({
             ) {
               return;
             }
-            setTabRestoreIssues([...stored.issues]);
+            setTabRestoreIssues([...restored.issues]);
             persistence.resumeAfterRestore(manager.snapshot());
             syncActiveTabChrome(
               manager.snapshot().activeTab?.relativePath ?? null,
               generation,
             );
           } catch (reason) {
+            // A fatal frontend invariant failure must not keep session metadata
+            // frozen for the rest of this window. The empty safe collection can
+            // be replaced after the next real open without touching Markdown.
+            persistence.resumeAfterRestore(manager.snapshot());
             setPageError(
               normalizeDesktopError(reason, "window_session_read_failed"),
             );

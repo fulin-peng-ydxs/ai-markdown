@@ -67,10 +67,10 @@
 
 ## 命令与验证状态
 
-- 2026-07-27 已在 macOS arm64 实际验证 T42 本地基线：201 个 Rust 测试通过（另 1 项手动性能探针忽略）、263 个 Vitest、30 个 Node 独立回归、类型检查、前端生产构建和许可证 727/511/0。页签专项 68/68 覆盖独立 runtime、批量结算、已有会话有序恢复、既有 revision 接管、问题项清理写回、活动项失败回退和首次激活惰性加载；P1/P2 组件测试覆盖页签摘要、单项失败隔离、跳过/重试，以及恢复接管后元数据写失败仍允许安全关闭。T42 未修改 Rust，因此未重跑 fmt/全 feature Clippy；T35 的轻量 benchmark 仍只作为本机报告。
+- 2026-07-27 已在 macOS arm64 实际验证 T42 本地基线：201 个 Rust 测试通过（另 1 项手动性能探针忽略）、265 个 Vitest、30 个 Node 独立回归、类型检查、前端生产构建和许可证 727/511/0。页签专项 69/69 覆盖独立 runtime、批量结算、已有会话有序恢复、既有 revision 接管、问题项清理写回、重复/畸形 identity 隔离、致命恢复异常后解除冻结、活动项失败回退和首次激活惰性加载；P1/P2 组件测试覆盖页签摘要、单项失败隔离、跳过/重试，以及恢复接管后元数据写失败仍允许安全关闭。T42 未修改 Rust，因此未重跑 fmt/全 feature Clippy；T35 的轻量 benchmark 仍只作为本机报告。
 - `pnpm test:e2e` 每次使用独立临时状态目录与临时复制工作区，真实 macOS Tauri/WebKit 11/11 通过：P2 IPC、1100/740 px 启动页布局与入口焦点、P1 工作区打开及编辑 chrome、三文档真实页签、溢出菜单焦点返回、干净页签关闭与最近关闭重开、Rust 页签顺序/最近项持久化、关闭右侧及打开页签的真实改名/移动/删除和图片链接写回、1100/820/740 px 页签布局、单 adapter/RSS 门禁、排版/源码编辑、WebView 文件输入到 Rust 图片上传、保存重开、外部修改内容安全、恢复仓储、显式恢复和含图片目录移动前的风险确认/取消。WebKit 未暴露 JS heap，不能外推为 heap 证据。默认生产前端产物和 release 二进制不注册 e2e RSS 命令。T17 的生产 `.app` 原生多窗口、Finder、系统废纸篓、监听和第二实例人工证据仍有效；这些 macOS 证据不替代 Windows 原生人工验收。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。T16 已在 GitHub `windows-latest` 上验证锁定的 Node/Rust 工具链、Windows 编译、测试、WebView2 E2E 和未签名生产构建；原生系统交互仍保留人工未验证状态。
-- 当前自动化测试在既有底座、编辑器、恢复/冲突/资源、菜单、页签模型/runtime、窗口页签仓储和打开偏好链路上共 201 个 Rust 测试通过（另 1 项手动性能探针忽略）、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、263 个 React UI/状态/编辑器/页签测试、1 个 fixture 测试、4 个许可证策略测试和 11 个本地 macOS 桌面 E2E。`pnpm test` 统一执行 Node、Vitest 与无桌面 feature 的 Rust 服务门禁；`test:tabs` 是可失败页签模型/runtime/批量结算/恢复门禁，`test:tabs:performance` 仅输出本机 benchmark。GitHub Actions run `30082725332` 已在 macOS/Windows 完整通过第二阶段的 9 条桌面门禁、生产构建和 artifact 上传，尚未覆盖 T35～T42 本地提交。许可证扫描最近一次为 727 个 Node 包、511 个 Rust 包、0 个阻断项。Windows 原生系统 UI 仍未人工验证。
+- 当前自动化测试在既有底座、编辑器、恢复/冲突/资源、菜单、页签模型/runtime、窗口页签仓储和打开偏好链路上共 201 个 Rust 测试通过（另 1 项手动性能探针忽略）、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、265 个 React UI/状态/编辑器/页签测试、1 个 fixture 测试、4 个许可证策略测试和 11 个本地 macOS 桌面 E2E。`pnpm test` 统一执行 Node、Vitest 与无桌面 feature 的 Rust 服务门禁；`test:tabs` 是可失败页签模型/runtime/批量结算/恢复门禁，`test:tabs:performance` 仅输出本机 benchmark。GitHub Actions run `30082725332` 已在 macOS/Windows 完整通过第二阶段的 9 条桌面门禁、生产构建和 artifact 上传，尚未覆盖 T35～T42 本地提交。许可证扫描最近一次为 727 个 Node 包、511 个 Rust 包、0 个阻断项。Windows 原生系统 UI 仍未人工验证。
 
 ## 文档、协作与 Git
 

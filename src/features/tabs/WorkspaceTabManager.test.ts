@@ -328,6 +328,43 @@ describe("WorkspaceTabManager", () => {
     expect(gateway.read).toHaveBeenCalledTimes(2);
   });
 
+  it("isolates duplicate or malformed restored identities instead of freezing the session", async () => {
+    const { manager, gateway } = managerFixture();
+    const session = restoredSession("one.md");
+    session.tabs[1] = {
+      ...session.tabs[1]!,
+      path: {
+        relativePath: "two.md",
+        identity: "native:one.md",
+      },
+    };
+    session.tabs[2] = {
+      ...session.tabs[2]!,
+      path: {
+        relativePath: "three.md",
+        identity: "",
+      },
+    };
+
+    const result = await manager.restoreSession(session, () => true);
+
+    expect(result).toMatchObject({
+      restoredTabCount: 1,
+      isolatedIssueCount: 2,
+    });
+    expect(result.issues.map((issue) => issue.relativePath)).toEqual([
+      "two.md",
+      "three.md",
+    ]);
+    expect(
+      result.issues.every(
+        (issue) => issue.error.code === "window_session_corrupt",
+      ),
+    ).toBe(true);
+    expect(manager.snapshot().activeTab?.relativePath).toBe("one.md");
+    expect(gateway.read).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps independent content, history and view state for three tabs", async () => {
     const { manager } = managerFixture();
     const first = await openReady(manager, "one.md");

@@ -12,6 +12,7 @@
 ### 2.1 恢复与惰性加载
 
 - `restoreWorkspaceTabCollection` 把 Rust 已解析的路径契约恢复为有序轻量 descriptor，保留活动路径、视图和最近关闭，同时继续执行工作区、路径身份、展示字段和重复项不变量校验。
+- 前端恢复入口对 Rust 返回结果再次做纵深校验：相同 opaque identity 只保留首项，重复或畸形项转为 `window_session_corrupt` issue；更底层的致命恢复异常也会解除 `deferred_existing_session`，后续真实打开可用新的安全投影覆盖旧会话，不会整场冻结元数据写入。
 - `WorkspaceTabManager.restoreSession` 初始只加载首选活动页签；首选项读取失败时按顺序尝试下一可用页签，失败项保留真实状态，其他页签保持 `unloaded`。
 - 点击或键盘激活 `unloaded` 页签会触发一次真实读盘；`begin_load` 在首个异步等待前提交，因此重复激活不会并发启动第二次读取。
 - 恢复后的活动页签继续使用既有 `DocumentSession`、`DocumentSaveController` 和 recovery snapshot 匹配逻辑，没有第二份正文或恢复状态机。
@@ -44,9 +45,9 @@
 ## 5. 验证证据
 
 - `pnpm typecheck`：通过。
-- T42 六个专项文件：105/105 通过。
-- `pnpm test:tabs`：68/68 通过。
-- `pnpm test:ui`：263/263 通过。
+- T42 六个专项文件：107/107 通过。
+- `pnpm test:tabs`：69/69 通过。
+- `pnpm test:ui`：265/265 通过。
 - Node 独立回归：许可证策略 4/4、永久删除反馈 4/4、工作区路径 3/3、文件树 18/18、fixture 1/1，共 30/30。
 - `pnpm test:rust`：201 项通过，1 项手动性能探针忽略。
 - `pnpm build`：通过；既有大 chunk 警告未变化。
@@ -57,6 +58,7 @@
 
 - 有序 descriptor、活动项、视图和最近关闭恢复；
 - 有问题的恢复投影保持待写，接管后以既有 revision 执行 CAS；
+- 重复/畸形 identity 逐项隔离，致命恢复异常后持久化解除冻结；
 - 只加载活动页签、首次激活惰性加载、首选活动页签失败后回退；
 - P2 页签摘要、单窗口失败不阻断其他窗口；
 - P1 路径问题的跳过/重试；

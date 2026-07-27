@@ -1,6 +1,7 @@
 import type {
   DesktopError,
   WindowTabSession,
+  WindowTabSessionPathIssue,
   WorkspaceId,
   WorkspaceRelativePath,
 } from "../../services/desktop/contracts";
@@ -105,6 +106,7 @@ export interface WorkspaceTabRestoreResult {
   restoredTabCount: number;
   restoredRecentlyClosedCount: number;
   isolatedIssueCount: number;
+  issues: readonly WindowTabSessionPathIssue[];
   activeTabId: WorkspaceTabId | null;
 }
 
@@ -179,23 +181,48 @@ export class WorkspaceTabManager {
     if (session.workspaceId !== this.collection.workspaceId) {
       throw new Error("Cannot restore a tab session from another workspace");
     }
-    const tabs = session.tabs.map((tab) => ({
-      tabId: this.createTabId(),
-      workspaceId: session.workspaceId,
-      path: acceptWorkspaceTabPath(tab.path),
-      restoredView: tab.view,
-      lastActivatedAt: tab.lastActivatedAt,
-    }));
-    const recentlyClosed = session.recentlyClosed.map((recent) => {
-      const path = acceptWorkspaceTabPath(recent.path);
-      return {
-        workspaceId: session.workspaceId,
-        relativePath: path.relativePath,
-        pathIdentity: path.identity,
-        ...deriveWorkspaceTabPathPresentation(path.relativePath),
-        view: recent.view,
-        closedAt: recent.closedAt,
-      };
+    const issues = [...session.issues];
+    const acceptedIdentities = new Set<WorkspaceTabPathIdentity>();
+    const tabs = session.tabs.flatMap((tab) => {
+      try {
+        const path = acceptWorkspaceTabPath(tab.path);
+        if (acceptedIdentities.has(path.identity)) {
+          issues.push(corruptRestoreIssue(path.relativePath));
+          return [];
+        }
+        acceptedIdentities.add(path.identity);
+        return [{
+          tabId: this.createTabId(),
+          workspaceId: session.workspaceId,
+          path,
+          restoredView: tab.view,
+          lastActivatedAt: tab.lastActivatedAt,
+        }];
+      } catch {
+        issues.push(corruptRestoreIssue(tab.path.relativePath));
+        return [];
+      }
+    });
+    const recentlyClosed = session.recentlyClosed.flatMap((recent) => {
+      try {
+        const path = acceptWorkspaceTabPath(recent.path);
+        if (acceptedIdentities.has(path.identity)) {
+          issues.push(corruptRestoreIssue(path.relativePath));
+          return [];
+        }
+        acceptedIdentities.add(path.identity);
+        return [{
+          workspaceId: session.workspaceId,
+          relativePath: path.relativePath,
+          pathIdentity: path.identity,
+          ...deriveWorkspaceTabPathPresentation(path.relativePath),
+          view: recent.view,
+          closedAt: recent.closedAt,
+        }];
+      } catch {
+        issues.push(corruptRestoreIssue(recent.path.relativePath));
+        return [];
+      }
     });
     const activePathIdentity =
       tabs.find(
@@ -205,7 +232,7 @@ export class WorkspaceTabManager {
       tabs,
       activePathIdentity,
       recentlyClosed,
-      repositoryMatches: session.issues.length === 0,
+      repositoryMatches: issues.length === 0,
     });
     this.emit();
 
@@ -233,7 +260,8 @@ export class WorkspaceTabManager {
         return {
           restoredTabCount: tabs.length,
           restoredRecentlyClosedCount: recentlyClosed.length,
-          isolatedIssueCount: session.issues.length,
+          isolatedIssueCount: issues.length,
+          issues,
           activeTabId: tabId,
         };
       }
@@ -251,7 +279,8 @@ export class WorkspaceTabManager {
     return {
       restoredTabCount: tabs.length,
       restoredRecentlyClosedCount: recentlyClosed.length,
-      isolatedIssueCount: session.issues.length,
+      isolatedIssueCount: issues.length,
+      issues,
       activeTabId: this.collection.activeTabId,
     };
   }
@@ -925,5 +954,20 @@ function managerError(
     pathHint,
     contentSafe: true,
     retryable: true,
+  };
+}
+
+function corruptRestoreIssue(
+  relativePath: WorkspaceRelativePath,
+): WindowTabSessionPathIssue {
+  return {
+    relativePath,
+    error: {
+      code: "window_session_corrupt",
+      messageKey: "error.windowSession.corrupt",
+      pathHint: relativePath,
+      contentSafe: true,
+      retryable: true,
+    },
   };
 }
