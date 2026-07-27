@@ -38,31 +38,41 @@ async function sendNativeTabShortcut(direction) {
       `on run argv
         set expectedTitle to item 1 of argv
         set expectedMenuItem to item 2 of argv
-        tell application "System Events"
-          repeat with candidate in (application processes whose name is "plainroot")
-            repeat with candidateWindow in windows of candidate
-              if name of candidateWindow contains expectedTitle then
-                set frontmost of candidate to true
-                perform action "AXRaise" of candidateWindow
-                repeat 50 times
-                  if frontmost of candidate then
-                    try
-                      set targetItem to menu item expectedMenuItem of menu "页签" of menu bar item "页签" of menu bar 1 of candidate
-                      if enabled of targetItem then exit repeat
-                    end try
-                  end if
-                  delay 0.1
-                end repeat
-                if not frontmost of candidate then error "Plainroot shortcut fixture process did not become frontmost"
-                set targetItem to menu item expectedMenuItem of menu "页签" of menu bar item "页签" of menu bar 1 of candidate
-                if not enabled of targetItem then error "Plainroot shortcut menu item did not become enabled"
-                key code ${keyCode} using {command down, option down}
-                return
-              end if
+        set targetFound to false
+        repeat 50 times
+          tell application "System Events"
+            repeat with candidate in (application processes whose name is "plainroot")
+              repeat with candidateWindow in windows of candidate
+                if name of candidateWindow contains expectedTitle then
+                  set frontmost of candidate to true
+                  perform action "AXRaise" of candidateWindow
+                  set targetFound to true
+                  exit repeat
+                end if
+              end repeat
+              if targetFound then exit repeat
             end repeat
+          end tell
+          if targetFound then exit repeat
+          delay 0.1
+        end repeat
+        if not targetFound then error "Plainroot shortcut fixture window was not found"
+        tell application "System Events"
+          repeat 50 times
+            if frontmost of candidate then
+              try
+                set targetItem to menu item expectedMenuItem of menu "页签" of menu bar item "页签" of menu bar 1 of candidate
+                if enabled of targetItem then exit repeat
+              end try
+            end if
+            delay 0.1
           end repeat
+          if not frontmost of candidate then error "Plainroot shortcut fixture process did not become frontmost"
+          set targetItem to menu item expectedMenuItem of menu "页签" of menu bar item "页签" of menu bar 1 of candidate
+          if not enabled of targetItem then error "Plainroot shortcut menu item did not become enabled"
+          key code ${keyCode} using {command down, option down}
+          return
         end tell
-        error "Plainroot shortcut fixture window was not found"
       end run`,
       workspaceName,
       menuItemTitle,
@@ -72,25 +82,107 @@ async function sendNativeTabShortcut(direction) {
 
   if (process.platform === "win32") {
     const keys = direction === "next" ? "^{TAB}" : "^+{TAB}";
+    const menuItemTitle = direction === "next" ? "下一个页签" : "上一个页签";
     const script = `
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type @"
 using System;
+using System.Text;
 using System.Runtime.InteropServices;
 public static class PlainrootNativeInput {
   [DllImport("user32.dll")]
   public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  public static extern IntPtr GetForegroundWindow();
+
+  [DllImport("user32.dll")]
+  public static extern IntPtr GetMenu(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  public static extern int GetMenuItemCount(IntPtr hMenu);
+
+  [DllImport("user32.dll")]
+  public static extern IntPtr GetSubMenu(IntPtr hMenu, int nPos);
+
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+  public static extern int GetMenuString(
+    IntPtr hMenu,
+    uint uIDItem,
+    StringBuilder lpString,
+    int cchMax,
+    uint flags
+  );
+
+  [DllImport("user32.dll")]
+  public static extern uint GetMenuState(IntPtr hMenu, uint uId, uint flags);
 }
 "@
-$expectedTitle = [IO.Path]::GetFileName($env:PLAINROOT_E2E_WORKSPACE_ROOT)
-$process = Get-Process plainroot | Where-Object {
-  $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like "*$expectedTitle*"
-} | Select-Object -First 1
-if ($null -eq $process) { throw "Plainroot native window was not found" }
-if (-not [PlainrootNativeInput]::SetForegroundWindow($process.MainWindowHandle)) {
-  throw "Plainroot native window could not be focused"
+
+function Test-PlainrootMenuItemEnabled {
+  param(
+    [IntPtr]$Menu,
+    [string]$ExpectedTitle
+  )
+  if ($Menu -eq [IntPtr]::Zero) { return $false }
+  $itemCount = [PlainrootNativeInput]::GetMenuItemCount($Menu)
+  for ($index = 0; $index -lt $itemCount; $index += 1) {
+    $caption = New-Object System.Text.StringBuilder 256
+    [void][PlainrootNativeInput]::GetMenuString(
+      $Menu,
+      [uint32]$index,
+      $caption,
+      $caption.Capacity,
+      0x400
+    )
+    if ($caption.ToString().Replace("&", "").StartsWith($ExpectedTitle)) {
+      $state = [PlainrootNativeInput]::GetMenuState(
+        $Menu,
+        [uint32]$index,
+        0x400
+      )
+      return $state -ne [uint32]::MaxValue -and ($state -band 0x3) -eq 0
+    }
+    $subMenu = [PlainrootNativeInput]::GetSubMenu($Menu, $index)
+    if (Test-PlainrootMenuItemEnabled $subMenu $ExpectedTitle) {
+      return $true
+    }
+  }
+  return $false
 }
-Start-Sleep -Milliseconds 500
+
+$expectedTitle = [IO.Path]::GetFileName($env:PLAINROOT_E2E_WORKSPACE_ROOT)
+$expectedMenuItem = "${menuItemTitle}"
+$process = $null
+$discoveryDeadline = [DateTime]::UtcNow.AddSeconds(5)
+do {
+  $process = Get-Process plainroot -ErrorAction SilentlyContinue | Where-Object {
+    $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like "*$expectedTitle*"
+  } | Select-Object -First 1
+  if ($null -eq $process) { Start-Sleep -Milliseconds 100 }
+} while ($null -eq $process -and [DateTime]::UtcNow -lt $discoveryDeadline)
+if ($null -eq $process) { throw "Plainroot native window was not found" }
+
+$ready = $false
+$deadline = [DateTime]::UtcNow.AddSeconds(5)
+do {
+  if ([PlainrootNativeInput]::GetForegroundWindow() -ne $process.MainWindowHandle) {
+    [void][PlainrootNativeInput]::SetForegroundWindow($process.MainWindowHandle)
+  }
+  $isForeground =
+    [PlainrootNativeInput]::GetForegroundWindow() -eq $process.MainWindowHandle
+  $nativeMenu = [PlainrootNativeInput]::GetMenu($process.MainWindowHandle)
+  $isMenuEnabled = Test-PlainrootMenuItemEnabled $nativeMenu $expectedMenuItem
+  if ($isForeground -and $isMenuEnabled) {
+    $ready = $true
+    break
+  }
+  Start-Sleep -Milliseconds 100
+} while ([DateTime]::UtcNow -lt $deadline)
+
+if (-not $ready) {
+  throw "Plainroot shortcut window or menu item did not become ready"
+}
 [System.Windows.Forms.SendKeys]::SendWait("${keys}")
 `;
     await execFileAsync("powershell.exe", [

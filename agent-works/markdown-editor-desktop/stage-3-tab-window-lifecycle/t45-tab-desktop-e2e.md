@@ -37,10 +37,10 @@ P1 主链新增真实替换事务：
 
 ### 2.3 平台原生页签组合键
 
-原生快捷键用独立桌面进程和三个真实页签验证。测试先定位唯一 fixture 窗口，等待目标进程成为前台且对应原生菜单项已启用，再执行系统级输入；每个方向只发送一次：
+原生快捷键用独立桌面进程和三个真实页签验证。测试先有界等待唯一 fixture 窗口进入系统可发现状态，再等待目标进程成为前台且对应原生菜单项已启用，最后执行系统级输入；每个方向只发送一次：
 
 - macOS：System Events `AXRaise` 后发送 `Cmd+Option+Right/Left`；
-- Windows：Win32 `SetForegroundWindow` 后发送 `Ctrl+Tab` / `Ctrl+Shift+Tab`。
+- Windows：轮询 Win32 `GetForegroundWindow` 与原生菜单 `GetMenuState`，确认目标窗口前台且对应菜单项启用后发送 `Ctrl+Tab` / `Ctrl+Shift+Tab`。
 
 macOS 在最新重建的 Tauri E2E release 二进制上发现 `Cmd+Shift+]` 可触发，但 `Cmd+Shift+[` 不会到达菜单动作；因此没有保留不可用的对称外观，而是收敛为双向均实际通过的 `Cmd+Option+Right/Left`。Windows 映射保持平台常用组合，但尚未在 Windows runner 运行，不能记为通过。
 
@@ -75,6 +75,8 @@ React 没有新增全局 keydown；原生菜单仍通过唯一 `WORKBENCH_MENU_E
 - 旧 E2E 二进制曾造成快捷键结果失真；重新执行 `pnpm test:e2e:build` 后只采信最新产物；
 - 恢复用例错误地查询 `h3`，而公共 `AsyncStatePanel` 的标题契约是 `h2`；修正语义选择器后完整四段链从头通过。
 - 加入 760 px 档位后的首次完整复跑中，主链 12/12 通过，但原生下一页签未触发，整套真实返回非零；原因是固定 500 ms 延时不能证明目标进程和菜单已就绪。测试改为等待前台进程与菜单启用这两个可观察前置条件后仍只发送一次按键，随后四段链再次从头通过。
+- 同一前置条件也已应用到 Windows 分支：不再使用固定 500 ms 延时，而是通过 Win32 窗口与原生菜单状态等待就绪。该代码尚未在 Windows 执行，不能由 macOS 通过结果推断其可用。
+- Windows 前置门禁整改后的首次 macOS 回归又真实暴露 System Events 单次枚举尚未发现新进程窗口的失败；窗口发现因此也改为有界等待。该等待只建立系统输入前置条件，不重复发送快捷键或重试业务断言；整改后完整四段链再次以 15/15 通过。
 
 WDIO Tauri service 在 macOS 会输出无法按动态文档标题切换原生窗口的告警，但 WebDriver 会话、断言与 spec 均完成；这些告警不被当成通过证据，也未通过关闭断言或业务重试掩盖。
 
