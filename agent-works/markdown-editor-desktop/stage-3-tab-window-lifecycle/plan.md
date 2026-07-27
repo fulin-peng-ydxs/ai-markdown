@@ -6,7 +6,7 @@
 >
 > 当前阶段：阶段 3——多文档页签状态机、窗口会话恢复与全页签生命周期保护
 >
-> 计划状态：执行中（T35～T44 已完成；T45 本地实现与 macOS 验证已完成，四轮远端依次暴露 Windows CRLF 契约、平台字段 lint、Tauri 菜单前置探针及 WebView 刷新测试动作问题，均已按真实契约整改，最新双平台复验待补；T46 未实施）
+> 计划状态：执行中（T35～T44 已完成；T45 本地实现与 macOS 验证已完成，第五次远端已再次取得 macOS 完整绿灯，并让 Windows 进入主桌面链后暴露动态窗口标题导致 WebView2 点击错渲染器的问题；当前已按真实渲染器状态修复并待最新双平台复验；T46 未实施）
 >
 > 需求编号规则：完全沿用 `requirement.md` 的 R1～R34，不新增、重排或改变 R 编号含义。
 
@@ -573,7 +573,7 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 
 ### 6.11 任务 T45：真实桌面 E2E、双平台 CI 与页面验收
 
-- 状态：进行中（本地实现与 macOS 验证完成；第四次远端运行中 macOS 主链暴露 WebView 刷新会使 WDIO 动态窗口追踪失效，现已改用真实页签关闭/重开验证磁盘内容；Windows 同轮结果与最新双平台 CI/artifact 待再次核验）。
+- 状态：进行中（本地实现与 macOS 验证完成；第五次远端 macOS 完整通过，Windows 已通过非桌面门禁并在 12 条主链中通过 10 条，剩余失败定位为动态窗口标题下 WDIO Tauri service 错选渲染器；测试现以当前渲染器内真实 React 事件继续驱动 Tauri IPC 和磁盘链，最新双平台 CI/artifact 待再次核验）。
 - 依赖：T44。
 - 涉及文件/模块：`tests/e2e/`、fixtures、WDIO、`.github/workflows/ci.yml`、P1/P2、页面验收留痕。
 - 目标：用真实 Tauri IPC 在 macOS/Windows 验证页签、结算、窗口替换和恢复，而不是只依赖 jsdom/mock。
@@ -592,6 +592,7 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
   - 首次第三阶段远端 run `30272399213` 中 macOS 作业通过完整门禁、15 条桌面 E2E、生产构建与 artifact；Windows 在非桌面契约反向测试提前失败，根因为逐变体解析器只识别 LF、未兼容 checkout 的 CRLF。解析器现先归一行尾并新增 Windows 行尾回归，原字段错置 fail-loud 断言继续保留。修复提交尚待重新推送取得双平台结果，因此 T45 仍为进行中，不开始 T46。
   - 第二次远端 run `30274596446` 的 macOS 作业再次完整通过，Windows 也已通过此前失败的非桌面契约门禁，随后在全 target Clippy 阶段发现 `WindowSessionStore.root` 仅由 Unix 权限分支读取、Windows 结构体保留后触发 `dead_code`。实现改为只在 Unix 编译该字段，不用 `allow`/`expect` 绕过门禁；第三次双平台复验前仍不开始 T46。
   - 第四次远端 run `30278252178` 已上传 macOS/Windows 诊断 artifact：`plainroot-macos-30278252178`（SHA-256 `e9758037104c586f904074326f186e6abceaa61ee84f53a74a74858f626ab70c`）与 `plainroot-windows-30278252178`（SHA-256 `26cff25d996b95ad52afcbeb6774f1dc61f0ef0aa0fc20028e4aeb82dff45f93`）。macOS 主链在保存后的 `browser.refresh()` 场景失败；本机完整复现表明，动态窗口标题变化后刷新 WebView 会使 WDIO Tauri service 持续寻找旧标题并级联影响后续用例。Windows 已通过非桌面门禁和 12/12 主链，进入原生页签快捷键用例后，因只读菜单探针在系统脚本建立前台窗口条件之前执行而持续返回未启用；当次没有发送按键。用例现以真实页签关闭/重开替代非应用重启的 WebView 刷新，并在读取菜单状态前先建立目标窗口前台条件；本机原生快捷键专项已以真实系统输入通过。整改没有增加业务重试或放宽内容断言，仍须由下一轮双平台远端执行验证。
+  - 第五次远端 run `30280357578` 对提交 `a471a43` 再次证明 macOS 完整门禁、15 条桌面 E2E、生产构建和 artifact 可用；`plainroot-macos-30280357578` 的 SHA-256 为 `ab4772d4a174194c1c9f450af93b292af3eae5f685c19e6fdf6935f1d943f0f6`。Windows 已通过非桌面门禁并在主桌面链通过 10/12，随后“真实改名/移动/删除”和目录移动风险取消用例失败；`plainroot-windows-30280357578` 的 SHA-256 为 `15c6bfd89a5c263128a75e6adb80dde3fa553beb38701baedf3257e755350ebc`。日志与截图证明动态文档标题下 WDIO Tauri service 把点击路由到错误渲染器，实际打开了上一项移动弹层并遗留结算弹层，不是 Rust 磁盘命令失败。当前测试用受控 helper 在当前 WebView 文档内定位树项、精确 `aria-labelledby` 弹层和按钮，并触发真实 DOM `click`/`input` 事件；React handler、Tauri IPC、Rust 磁盘操作和磁盘断言均未替换为 mock。修复后本机主桌面链已连续两次通过 12/12；macOS 原生快捷键、重启种子和恢复脚本保持第五次远端已通过的实现不变。最新双平台远端结果仍是 T45 完成前置。
 
 ### 6.12 任务 T46：整体复核、架构文档与阶段验收
 

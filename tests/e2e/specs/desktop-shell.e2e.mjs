@@ -192,6 +192,170 @@ async function openFixtureWorkspace() {
   workspaceId = workspace.id;
 }
 
+// The service cannot resolve Plainroot's document-dependent native titles on
+// WebView2. These helpers stay in the current renderer while preserving the real
+// React event, Tauri IPC and disk mutation chain under test.
+async function clickRendererButton(label, labelledBy = null) {
+  const result = await browser.execute((nextLabel, nextLabelledBy) => {
+    const scope = nextLabelledBy
+      ? document.querySelector(
+          `dialog[open][aria-labelledby="${nextLabelledBy}"]`,
+        )
+      : document;
+    if (!scope) return "scope-not-found";
+    const button = [...scope.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent?.trim() === nextLabel,
+    );
+    if (!(button instanceof HTMLButtonElement)) return "button-not-found";
+    if (button.disabled) return "button-disabled";
+    button.click();
+    return "clicked";
+  }, label, labelledBy);
+  assert.equal(
+    result,
+    "clicked",
+    `could not click "${label}" in ${labelledBy ?? "the current renderer"}: ${result}`,
+  );
+}
+
+async function clickRendererElement(selector) {
+  const result = await browser.execute((nextSelector) => {
+    const element = document.querySelector(nextSelector);
+    if (!(element instanceof HTMLElement)) return "element-not-found";
+    element.click();
+    return "clicked";
+  }, selector);
+  assert.equal(
+    result,
+    "clicked",
+    `could not click renderer element ${selector}: ${result}`,
+  );
+}
+
+async function selectTreePath(relativePath) {
+  await browser.waitUntil(
+    () =>
+      browser.execute(
+        (nextPath) =>
+          [...document.querySelectorAll('[role="treeitem"]')].some(
+            (candidate) =>
+              candidate instanceof HTMLButtonElement &&
+              candidate.dataset.treePath === nextPath,
+          ),
+        relativePath,
+      ),
+    {
+      timeout: 10_000,
+      timeoutMsg: `tree entry ${relativePath} did not appear`,
+    },
+  );
+  const result = await browser.execute((nextPath) => {
+    const entry = [...document.querySelectorAll('[role="treeitem"]')].find(
+      (candidate) =>
+        candidate instanceof HTMLButtonElement &&
+        candidate.dataset.treePath === nextPath,
+    );
+    if (!(entry instanceof HTMLButtonElement)) return "entry-not-found";
+    entry.click();
+    return "clicked";
+  }, relativePath);
+  assert.equal(result, "clicked", `could not select tree entry ${relativePath}`);
+  await browser.waitUntil(
+    () =>
+      browser.execute(
+        (nextPath) =>
+          [...document.querySelectorAll('[role="treeitem"]')].some(
+            (candidate) =>
+              candidate instanceof HTMLButtonElement &&
+              candidate.dataset.treePath === nextPath &&
+              candidate.getAttribute("aria-selected") === "true",
+          ),
+        relativePath,
+      ),
+    {
+      timeout: 10_000,
+      timeoutMsg: `tree selection did not settle on ${relativePath}`,
+    },
+  );
+}
+
+async function waitForRendererDialog(labelledBy) {
+  await browser.waitUntil(
+    () =>
+      browser.execute(
+        (nextLabelledBy) =>
+          Boolean(
+            document.querySelector(
+              `dialog[open][aria-labelledby="${nextLabelledBy}"]`,
+            ),
+          ),
+        labelledBy,
+      ),
+    {
+      timeout: 10_000,
+      timeoutMsg: `dialog ${labelledBy} did not open`,
+    },
+  );
+}
+
+async function setRendererDialogInput(labelledBy, value) {
+  const result = await browser.execute((nextLabelledBy, nextValue) => {
+    const dialog = document.querySelector(
+      `dialog[open][aria-labelledby="${nextLabelledBy}"]`,
+    );
+    const input = dialog?.querySelector('input:not([type="checkbox"])');
+    if (!(input instanceof HTMLInputElement)) return "input-not-found";
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    if (!setter) return "value-setter-not-found";
+    setter.call(input, nextValue);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    return "updated";
+  }, labelledBy, value);
+  assert.equal(
+    result,
+    "updated",
+    `could not update the input in ${labelledBy}: ${result}`,
+  );
+}
+
+async function dismissOpenDialogs() {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const result = await browser.execute(() => {
+      const openCount = document.querySelectorAll("dialog[open]").length;
+      const dialog = document.querySelector("dialog[open]");
+      if (!(dialog instanceof HTMLDialogElement)) {
+        return { status: "none", openCount };
+      }
+      const cancel = dialog.querySelector(
+        ".app-dialog__actions button:not(:disabled)",
+      );
+      if (!(cancel instanceof HTMLButtonElement)) {
+        return { status: "blocked", openCount };
+      }
+      cancel.click();
+      return { status: "clicked", openCount };
+    });
+    if (result.status === "none") return;
+    if (result.status === "blocked") {
+      throw new Error("an open dialog could not be dismissed after the test");
+    }
+    await browser.waitUntil(
+      () =>
+        browser.execute(
+          (previousCount) =>
+            document.querySelectorAll("dialog[open]").length < previousCount,
+          result.openCount,
+        ),
+      { timeout: 2_000, timeoutMsg: "an open dialog did not dismiss" },
+    );
+  }
+  throw new Error("too many nested dialogs remained open after the test");
+}
+
 async function focusAtEnd(selector) {
   const focused = await browser.execute((targetSelector) => {
     const target = document.querySelector(targetSelector);
@@ -563,17 +727,13 @@ describe("Plainroot desktop shell", () => {
     await writeFile(imagePath, new Uint8Array(PNG_BYTES));
 
     try {
-      await $('[title="刷新文件树"]').click();
+      await clickRendererElement('[title="刷新文件树"]');
 
-      const renameEntry = await $(
-        `[role="treeitem"][data-tree-path="${renameSource}"]`,
-      );
-      await renameEntry.waitForDisplayed({ timeout: 10_000 });
-      await renameEntry.click();
-      await $('button=重命名').click();
-      const renameDialog = await $("dialog[open]");
-      await renameDialog.$('input[aria-label="新名称"], input').setValue(renameTarget);
-      await renameDialog.$("button=提交到磁盘").click();
+      await selectTreePath(renameSource);
+      await clickRendererButton("重命名");
+      await waitForRendererDialog("workbench-operation-title");
+      await setRendererDialogInput("workbench-operation-title", renameTarget);
+      await clickRendererButton("提交到磁盘", "workbench-operation-title");
       await browser.waitUntil(
         async () =>
           (await tabList
@@ -589,24 +749,24 @@ describe("Plainroot desktop shell", () => {
       );
       await assert.rejects(readFile(join(fixture.root, renameSource), "utf8"));
 
-      const moveEntry = await $(
-        `[role="treeitem"][data-tree-path="${moveSource}"]`,
+      await selectTreePath(moveSource);
+      await clickRendererButton("移动");
+      await waitForRendererDialog("workbench-operation-title");
+      await setRendererDialogInput(
+        "workbench-operation-title",
+        moveTargetDirectory,
       );
-      await moveEntry.waitForDisplayed({ timeout: 10_000 });
-      await moveEntry.click();
-      await $('button=移动').click();
-      const moveDialog = await $("dialog[open]");
-      await moveDialog
-        .$('input[aria-label="目标文件夹（留空表示根目录）"], input')
-        .setValue(moveTargetDirectory);
       assert.equal(
-        await moveDialog
-          .$("input[type=checkbox]")
-          .isSelected(),
+        await browser.execute(
+          () =>
+            document.querySelector(
+              'dialog[open][aria-labelledby="workbench-operation-title"] input[type="checkbox"]',
+            )?.checked ?? false,
+        ),
         true,
         "the real move must offer image-link adjustment for the open document",
       );
-      await moveDialog.$("button=提交到磁盘").click();
+      await clickRendererButton("提交到磁盘", "workbench-operation-title");
       await browser.waitUntil(
         async () => {
           try {
@@ -640,31 +800,44 @@ describe("Plainroot desktop shell", () => {
       );
       await assert.rejects(readFile(join(fixture.root, moveSource), "utf8"));
 
-      const deleteEntry = await $(
-        `[role="treeitem"][data-tree-path="${deletePath}"]`,
-      );
-      await deleteEntry.waitForDisplayed({ timeout: 10_000 });
-      await deleteEntry.click();
-      await $('button=删除').click();
-      const trashDialog = await $("dialog[open]");
-      await trashDialog.$("button=移到废纸篓").click();
+      await selectTreePath(deletePath);
+      await clickRendererButton("删除");
+      await waitForRendererDialog("trash-title");
+      await clickRendererButton("移到废纸篓", "trash-title");
       await browser.waitUntil(
-        async () => {
-          const deleteTab = await tabList.$(
-            `button[role="tab"][title^="${deletePath} ·"]`,
-          );
-          const permanent = await $("button=永久删除");
-          return !(await deleteTab.isExisting()) ||
-            (await permanent.isDisplayed().catch(() => false));
-        },
+        () =>
+          browser.execute(
+            (nextDeletePath) => {
+              const deleteTab = [
+                ...document.querySelectorAll('button[role="tab"]'),
+              ].some((tab) =>
+                tab.getAttribute("title")?.startsWith(`${nextDeletePath} ·`),
+              );
+              const permanent = [
+                ...document.querySelectorAll("button"),
+              ].some(
+                (button) =>
+                  button.textContent?.trim() === "永久删除" &&
+                  !button.hasAttribute("disabled"),
+              );
+              return !deleteTab || permanent;
+            },
+            deletePath,
+          ),
         {
           timeout: 10_000,
           timeoutMsg: "real trash flow neither closed the tab nor offered fallback",
         },
       );
-      const permanent = await $("button=永久删除");
-      if (await permanent.isDisplayed().catch(() => false)) {
-        await permanent.click();
+      const permanentReady = await browser.execute(() =>
+        [...document.querySelectorAll("button")].some(
+          (button) =>
+            button.textContent?.trim() === "永久删除" &&
+            !button.hasAttribute("disabled"),
+        ),
+      );
+      if (permanentReady) {
+        await clickRendererButton("永久删除", "permanent-delete-title");
       }
       await browser.waitUntil(
         async () =>
@@ -678,6 +851,7 @@ describe("Plainroot desktop shell", () => {
       );
       await assert.rejects(readFile(join(fixture.root, deletePath), "utf8"));
     } finally {
+      await dismissOpenDialogs();
       await rm(join(fixture.root, renameSource), { force: true });
       await rm(join(fixture.root, renameTarget), { force: true });
       await rm(join(fixture.root, moveSource), { force: true });
@@ -703,13 +877,10 @@ describe("Plainroot desktop shell", () => {
       assert.equal(risk.containsSupportedImages, true);
       assert.equal(risk.mayBreakImageLinks, true);
 
-      const guideEntry = await $('[role="treeitem"][data-tree-path="guides"]');
-      await guideEntry.waitForDisplayed();
-      await guideEntry.click();
-      await $('button=移动').click();
-      const operationDialog = await $("dialog[open]");
-      await operationDialog.waitForDisplayed();
-      await operationDialog.$("button=提交到磁盘").click();
+      await selectTreePath("guides");
+      await clickRendererButton("移动");
+      await waitForRendererDialog("workbench-operation-title");
+      await clickRendererButton("提交到磁盘", "workbench-operation-title");
 
       const warning = await $("#workbench-operation-description");
       await browser.waitUntil(
@@ -723,15 +894,19 @@ describe("Plainroot desktop shell", () => {
         },
       );
       assert.equal(
-        await operationDialog
-          .$("button=继续移动（链接可能失效）")
-          .isDisplayed(),
+        await browser.execute(() =>
+          [...document.querySelectorAll("button")].some(
+            (button) =>
+              button.textContent?.trim() === "继续移动（链接可能失效）" &&
+              !button.hasAttribute("disabled"),
+          ),
+        ),
         true,
       );
-      await operationDialog
-        .$(".app-dialog__actions button:first-child")
-        .click();
-      await browser.waitUntil(async () => !(await $("dialog[open]").isExisting()), {
+      await clickRendererButton("取消", "workbench-operation-title");
+      await browser.waitUntil(() => browser.execute(
+        () => !document.querySelector("dialog[open]"),
+      ), {
         timeoutMsg: "cancelling the move warning did not close the operation dialog",
       });
       assert.equal(
@@ -743,13 +918,7 @@ describe("Plainroot desktop shell", () => {
         "cancelling the warning must not move the directory",
       );
     } finally {
-      const openDialog = await $("dialog[open]");
-      if (await openDialog.isExisting().catch(() => false)) {
-        await openDialog
-          .$(".app-dialog__actions button:first-child")
-          .click()
-          .catch(() => undefined);
-      }
+      await dismissOpenDialogs();
       await rm(warningImage, { force: true });
     }
   });
