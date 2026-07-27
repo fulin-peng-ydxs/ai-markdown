@@ -184,19 +184,59 @@ function Test-PlainrootMenuItemEnabled {
     [IntPtr]$WindowHandle,
     [string]$ItemTitle
   )
+  $expandPattern = $null
   try {
     $window = [System.Windows.Automation.AutomationElement]::FromHandle(
       $WindowHandle
     )
     if ($null -eq $window) { return $false }
-    $menuItems = $window.FindAll(
+
+    $windowItems = $window.FindAll(
       [System.Windows.Automation.TreeScope]::Descendants,
       [System.Windows.Automation.Condition]::TrueCondition
     )
-    foreach ($candidate in $menuItems) {
+    $tabMenu = $null
+    foreach ($candidate in $windowItems) {
       if (
         $candidate.Current.ControlType -eq
           [System.Windows.Automation.ControlType]::MenuItem -and
+        $candidate.Current.Name -like "*页签*"
+      ) {
+        $tabMenu = $candidate
+        break
+      }
+    }
+
+    if (
+      $null -eq $tabMenu -or
+      -not $tabMenu.TryGetCurrentPattern(
+        [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
+        [ref]$expandPattern
+      )
+    ) {
+      return $false
+    }
+
+    $expandPattern.Expand()
+    Start-Sleep -Milliseconds 50
+
+    $processCondition = [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+      $window.Current.ProcessId
+    )
+    $menuItemCondition = [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::MenuItem
+    )
+    $menuItems = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+      [System.Windows.Automation.TreeScope]::Descendants,
+      [System.Windows.Automation.AndCondition]::new(
+        $processCondition,
+        $menuItemCondition
+      )
+    )
+    foreach ($candidate in $menuItems) {
+      if (
         $candidate.Current.Name -like "*$ItemTitle*" -and
         $candidate.Current.IsEnabled
       ) {
@@ -205,6 +245,14 @@ function Test-PlainrootMenuItemEnabled {
     }
   } catch {
     return $false
+  } finally {
+    if ($null -ne $expandPattern) {
+      try {
+        $expandPattern.Collapse()
+      } catch {
+        # The menu may already have collapsed after a foreground transition.
+      }
+    }
   }
   return $false
 }
