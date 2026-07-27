@@ -573,7 +573,7 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 
 ### 6.11 任务 T45：真实桌面 E2E、双平台 CI 与页面验收
 
-- 状态：进行中（本地实现与 macOS 验证完成；第九次远端 macOS 完整通过，Windows 已通过非桌面门禁和 10/12 主桌面链，两个失败仍来自动态标题下 WDIO renderer 选择；当前在全部 Windows E2E 隔离进程固定工作区标题，保持真实 React/IPC/磁盘链、Rust/Tauri 菜单探针、系统输入和页签选中态闭环，最新双平台 CI/artifact 待再次核验）。
+- 状态：进行中（本地实现与 macOS 验证完成；第十次远端 macOS 完整通过，Windows 已通过非桌面门禁和 12/12 主桌面链，随后原生快捷键专项只证明 policy 或原生菜单至少一项未就绪；当前让单窗口持续应用自身菜单状态、多窗口仍按聚焦窗口隔离，并增加诊断区分两类原因，最新双平台 CI/artifact 待再次核验）。
 - 依赖：T44。
 - 涉及文件/模块：`tests/e2e/`、fixtures、WDIO、`.github/workflows/ci.yml`、P1/P2、页面验收留痕。
 - 目标：用真实 Tauri IPC 在 macOS/Windows 验证页签、结算、窗口替换和恢复，而不是只依赖 jsdom/mock。
@@ -597,6 +597,7 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
   - 第七次远端 run `30287098572` 对提交 `30b44ad5a7b24accc2aa729535265cc087566ff2` 再次证明 macOS 完整通过、Windows 非桌面门禁与主桌面链 12/12 通过。Windows 在原生快捷键专项发送按键前安全失败：折叠状态下目标子菜单项不在窗口后代 AutomationElement 集合内。macOS artifact SHA-256 为 `5682950a5080c55c570dcbab9e7b29224fedd7d1880b7a92fd92177a99324e66`，Windows 诊断 artifact 为 `31dee948ffb2f9095fedddacbabd463ec570c5b724a40f9d3741bc5817f2f56c`。当前实现先展开顶层“页签”菜单，从同进程桌面可访问性树读取目标子项 enabled，再收起菜单并发送一次按键；仍待下一轮 Windows runner 验证。
   - 第八次远端 run `30288530855` 对提交 `89fb7bd8c8dbd582a2d41afd283bc9b868c7a651` 再次证明 macOS 完整通过、Windows 非桌面门禁与主桌面链 12/12 通过；主动展开菜单后，Tauri/Windows 仍未通过 UI Automation 暴露目标子项，按键未发送。macOS artifact SHA-256 为 `e90c0819f7a91a482af0591389c9f642acda533c19f78d054bdb5d6f030d01b9`，Windows 诊断 artifact 为 `9d8f0d69242fbf7544ef94fa23d99032df2d6cf06f20de18d8a721d6a79ffbf9`。当前改用 Windows 快捷键 E2E 专用固定标题测试缝消除 WDIO renderer 漂移，真实菜单状态、系统按键和结果断言保持不变。
   - 第九次远端 run `30290219296` 对提交 `a280f978f38e8eed1ddb82fa69f86eae358097e9` 再次证明 macOS 完整通过；`plainroot-macos-30290219296` 的 SHA-256 为 `c530f11bc23ed3748eba7e635dafec009ec80ee8ded58acf02163eea64307eec`。Windows 非桌面门禁通过，但主桌面链在 10/12 后因动态标题再次令 WDIO 丢失 renderer，手动保存状态与恢复副本源码断言失败，快捷键专项尚未执行；诊断 artifact SHA-256 为 `b1a5d2518672b8659efba8fc7e18a2963d04c8ff10098d4a2d0817facdbb0f99`。当前把同一固定标题测试缝覆盖到全部 Windows E2E 隔离进程，生产窗口标题与业务断言保持不变。
+  - 第十次远端 run `30291901180` 对提交 `a25af90f271cfe92347de7040b1b0a2effe317b6` 再次证明 macOS 完整通过，Windows 非桌面门禁与主桌面链 12/12 通过，全流程固定标题真实闭合 renderer 漂移。Windows 随后在原生快捷键专项的只读菜单探针中发现下一/上一项仍未启用，系统按键未发送；`plainroot-macos-30291901180` 的 SHA-256 为 `228473f8411c6e7d64b394e17579cff079a46640751fdf693aede8f341046bee`，Windows 诊断 artifact 为 `dede64c0ccccd205f9a66fe70269e45e254c321964fe66be0e07f1516640e2a9`。当前修复单窗口暂时失焦时不应用最新 registry 状态的问题：单窗口菜单始终可保持当前，多窗口仍只由聚焦窗口事件决定全局菜单。
 
 ### 6.12 任务 T46：整体复核、架构文档与阶段验收
 

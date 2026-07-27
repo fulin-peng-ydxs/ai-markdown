@@ -398,7 +398,10 @@ pub fn update_editor_menu_state<R: Runtime>(
     registry: State<'_, EditorMenuStateRegistry>,
 ) -> Result<(), DesktopError> {
     registry.update(window.label(), state)?;
-    if window.is_focused().unwrap_or(false) {
+    if should_apply_editor_menu_state(
+        window.is_focused().unwrap_or(false),
+        app.webview_windows().len(),
+    ) {
         apply_editor_menu_state(&app, state)?;
     }
     Ok(())
@@ -411,10 +414,17 @@ pub fn reset_editor_menu_state<R: Runtime>(
     registry: State<'_, EditorMenuStateRegistry>,
 ) -> Result<(), DesktopError> {
     registry.remove(window.label())?;
-    if window.is_focused().unwrap_or(false) {
+    if should_apply_editor_menu_state(
+        window.is_focused().unwrap_or(false),
+        app.webview_windows().len(),
+    ) {
         apply_editor_menu_state(&app, EditorMenuState::default())?;
     }
     Ok(())
+}
+
+fn should_apply_editor_menu_state(window_is_focused: bool, window_count: usize) -> bool {
+    window_is_focused || window_count == 1
 }
 
 #[cfg(feature = "e2e")]
@@ -427,13 +437,24 @@ pub fn e2e_tab_shortcuts_ready<R: Runtime>(
     let state = registry.state_for(window.label())?;
     let policy = tab_menu_policy(state);
     if !policy.next || !policy.previous {
+        eprintln!(
+            "Plainroot E2E tab menu policy is not ready: tabs={}, active={:?}, busy={}",
+            state.tabs.tab_count, state.tabs.active_tab_index, state.busy
+        );
         return Ok(false);
     }
 
     let menu = app.menu().ok_or_else(menu_update_error)?;
     let next = find_menu_item(&menu, NEXT_TAB_ID).ok_or_else(menu_update_error)?;
     let previous = find_menu_item(&menu, PREVIOUS_TAB_ID).ok_or_else(menu_update_error)?;
-    Ok(menu_item_enabled(&next)? && menu_item_enabled(&previous)?)
+    let next_enabled = menu_item_enabled(&next)?;
+    let previous_enabled = menu_item_enabled(&previous)?;
+    if !next_enabled || !previous_enabled {
+        eprintln!(
+            "Plainroot E2E native tab menu is stale: next={next_enabled}, previous={previous_enabled}"
+        );
+    }
+    Ok(next_enabled && previous_enabled)
 }
 
 pub fn apply_window_editor_menu_state<R: Runtime>(
@@ -782,6 +803,13 @@ mod tests {
         assert!(!invalid_active.close_current);
         assert!(!invalid_active.close_right);
         assert!(!invalid_active.next);
+    }
+
+    #[test]
+    fn a_single_background_window_keeps_its_native_menu_state_current() {
+        assert!(super::should_apply_editor_menu_state(false, 1));
+        assert!(super::should_apply_editor_menu_state(true, 2));
+        assert!(!super::should_apply_editor_menu_state(false, 2));
     }
 
     #[test]
