@@ -158,7 +158,7 @@ async function sendNativeTabShortcut(direction) {
   }
 
   if (process.platform === "win32") {
-    const keys = direction === "next" ? "^{TAB}" : "^+{TAB}";
+    const keys = direction === "next" ? "^{PGDN}" : "^{PGUP}";
     const script = `
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type @"

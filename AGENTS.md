@@ -15,7 +15,7 @@
 - T1 已建立并验证技术基线：Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以当前清单和锁文件为准。
 - Markdown 内容事实源始终是用户授权目录中的真实 `.md` 文件；首版不建立云端账号、在线协作、插件市场或私有内容数据库。
 - 第一阶段 T1～T17 已建立桌面底座，第二阶段 T18～T34 已建立单文档编辑、保存、恢复、冲突和图片链。第三阶段分支 `codex/plainroot-stage-3` 的 T35～T44 已建立页签集合、窗口页签会话仓储、平台路径身份、每页签独立 session/history/save controller、活动 editor 单挂载、可见页签、最近关闭、全页签结算、磁盘成功后的多 runtime 提交、窗口生命周期保护、打开偏好、既有会话恢复、原生页签命令和统一非桌面门禁。T45 本地实现与 macOS 验证已完成；第十次远端 macOS 完整通过，Windows 已通过非桌面门禁和主桌面链 12/12，原生快捷键专项的菜单同步正在复验；T46 未实施。当前计划见 `agent-works/markdown-editor-desktop/stage-3-tab-window-lifecycle/plan.md`。
-- 第二阶段基线提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 的 9/9 隔离桌面 E2E 已在 macOS/Windows runner 通过。T45 当前本地 macOS 以四个隔离进程通过 15/15 桌面用例，包含真实系统 `Cmd+Option+Right/Left` 页签切换、窗口替换拒绝和跨进程恢复/单项失败隔离；第十次 run `30291901180` 的 macOS 再次全绿，Windows 已通过非桌面门禁和主桌面链 12/12，证明全 Windows E2E 固定标题已稳定 renderer。Windows 快捷键专项随后只证明 policy 或原生菜单至少一项未就绪；当前让单窗口即使暂时失焦也持续应用其自身菜单状态，多窗口仍只消费聚焦窗口状态，并增加脱敏诊断区分两类原因。最新双平台 CI 与成对 artifact 尚待复验。系统 IME、JS heap、长时峰值内存、真实多窗口整组退出，以及 Windows 选择器、回收站、Explorer、菜单和辅助技术仍无完整证据；当前不得表述为完整 R13/R14/R30 或第三阶段完成。
+- 第二阶段基线提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 的 9/9 隔离桌面 E2E 已在 macOS/Windows runner 通过。T45 当前本地 macOS 以四个隔离进程通过 15/15 桌面用例，包含真实系统 `Cmd+Option+Right/Left` 页签切换、窗口替换拒绝和跨进程恢复/单项失败隔离；第十一轮 run `30293567676` 的 macOS 再次全绿，Windows 已通过非桌面门禁和主桌面链 12/12，并证明页签策略与原生菜单启用态可达。单次真实系统 `Ctrl+Tab` 仍未触发 Windows/Tauri 原生菜单，现已收敛为待验证的 `Ctrl+PageDown/PageUp`；最新双平台 CI 与成对 artifact 尚待复验。系统 IME、JS heap、长时峰值内存、真实多窗口整组退出，以及 Windows 选择器、回收站、Explorer、菜单和辅助技术仍无完整证据；当前不得表述为完整 R13/R14/R30 或第三阶段完成。
 
 ## 当前与目标代码边界
 

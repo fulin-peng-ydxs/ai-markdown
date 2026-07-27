@@ -43,11 +43,11 @@ const CLOSE_WINDOW_ACCELERATOR: &str = "CmdOrCtrl+Shift+W";
 #[cfg(target_os = "macos")]
 const NEXT_TAB_ACCELERATOR: &str = "CmdOrCtrl+Alt+Right";
 #[cfg(not(target_os = "macos"))]
-const NEXT_TAB_ACCELERATOR: &str = "Ctrl+Tab";
+const NEXT_TAB_ACCELERATOR: &str = "Ctrl+PageDown";
 #[cfg(target_os = "macos")]
 const PREVIOUS_TAB_ACCELERATOR: &str = "CmdOrCtrl+Alt+Left";
 #[cfg(not(target_os = "macos"))]
-const PREVIOUS_TAB_ACCELERATOR: &str = "Ctrl+Shift+Tab";
+const PREVIOUS_TAB_ACCELERATOR: &str = "Ctrl+PageUp";
 
 const WORKBENCH_ACTION_IDS: &[&str] = &[
     SAVE_ID,
@@ -865,8 +865,8 @@ mod tests {
         }
         #[cfg(not(target_os = "macos"))]
         {
-            assert_eq!(super::NEXT_TAB_ACCELERATOR, "Ctrl+Tab");
-            assert_eq!(super::PREVIOUS_TAB_ACCELERATOR, "Ctrl+Shift+Tab");
+            assert_eq!(super::NEXT_TAB_ACCELERATOR, "Ctrl+PageDown");
+            assert_eq!(super::PREVIOUS_TAB_ACCELERATOR, "Ctrl+PageUp");
         }
     }
 }

@@ -46,7 +46,7 @@
 ### 2.1 工程与验证基线
 
 - 当前技术基线为 Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以清单和锁文件为准。
-- 2026-07-27 已在 T45 当前本地状态以 `pnpm verify:non-desktop` 从头执行统一门禁：Node 独立回归 30/30、Vitest 32 个文件 267/267、Rust no-default/all-features 均 205 项通过且 1 项手动性能探针忽略、类型检查、生产构建、Rust fmt、全 target/all-features Clippy 和许可证 727/511/0 通过。macOS Tauri/WebKit 现由四个隔离桌面进程完成 15/15：既有主链扩为 12 条，另有 1 条真实系统页签组合键、1 条重启前会话种子和 1 条重启后逐项失败隔离。macOS 下一/上一页签使用实际可触发的 `Cmd+Option+Right/Left`，Windows 保留 `Ctrl+Tab` / `Ctrl+Shift+Tab`，但 Windows 与远端 CI 尚未验证。各任务留痕中的测试数字只是当时的历史快照；最新远端证据仍为 GitHub Actions run `30082725332` 在 macOS/Windows 通过第二阶段 9 条套件，尚未覆盖第三阶段本地提交。
+- 2026-07-27 已在 T45 当前本地状态以 `pnpm verify:non-desktop` 从头执行统一门禁：Node 独立回归 30/30、Vitest 32 个文件 267/267、Rust no-default/all-features 均 205 项通过且 1 项手动性能探针忽略、类型检查、生产构建、Rust fmt、全 target/all-features Clippy 和许可证 727/511/0 通过。macOS Tauri/WebKit 现由四个隔离桌面进程完成 15/15：既有主链扩为 12 条，另有 1 条真实系统页签组合键、1 条重启前会话种子和 1 条重启后逐项失败隔离。macOS 下一/上一页签使用实际可触发的 `Cmd+Option+Right/Left`；Windows run `30293567676` 已证明页签策略与菜单启用态可达，但 `Ctrl+Tab` / `Ctrl+Shift+Tab` 不触发 Windows/Tauri 原生菜单，现已收敛为待验证的 `Ctrl+PageDown/PageUp`。各任务留痕中的测试数字只是当时的历史快照；最新双平台成功证据仍为 GitHub Actions run `30082725332` 在 macOS/Windows 通过第二阶段 9 条套件，尚未覆盖第三阶段当前提交。
 - 第三阶段不得删除、降低或用重试掩盖上述基线。新增页签测试必须加入统一 `pnpm test`、真实桌面 E2E 和双平台 CI。
 - 当前产品依赖已能实现页签状态、拖动、菜单和持久化；T37 只为真实桌面内存门禁在 `e2e` feature 增加可选 `sysinfo`，默认产品构建不注册对应命令。若后续确认必须引入拖拽或状态库，先补许可证、包体、复用理由和回滚方案，再修改清单。
 
@@ -60,7 +60,7 @@
 - `plainroot-state-v1.json` 的 `WorkspaceSessionRoot.windowStateRef` 已由 T36 接到独立窗口页签会话仓储；根状态仍不承载高频页签元数据或正文。
 - `plainroot-preferences-v1.json` 已保存工作区资源目录。R14 的全局打开偏好可在向后兼容的可选字段中扩展，默认继续为“每次询问”。
 - `AppDialog`、`AsyncStatePanel`、`focusContainment`、`plainroot-button` 和语义 token 是弹层、菜单和状态反馈的复用事实源。
-- 原生菜单已将 `Cmd/Ctrl+Shift+W` 用于关闭窗口，并由 T43 启用 `Cmd/Ctrl+W` 关闭当前页签、`Cmd/Ctrl+Shift+T` 重开最近关闭及批量页签命令；T45 按真实平台输入把 macOS 页签切换收敛为 `Cmd+Option+Right/Left`，Windows 保留 `Ctrl+Tab` / `Ctrl+Shift+Tab`。React 不注册会与原生加速键双触发的全局 keydown。
+- 原生菜单已将 `Cmd/Ctrl+Shift+W` 用于关闭窗口，并由 T43 启用 `Cmd/Ctrl+W` 关闭当前页签、`Cmd/Ctrl+Shift+T` 重开最近关闭及批量页签命令；T45 按真实平台输入把 macOS 页签切换收敛为 `Cmd+Option+Right/Left`，Windows 因 `Ctrl+Tab` / `Ctrl+Shift+Tab` 无法触发 Tauri 原生菜单而收敛为 `Ctrl+PageDown/PageUp`。React 不注册会与原生加速键双触发的全局 keydown。
 - `Cmd/Ctrl+W` 关闭最后一个页签时保留已绑定工作区的空窗口；这是与 `Cmd/Ctrl+Shift+W` 关闭原生窗口相互独立的已确认产品行为。
 
 ### 2.3 原型与页面事实
@@ -107,7 +107,7 @@
 | R13 | 完整纳入：真实页签、唯一打开、排序、批量关闭、溢出、最近关闭、独立会话和恢复 | 进行中 | 一致 | T35～T46 | T45 macOS 已通过 15 条真实桌面链，含原生页签组合键、替换拒绝和跨进程恢复；Windows、远端 artifact 与阶段验收仍待 T45～T46 |
 | R14 | 纳入页签会话、打开偏好、全页签替换保护和独立窗口恢复；位置/尺寸/三栏布局留阶段 4 | 进行中 | 部分覆盖 | T36、T40～T46 | T42 已消费根会话引用并恢复独立窗口页签集合，T45 macOS 已验证单窗口跨进程恢复、缺失项隔离和当前窗口替换拒绝；真实多窗口整组退出/恢复、Windows/远端与阶段验收仍待完成 |
 | R15 | 阶段 5 实现主题工作室 | 跳过 | 未覆盖 | - | P3 不注册 |
-| R30 | 纳入页签切换/关闭、重新打开、关闭窗口和弹层焦点子集 | 进行中 | 部分覆盖 | T38～T46 | T45 已用 macOS 真实系统输入验证 `Cmd+Option+Right/Left` 首次触发即可切换；Windows `Ctrl+Tab` / `Ctrl+Shift+Tab`、远端双平台与阶段验收仍待 T45～T46 |
+| R30 | 纳入页签切换/关闭、重新打开、关闭窗口和弹层焦点子集 | 进行中 | 部分覆盖 | T38～T46 | T45 已用 macOS 真实系统输入验证 `Cmd+Option+Right/Left` 首次触发即可切换；Windows `Ctrl+Tab` / `Ctrl+Shift+Tab` 已实证无法触发原生菜单，替代键 `Ctrl+PageDown/PageUp`、远端双平台与阶段验收仍待 T45～T46 |
 | R31 | 纳入 tablist/menu/dialog 的语义、焦点、非颜色状态和减少动态效果子集 | 进行中 | 部分覆盖 | T38、T40、T43～T46 | T43 复用共享 `TabMenu` 打开“所有页签”并恢复首项焦点，原生菜单无可执行目标时禁用；完整对比度、系统偏好与阶段 4 矩阵仍待后续 |
 | R32 | 阶段 4 完成长文视觉定稿 | 跳过 | 未覆盖 | - | 不把页签样式记为 R32 完成 |
 
@@ -363,7 +363,7 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 | 必须实现 | R13 | 多文档页签与最近关闭文档 | 完整实现真实页签、排序、批量关闭、最近关闭和会话恢复 | T35～T46 | 进行中 | 一致 | T45 macOS 已通过 15 条真实桌面链，含原生页签组合键、替换拒绝和跨进程恢复；Windows、远端 artifact 与 T46 阶段验收仍待完成 |
 | 必须实现 | R14 | 一目录一窗口与多窗口生命周期 | 页签会话、偏好、全页签替换保护和独立窗口恢复 | T36、T40～T46 | 进行中 | 部分覆盖 | T42 已按真实根会话引用恢复独立窗口页签；T45 macOS 已验证单窗口重启与当前窗口替换拒绝，位置/尺寸/三栏布局仍属阶段 4，真实多窗口整组退出/恢复及 Windows/远端仍待完成 |
 | 必须实现 | R15 | 颜色主题预设与实时预览 | 暂不纳入 | - | 跳过 | 未覆盖 | 阶段 5 实现，P3 不注册 |
-| 必须实现 | R30 | 核心命令键盘操作 | 页签切换/关闭/重开、关闭窗口与弹层焦点子集 | T38～T46 | 进行中 | 部分覆盖 | T43 已完成原生页签菜单和聚焦窗口路由；T45 已用 macOS 真实系统输入验证 `Cmd+Option+Right/Left`，Windows `Ctrl+Tab` / `Ctrl+Shift+Tab`、搜索、阅读和布局命令留对应任务/阶段 |
+| 必须实现 | R30 | 核心命令键盘操作 | 页签切换/关闭/重开、关闭窗口与弹层焦点子集 | T38～T46 | 进行中 | 部分覆盖 | T43 已完成原生页签菜单和聚焦窗口路由；T45 已用 macOS 真实系统输入验证 `Cmd+Option+Right/Left`，Windows 替代键 `Ctrl+PageDown/PageUp` 待远端验证，搜索、阅读和布局命令留对应任务/阶段 |
 | 必须实现 | R31 | 无障碍基础 | tablist/menu/dialog 的语义、焦点、非颜色状态与减少动态效果 | T38、T40、T43～T46 | 进行中 | 部分覆盖 | T43 已完成无目标禁用和原生“所有页签”到共享菜单的焦点入口；完整桌面无障碍矩阵仍属阶段 4 |
 | 必须实现 | R32 | 长文阅读排版 | 暂不纳入 | - | 跳过 | 未覆盖 | 阶段 4 定稿 |
 | 可选增强 | R16 | 导出 HTML/PDF | 暂不纳入 | - | 跳过 | 未覆盖 | 等阅读渲染与主题稳定 |
@@ -586,7 +586,7 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 - 实际落地情况：
   - `pnpm test:e2e` 现顺序启动四个相互隔离的桌面进程与状态目录：12 条 P1/P2 主链、1 条原生页签组合键、1 条重启前真实会话写入、1 条重启后恢复。重启编排在两个真实进程之间删除一个 fixture 文件，确认两个可读页签继续恢复、缺失页签进入可见 issue、活动项安全回退且非活动页签首次激活才读盘。
   - 主链新增真实窗口替换 intent：先制造本地 dirty 与磁盘外部变化，再通过 Rust `coordinate_workspace_open` 取得 `settlement_required`，确认安全替换弹层出现，并用真实 `resolve_window_settlement(allow=false)` 拒绝事务；原工作区绑定与内存内容保持不变。React 取消按钮接线仍由既有组件测试覆盖，本用例不把直接 IPC 拒绝冒充按钮点击证据。
-  - 两个平台的原生输入都先有界发现目标窗口并将进程置于前台，再等待对应原生菜单项启用，最后只发送一次系统键盘事件，不做业务重试。macOS 通过 `osascript`/System Events 与只读 Rust/Tauri 菜单探针验证，并使用已实测双向有效的 `Cmd+Option+Right/Left`。全部 Windows E2E 隔离进程通过 `e2e` feature 固定与业务无关的动态文档标题，使 WDIO 可持续读取同一真实 renderer；快捷键专项仍读取真实 Rust/Tauri 菜单探针与页签 DOM，系统仅发送一次 `Ctrl+Tab` / `Ctrl+Shift+Tab`。默认生产构建不读取该标志、不注册探针。
+  - 两个平台的原生输入都先有界发现目标窗口并将进程置于前台，再等待对应原生菜单项启用，最后只发送一次系统键盘事件，不做业务重试。macOS 通过 `osascript`/System Events 与只读 Rust/Tauri 菜单探针验证，并使用已实测双向有效的 `Cmd+Option+Right/Left`。全部 Windows E2E 隔离进程通过 `e2e` feature 固定与业务无关的动态文档标题，使 WDIO 可持续读取同一真实 renderer；快捷键专项仍读取真实 Rust/Tauri 菜单探针与页签 DOM。远端 run `30293567676` 已证明菜单策略和启用态可达，但单次 `Ctrl+Tab` 未触发原生菜单，故 Windows 改为只发送一次 `Ctrl+PageDown/PageUp`，等待后续 run 验证。默认生产构建不读取该标志、不注册探针。
   - 页面矩阵在真实 P1/P2 中覆盖 1100/1050/820/760/740 px，不产生根级横向溢出；主命令、状态路径、页签条与其滚动归属保持可见。确定性流程不配置测试重试；每段失败立即停止后续阶段。
   - 最新整改后，本地 macOS 已重新从头运行四个隔离桌面进程并通过 15/15：12 条主链、1 条真实原生页签组合键、1 条重启种子和 1 条跨进程恢复；此前 CRLF 修复后的 `pnpm verify:non-desktop` 从头通过 30/30 Node、267/267 Vitest、206 项 no-default Rust 与 206 项 all-features Rust（均另 1 项手动探针忽略）、fmt、Clippy、typecheck、生产构建和许可证 727/511/0。完整证据与未验证项见 `t45-tab-desktop-e2e.md`。
   - 首次第三阶段远端 run `30272399213` 中 macOS 作业通过完整门禁、15 条桌面 E2E、生产构建与 artifact；Windows 在非桌面契约反向测试提前失败，根因为逐变体解析器只识别 LF、未兼容 checkout 的 CRLF。解析器现先归一行尾并新增 Windows 行尾回归，原字段错置 fail-loud 断言继续保留。修复提交尚待重新推送取得双平台结果，因此 T45 仍为进行中，不开始 T46。
@@ -638,7 +638,7 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 - T43 已启用：
   - 关闭当前页签 `Cmd/Ctrl+W`；
   - 重新打开最近关闭 `Cmd/Ctrl+Shift+T`；
-  - 下一/上一页签采用平台映射：macOS 为 `Cmd+Option+Right/Left`，Windows 为 `Ctrl+Tab` / `Ctrl+Shift+Tab`；
+  - 下一/上一页签采用平台映射：macOS 为 `Cmd+Option+Right/Left`，Windows 为 `Ctrl+PageDown/PageUp`；
   - 关闭其他、关闭右侧、关闭全部、页签列表；
   - 设置/偏好入口，macOS 使用应用菜单，Windows 使用可发现的设置菜单。
 - 保留关闭窗口 `Cmd/Ctrl+Shift+W`、新建窗口 `Cmd/Ctrl+Shift+N`。
