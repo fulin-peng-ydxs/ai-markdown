@@ -1,5 +1,6 @@
 import type {
   RecentWorkspace,
+  WindowTabSessionSummary,
   WorkspaceId,
   WorkspaceLauncherSnapshot,
   WorkspaceSessionRoot,
@@ -8,6 +9,7 @@ import type {
 export interface RestorableWorkspace {
   session: WorkspaceSessionRoot;
   recent: RecentWorkspace | null;
+  summary: WindowTabSessionSummary | null;
 }
 
 export function filterRecentWorkspaces(
@@ -32,12 +34,23 @@ export function restorableWorkspaces(
   const recentById = new Map(
     snapshot.recentWorkspaces.map((workspace) => [workspace.workspaceId, workspace]),
   );
+  const summaryByReference = new Map(
+    snapshot.windowSessionSummaries.map((summary) => [
+      `${summary.workspaceId}\u0000${summary.windowStateRef}`,
+      summary,
+    ]),
+  );
   return snapshot.workspaceSessions
     .filter((session) => !active.has(session.workspaceId))
     .sort((left, right) => right.lastActiveAt - left.lastActiveAt)
     .map((session) => ({
       session,
       recent: recentById.get(session.workspaceId) ?? null,
+      summary: session.windowStateRef
+        ? summaryByReference.get(
+            `${session.workspaceId}\u0000${session.windowStateRef}`,
+          ) ?? null
+        : null,
     }));
 }
 

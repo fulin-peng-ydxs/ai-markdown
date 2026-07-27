@@ -26,10 +26,19 @@ const snapshot: WorkspaceLauncherSnapshot = {
   ],
   workspaceSessions: [
     { workspaceId: "workspace-a", windowLabel: "window-1", windowStateRef: null, lastActiveAt: 20 },
-    { workspaceId: "workspace-b", windowLabel: "window-2", windowStateRef: null, lastActiveAt: 30 },
+    { workspaceId: "workspace-b", windowLabel: "window-2", windowStateRef: "session-b", lastActiveAt: 30 },
     { workspaceId: "workspace-c", windowLabel: "window-3", windowStateRef: null, lastActiveAt: 10 },
   ],
-  windowSessionSummaries: [],
+  windowSessionSummaries: [
+    {
+      workspaceId: "workspace-b",
+      windowStateRef: "session-b",
+      revision: 4,
+      tabCount: 3,
+      updatedAt: 40,
+      issue: null,
+    },
+  ],
   activeWorkspaceIds: ["workspace-a"],
   currentWorkspaceId: null,
   windowLabel: "window-1",
@@ -46,7 +55,9 @@ describe("launcher state", () => {
     const items = restorableWorkspaces(snapshot);
     expect(items.map((item) => item.session.workspaceId)).toEqual(["workspace-b", "workspace-c"]);
     expect(items[0]?.recent?.availability).toBe("missing");
+    expect(items[0]?.summary?.tabCount).toBe(3);
     expect(items[1]?.recent).toBeNull();
+    expect(items[1]?.summary).toBeNull();
   });
 
   it("formats stable relative day labels", () => {

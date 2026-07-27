@@ -1,5 +1,6 @@
 import type {
   DesktopError,
+  WindowTabSession,
   WorkspaceId,
   WorkspaceRelativePath,
 } from "../../services/desktop/contracts";
@@ -22,6 +23,7 @@ import {
 import {
   createWorkspaceTabCollection,
   reduceWorkspaceTabs,
+  restoreWorkspaceTabCollection,
   selectActiveWorkspaceTabProjection,
   type WorkspaceTabCloseTarget,
   type WorkspaceTabCollection,
@@ -32,6 +34,7 @@ import type {
   WorkspaceTabPathIdentity,
 } from "./tabPath";
 import type { WorkspaceTabSessionGateway } from "./tabSessionGateway";
+import { deriveWorkspaceTabPathPresentation } from "./tabTypes";
 import type {
   WorkspaceTabDescriptor,
   WorkspaceTabId,
@@ -98,6 +101,13 @@ export interface WorkspaceTabAdapterLifecycle {
   violations: number;
 }
 
+export interface WorkspaceTabRestoreResult {
+  restoredTabCount: number;
+  restoredRecentlyClosedCount: number;
+  isolatedIssueCount: number;
+  activeTabId: WorkspaceTabId | null;
+}
+
 type Listener = (snapshot: WorkspaceTabManagerSnapshot) => void;
 
 interface ManagedRuntime extends WorkspaceTabRuntime {
@@ -159,6 +169,93 @@ export class WorkspaceTabManager {
     return () => this.listeners.delete(listener);
   }
 
+  async restoreSession(
+    session: WindowTabSession,
+    writableForPath: (relativePath: WorkspaceRelativePath) => boolean,
+  ): Promise<WorkspaceTabRestoreResult> {
+    if (this.destroyed) {
+      throw new Error("Cannot restore a destroyed workspace tab manager");
+    }
+    if (session.workspaceId !== this.collection.workspaceId) {
+      throw new Error("Cannot restore a tab session from another workspace");
+    }
+    const tabs = session.tabs.map((tab) => ({
+      tabId: this.createTabId(),
+      workspaceId: session.workspaceId,
+      path: acceptWorkspaceTabPath(tab.path),
+      restoredView: tab.view,
+      lastActivatedAt: tab.lastActivatedAt,
+    }));
+    const recentlyClosed = session.recentlyClosed.map((recent) => {
+      const path = acceptWorkspaceTabPath(recent.path);
+      return {
+        workspaceId: session.workspaceId,
+        relativePath: path.relativePath,
+        pathIdentity: path.identity,
+        ...deriveWorkspaceTabPathPresentation(path.relativePath),
+        view: recent.view,
+        closedAt: recent.closedAt,
+      };
+    });
+    const activePathIdentity =
+      tabs.find(
+        (tab) => tab.path.relativePath === session.activeRelativePath,
+      )?.path.identity ?? null;
+    this.collection = restoreWorkspaceTabCollection(this.collection, {
+      tabs,
+      activePathIdentity,
+      recentlyClosed,
+      repositoryMatches: session.issues.length === 0,
+    });
+    this.emit();
+
+    const preferredTabId = this.collection.activeTabId;
+    const loadOrder = preferredTabId
+      ? [
+          preferredTabId,
+          ...this.collection.orderedTabIds.filter(
+            (tabId) => tabId !== preferredTabId,
+          ),
+        ]
+      : [];
+    for (const tabId of loadOrder) {
+      if (this.collection.activeTabId !== tabId) {
+        this.dispatch({
+          type: "activate",
+          tabId,
+          activatedAt: this.now(),
+        });
+      }
+      const tab = this.collection.tabsById.get(tabId);
+      if (!tab) continue;
+      await this.load(tabId, writableForPath(tab.relativePath));
+      if (this.collection.tabsById.get(tabId)?.loadState.kind === "ready") {
+        return {
+          restoredTabCount: tabs.length,
+          restoredRecentlyClosedCount: recentlyClosed.length,
+          isolatedIssueCount: session.issues.length,
+          activeTabId: tabId,
+        };
+      }
+    }
+    if (
+      preferredTabId &&
+      this.collection.activeTabId !== preferredTabId
+    ) {
+      this.dispatch({
+        type: "activate",
+        tabId: preferredTabId,
+        activatedAt: this.now(),
+      });
+    }
+    return {
+      restoredTabCount: tabs.length,
+      restoredRecentlyClosedCount: recentlyClosed.length,
+      isolatedIssueCount: session.issues.length,
+      activeTabId: this.collection.activeTabId,
+    };
+  }
+
   async open(
     relativePath: WorkspaceRelativePath,
     options: WorkspaceTabOpenOptions,
@@ -217,10 +314,21 @@ export class WorkspaceTabManager {
     }
   }
 
-  activate(tabId: WorkspaceTabId, activatedAt = this.now()): boolean {
+  activate(
+    tabId: WorkspaceTabId,
+    writable = false,
+    activatedAt = this.now(),
+  ): boolean {
     if (this.destroyed || !this.collection.tabsById.has(tabId)) return false;
     if (this.collection.activeTabId !== tabId) this.captureCurrentProjection();
     this.dispatch({ type: "activate", tabId, activatedAt });
+    const tab = this.collection.tabsById.get(tabId);
+    if (tab?.loadState.kind === "idle") {
+      // Restored inactive tabs stay content-free until their first real
+      // activation. `load` synchronously moves the descriptor to loading before
+      // its first await, so repeated activation cannot start duplicate reads.
+      void this.load(tabId, writable);
+    }
     return true;
   }
 

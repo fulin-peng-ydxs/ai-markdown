@@ -213,15 +213,15 @@ Key Characteristics：
 | `focusContainment` | `src/components/focusContainment.ts` | `AppDialog`、P1 窄窗文件树抽屉 | 可聚焦元素筛选、进入焦点、Tab/Shift+Tab 圈定和安全焦点恢复；不持有页面业务状态 |
 | `AppDialog` | `src/components/AppDialog.tsx` | P1/P2 打开流程、文件操作、永久删除、恢复/冲突/另存 | 原生 dialog、共享焦点圈定、Esc/遮罩关闭、关闭门禁、焦点返回和统一动作区 |
 | `AsyncStatePanel` | `src/components/AsyncStatePanel.tsx`、`src/components/asyncState.ts` | 根启动状态、P1/P2 加载、错误、阻塞与恢复；页签状态模型复用纯状态契约 | 类型化状态与公共优先级、可见非颜色标签、自动 tone/role/aria-live、说明和恢复动作；非视觉消费者不得复制第二套优先级 |
-| `WorkspaceLauncher` | `src/features/launcher/WorkspaceLauncher.tsx` | P2 | 本地打开主入口、最近记录、授权、窗口决策、打开方式设置、根会话恢复和恢复快照的非阻塞入口；恢复正文由 P1 消费 |
-| `WorkspaceWorkbench` | `src/features/workbench/WorkspaceWorkbench.tsx` | P1 | 当前根工作区壳、真实文件操作、活动文档编辑投影、自动/手动保存、恢复载入、冲突/另存、外部删除保护、全页签窗口结算与窄窗目录抽屉 |
+| `WorkspaceLauncher` | `src/features/launcher/WorkspaceLauncher.tsx` | P2 | 本地打开主入口、最近记录、授权、窗口决策、打开方式设置、根会话恢复和恢复快照的非阻塞入口；会话摘要只显示页签数量、版本和问题，不读取文件名或正文，恢复正文由 P1 消费 |
+| `WorkspaceWorkbench` | `src/features/workbench/WorkspaceWorkbench.tsx` | P1 | 当前根工作区壳、真实文件操作、活动文档编辑投影、自动/手动保存、恢复载入、冲突/另存、外部删除保护、全页签窗口结算、启动页签恢复失败隔离与窄窗目录抽屉 |
 | `WorkspaceOpenDecisionDialog` | `src/features/workspace-open/WorkspaceOpenDecisionDialog.tsx` | P1、P2 | 复用 `AppDialog` 统一当前窗口/新窗口/取消决策和“记住这次选择”；明确当前窗口替换仍先处理全部页签，偏好或窗口提交失败时保持弹层并展示真实错误 |
 | `WorkspaceOpenPreferenceDialog` | `src/features/workspace-open/WorkspaceOpenPreferenceDialog.tsx` | P1、P2、原生设置菜单 | 复用 `AppDialog` 承载 `ask/current_window/new_window` 三值偏好读取、保存和恢复为每次询问；只决定打开位置，不绕过授权、同目录聚焦或内容安全结算 |
-| `WorkspaceTabManager` | `src/features/tabs/WorkspaceTabManager.ts` | P1 文件树、可见页签切换、最近关闭与批量结算 | 非视觉多文档 runtime：按 Rust opaque 路径身份唯一打开/聚焦和重新校验最近关闭项，每页签独立持有 session/history/save controller，切换/关闭前提交活动 adapter 投影且任意时刻只允许一个真实 editor adapter；提供全目标结算、单 revision 批量关闭和多 runtime 路径原子重映射，不承担页签视觉、启动持久恢复或用户决策 UI |
+| `WorkspaceTabManager` | `src/features/tabs/WorkspaceTabManager.ts` | P1 文件树、可见页签切换、最近关闭、启动恢复与批量结算 | 非视觉多文档 runtime：按 Rust opaque 路径身份唯一打开/聚焦和重新校验最近关闭项，每页签独立持有 session/history/save controller，启动时恢复轻量 descriptor 并只加载活动页签，首次激活才加载其他页签；切换/关闭前提交活动 adapter 投影且任意时刻只允许一个真实 editor adapter；提供全目标结算、单 revision 批量关闭和多 runtime 路径原子重映射，不承担页签视觉或用户决策 UI |
 | `WorkspaceTabBar` | `src/features/tabs/WorkspaceTabBar.tsx` | P1 | 消费 manager 快照投影真实 tablist、活动项、同名路径提示和非颜色状态；提供 roving tabindex、鼠标/键盘激活、单项/其他/右侧/全部关闭入口、当前窗口排序与最近关闭入口，页签 viewport 独立横向滚动；具体内容安全决策委托统一结算弹层 |
 | `TabMenu` | `src/features/tabs/TabMenu.tsx` | `TabOverflowMenu`、`TabContextMenu` | 共享 menu/分区语义、可聚焦项筛选、方向键/首尾遍历、Esc/Tab/外部点击关闭和焦点返回；溢出定位、最近关闭与页签动作由薄消费者分别配置，不在菜单内复制页签状态 |
 | `TabSettlementDialog` | `src/features/tabs/TabSettlementDialog.tsx`、`src/features/tabs/tabSettlement.ts` | P1 单页签/批量关闭与文件树破坏性操作 | 复用 `AppDialog` 承载不可变目标清单、逐项非颜色内容安全状态、重试保存/冲突/另存/放弃和最终一次性提交门禁；显式证据绑定页签 incarnation/generation/editVersion，继续编辑后必须重新决策，不创建第二套保存或冲突通道 |
-| `WorkspaceTabSessionPersistence` | `src/features/tabs/tabSessionPersistence.ts` | P1 | 将当前轻量页签投影以防抖、revision/CAS 写入既有 Rust 会话仓储；不保存正文/history，不覆盖尚未由启动恢复消费的既有非空会话 |
+| `WorkspaceTabSessionPersistence` | `src/features/tabs/tabSessionPersistence.ts` | P1 | 将当前轻量页签投影以防抖、revision/CAS 写入既有 Rust 会话仓储；不保存正文/history；启动发现既有 revision、页签、最近项或路径问题时先冻结，P1 消费恢复投影后显式接管后续写入 |
 | `tabPathImpact` | `src/features/tabs/tabPathImpact.ts` | P1 文件/目录重命名、移动与删除预检 | 纯函数收集受影响打开页签、目标路径和已加载文档图片链接改写预案；不执行磁盘写入或 runtime 提交 |
 | `WorkspaceTree` | `src/features/workbench/WorkspaceTree.tsx` | P1 | 渐进目录节点、磁盘提交后更新、只读标识、异步刷新期间也稳定的单一 Tab 停靠点，以及上下/首尾/父子方向键导航 |
 | `PermanentDeleteDialog` | `src/features/workbench/PermanentDeleteDialog.tsx` | P1 永久删除流程 | 复用 `AppDialog` 承载删除提案、显式不可逆确认、提交门禁、阶段化错误反馈与安全取消 |

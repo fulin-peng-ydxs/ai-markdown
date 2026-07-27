@@ -2,9 +2,9 @@
 
 ## 1. 文档定位
 
-本文描述 Plainroot 当前已经落地的 Markdown 编辑模块，包括统一内容模型、排版/源码投影、保存与恢复、外部冲突、另存副本、图片资源、窗口结算和菜单状态，以及第三阶段已接入 P1 的每页签独立文档 runtime 与可见页签交互。产品范围与验收口径以 `../requirement.md` 为准，第二阶段任务状态与证据以 `../stage-2-markdown-editing/plan.md` 和 `../stage-2-markdown-editing/t32-stage-acceptance.md` 为准，第三阶段当前进度见 `../stage-3-tab-window-lifecycle/plan.md`；代码、清单、配置和自动化测试是实现事实源。
+本文描述 Plainroot 当前已经落地的 Markdown 编辑模块，包括统一内容模型、排版/源码投影、保存与恢复、外部冲突、另存副本、图片资源、窗口结算和菜单状态，以及第三阶段已接入 P1 的每页签独立文档 runtime、可见页签交互与已有会话启动恢复。产品范围与验收口径以 `../requirement.md` 为准，第二阶段任务状态与证据以 `../stage-2-markdown-editing/plan.md` 和 `../stage-2-markdown-editing/t32-stage-acceptance.md` 为准，第三阶段当前进度见 `../stage-3-tab-window-lifecycle/plan.md`；代码、清单、配置和自动化测试是实现事实源。
 
-`desktop-foundation.md` 负责工作区授权、文件系统、窗口和应用状态等跨模块底座概览；本文是 Markdown 文档编辑子系统的专项事实源。T35～T41 已建立页签状态、元数据仓储、P1 多 session runtime、可见页签容器、最近关闭、当前会话元数据写入、两阶段安全结算、磁盘成功后的多 runtime 路径重映射/批量关闭，以及窗口替换、关闭和退出对同一完整批次的消费；窗口会话仓储尚未在启动时恢复 runtime。大纲、工作区搜索、分页阅读、主题工作室和完整布局持久化不属于本文所述的已完成能力。
+`desktop-foundation.md` 负责工作区授权、文件系统、窗口和应用状态等跨模块底座概览；本文是 Markdown 文档编辑子系统的专项事实源。T35～T42 已建立页签状态、元数据仓储、P1 多 session runtime、可见页签容器、最近关闭、当前会话元数据写入、两阶段安全结算、磁盘成功后的多 runtime 路径重映射/批量关闭、窗口替换/关闭/退出保护，以及既有会话的轻量恢复、活动项回退和惰性加载。大纲、工作区搜索、分页阅读、主题工作室和完整布局持久化不属于本文所述的已完成能力。
 
 ## 2. 模块边界
 
@@ -86,10 +86,10 @@ flowchart LR
 - P1 文件树入口通过 `tabSessionGateway` 消费 Rust 规范化路径和 opaque identity；同一身份只聚焦既有 runtime。切换前由活动 `DocumentEditorShell` 提交 Markdown、选择与锚点，切换后只挂载目标 runtime 对应的 Milkdown 或 CodeMirror adapter。
 - 非活动 dirty runtime 保留 history、模式和视图状态，并由自身 controller 继续自动保存/恢复快照。T40 的结算批次以 `tabId + incarnation` 固定目标，放弃/另存证据和最终破坏性关闭目标再绑定 `generation + editVersion`；保存中或异步删除期间继续编辑会使旧证据失效并回到阻塞态。取消不移除任何页签，已经真实写盘的保存或删除不做虚假回滚。
 - T38 的 `WorkspaceTabBar` 直接消费 manager 快照，提供真实 tablist、同名父路径、公共主状态、单页签关闭、当前窗口拖动/键盘排序和全部页签溢出；`TabOverflowMenu` 与 `TabContextMenu` 共同消费 `TabMenu` 的方向键、Esc 和焦点返回。T40 已启用关闭其他、关闭右侧和关闭全部，全部动作委托同一结算批次，不复制保存判断。
-- T39 让溢出菜单列出最近关闭项；重开必须重新经过 Rust 路径身份解析，失败项保留真实错误并可只移除元数据。`tabSessionProjection` 与 `WorkspaceTabSessionPersistence` 将当前顺序、活动项、视图和最近项以防抖/CAS 写入既有仓储，且不覆盖 T42 尚未恢复的既有非空会话。
+- T39 让溢出菜单列出最近关闭项；重开必须重新经过 Rust 路径身份解析，失败项保留真实错误并可只移除元数据。`tabSessionProjection` 与 `WorkspaceTabSessionPersistence` 将当前顺序、活动项、视图和最近项以防抖/CAS 写入既有仓储；T42 已让既有会话在恢复消费前冻结，消费后以原 repository revision 接管后续写入。
 - `tabPathImpact` 在 rename/move/delete 调用磁盘前纯计算受影响页签、目标路径和所有已加载文档的内联图片链接改写预案。命中打开页签时先走统一结算；Rust 磁盘操作失败时保留原路径和全部页签，成功后 `WorkspaceTabManager` 才以一次 collection revision 提交路径/identity/runtime 或页签移除。目录移动后再按新路径重新计算全部受影响已加载页签的内联图片链接；manager 生成的链接改写直接结算已提交 runtime，不重新采集 React 尚未更新的活动 adapter 旧投影。若其中某次安全写失败，目录移动事实保持、对应页签保持 dirty 并给出真实提示，不伪装为整批磁盘回滚。
 - 真实 Tauri/WebKit 门禁使用三个文档、36 次可见页签切换，逐次断言页面只有一个 `.ProseMirror` 或 `.cm-editor`，并以测试 feature 的进程 RSS 采样执行增量 ≤128 MiB 的可失败门禁；另验证溢出菜单 Esc 焦点返回及 1100/820/740 px 不产生根级横向溢出。当前 WebKit 未暴露 JS heap，因此只以单 adapter 与 RSS 作为已取得证据；JS heap 由 T45 在可观测平台补证，不能宣称已通过或取得双平台内存证据。
-- 窗口页签元数据仓储已经落地，T39 已接入当前会话的最近关闭和顺序持久化；T42 尚未把既有会话接入启动恢复。仓储发现既有非空会话时继续冻结当前元数据写入，直至 T42 真实消费并切回可写状态。
+- T42 启动时先恢复 Rust 已解析的有序轻量 descriptor、活动路径、模式、选择/锚点和最近关闭，只读取首选活动页签；活动项失败时按顺序选择下一可用项，其他页签保持 `unloaded` 并在首次激活时读盘。Rust 隔离的问题项由 P1 以 `AsyncStatePanel` 呈现并支持跳过/重试，不阻断其他页签或修改 Markdown。
 
 ## 4. 保存、恢复和冲突
 
@@ -159,7 +159,7 @@ UTF-8 BOM 与单一 LF/CRLF/CR 优先沿用原文件；mixed 或不支持编码�
 - P2 没有文档时重置编辑菜单；工作区搜索、可见页签命令、阅读、主题等没有真实消费者的入口继续禁用或隐藏。
 - 单页签、关闭其他、关闭右侧、关闭全部和命中打开页签的 rename/move/delete 统一创建不可变结算批次。前端逐项复用 `DocumentSaveController.settle()`、冲突处理和另存副本；dirty/save_failed/readonly/conflict 等状态未解决前最终动作禁用，全部安全后才一次性提交页签集合变化。
 - 系统关闭、菜单关闭、当前窗口根替换和应用退出的一次性 Rust intent 已接入同一全页签结算。取消显式拒绝 intent；全部正文安全后尽力持久化内容无关页签会话，再允许 Rust 提交窗口事务。元数据仍在初始化或写失败时显示非阻断提示并继续，旧有效会话仍可使下次启动退回较早页签状态；最终窗口提交失败保留原页签和可重试批次。
-- P1/P2 共用当前窗口/新窗口/取消决策与 `ask/current_window/new_window` 打开偏好；偏好只改变打开位置，不能跳过授权、同目录聚焦或全页签结算。T42 尚未恢复的既有非空会话仍冻结元数据覆盖。
+- P1/P2 共用当前窗口/新窗口/取消决策与 `ask/current_window/new_window` 打开偏好；偏好只改变打开位置，不能跳过授权、同目录聚焦或全页签结算。既有非空会话在 P1 完成恢复投影前冻结元数据覆盖，恢复后显式接管。
 
 ## 7. 权限和配置边界
 
@@ -182,7 +182,7 @@ UTF-8 BOM 与单一 LF/CRLF/CR 优先沿用原文件；mixed 或不支持编码�
 - `pnpm test:roundtrip` 使用生产 adapter 验证 CommonMark/GFM、图片、受支持 HTML 与 source-only 语料。
 - Rust 契约测试登记所有 TypeScript 导出 interface 和字符串枚举/tag，防止 Rust↔TypeScript 字段漂移。
 - `pnpm test:e2e` 使用独立 identifier、临时状态目录和每套件复制的临时工作区，当前本地 11 条真桌面用例除既有 P1/P2、两种模式、图片、保存重开、外部修改、恢复和目录图片移动风险外，还覆盖三文档可见页签切换、溢出菜单焦点返回、1100/820/740 px 页签布局、单 adapter/RSS 门禁，以及关闭右侧和打开页签的真实改名、移动、图片链接写回、删除。
-- 远端 GitHub Actions run `30082725332` 已在提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 上完成 macOS/Windows 双绿；该矩阵仍只覆盖第二阶段 9/9 桌面 E2E。T41 当前本地为 255 项 Vitest、201 个 Rust 通过且 1 项手动探针忽略、11/11 macOS 桌面 E2E，尚未推送，不能沿用旧运行宣称第三阶段双平台通过；T41 新增窗口 intent/偏好的完整桌面用例仍由 T45 补齐。
+- 远端 GitHub Actions run `30082725332` 已在提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 上完成 macOS/Windows 双绿；该矩阵仍只覆盖第二阶段 9/9 桌面 E2E。T42 当前本地为 263 项 Vitest、201 个 Rust 通过且 1 项手动探针忽略、68/68 页签专项；11/11 macOS 桌面 E2E 是 T41 已取得的既有证据，尚未覆盖真实重启恢复。第三阶段尚未推送，不能沿用旧运行宣称双平台通过；窗口 intent/偏好与启动恢复的完整桌面用例仍由 T45 补齐。
 
 ## 9. 已知边界
 
@@ -193,4 +193,4 @@ UTF-8 BOM 与单一 LF/CRLF/CR 优先沿用原文件；mixed 或不支持编码�
 - 当前文档移动后的自动改写只覆盖内联图片语法；引用式图片定义不在改写范围。
 - JPEG/WebP 签名校验采用保守完整信封，少数带尾随数据的合法文件可能被拒绝；前后端 WebP 预检严格度仍应继续保持一致。
 - 强制终止发生在“资源已落盘、Markdown 尚未确认插入”之间时可能留下孤立资源；缺少持久证据时不猜测删除用户文件。
-- T41 已由 P1 消费页签 runtime、可见页签、最近关闭、当前会话元数据写入、完整页签结算、磁盘成功后的批量重映射/关闭和窗口替换/关闭/退出 intent；已有会话启动恢复、原生页签命令和双平台证据仍未完成，当前不能把这些子集写成完整 R13/R14 或第三阶段完成。大纲、工作区搜索、分页阅读、主题预设和完整响应式布局仍属于后续阶段。
+- T42 已由 P1 消费页签 runtime、可见页签、最近关闭、当前会话元数据写入、完整页签结算、磁盘成功后的批量重映射/关闭、窗口替换/关闭/退出 intent 和已有会话启动恢复；原生页签命令、真实重启桌面 E2E 和双平台证据仍未完成，当前不能把这些子集写成完整 R13/R14 或第三阶段完成。大纲、工作区搜索、分页阅读、主题预设和完整响应式布局仍属于后续阶段。

@@ -116,7 +116,7 @@ describe("WorkspaceTabSessionPersistence", () => {
     fixture.persistence.dispose();
   });
 
-  it("does not overwrite a non-empty existing session before T42 restores it", async () => {
+  it("freezes an existing session until T42 consumes and resumes it", async () => {
     const existing = storedSession([
       {
         path: {
@@ -142,8 +142,50 @@ describe("WorkspaceTabSessionPersistence", () => {
     expect(await fixture.persistence.initialize()).toBe(
       "deferred_existing_session",
     );
+    expect(fixture.persistence.pendingRestore()).toEqual(existing);
     expect(await fixture.persistence.flush()).toBe(false);
     expect(fixture.gateway.save).not.toHaveBeenCalled();
+    const restored = managerSnapshot(["recover-me.md"], 1);
+    fixture.persistence.observe(restored);
+    expect(fixture.persistence.resumeAfterRestore(restored)).toBe(true);
+    expect(fixture.persistence.currentStatus()).toBe("ready");
+    expect(await fixture.persistence.flush()).toBe(true);
+    expect(fixture.gateway.save).toHaveBeenCalledWith(
+      "workspace-a",
+      "window-session-a",
+      3,
+      expect.objectContaining({
+        tabs: [
+          expect.objectContaining({ relativePath: "recover-me.md" }),
+        ],
+      }),
+    );
+    fixture.persistence.dispose();
+  });
+
+  it("defers an issues-only repository so startup cannot erase isolated entries", async () => {
+    const existing = {
+      ...storedSession(),
+      revision: 4,
+      issues: [
+        {
+          relativePath: "missing.md" as WorkspaceRelativePath,
+          error: {
+            code: "path_not_found" as const,
+            messageKey: "error.desktop.path_not_found",
+            pathHint: "missing.md",
+            contentSafe: true,
+            retryable: true,
+          },
+        },
+      ],
+    };
+    const fixture = persistenceFixture(existing);
+
+    expect(await fixture.persistence.initialize()).toBe(
+      "deferred_existing_session",
+    );
+    expect(fixture.persistence.pendingRestore()?.issues).toHaveLength(1);
     fixture.persistence.dispose();
   });
 

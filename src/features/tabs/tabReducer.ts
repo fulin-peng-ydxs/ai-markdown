@@ -45,6 +45,13 @@ export interface WorkspaceTabPathRemap {
   path: WorkspaceTabPath;
 }
 
+export interface WorkspaceTabCollectionRestore {
+  tabs: readonly WorkspaceTabOpenRequest[];
+  activePathIdentity: WorkspaceTabPathIdentity | null;
+  recentlyClosed: readonly RecentlyClosedWorkspaceTab[];
+  repositoryMatches: boolean;
+}
+
 export type WorkspaceTabAction =
   | { type: "open"; tab: WorkspaceTabOpenRequest }
   | { type: "activate"; tabId: WorkspaceTabId; activatedAt: number }
@@ -102,6 +109,77 @@ export function createWorkspaceTabCollection(
     nextIncarnation: 1,
     revision: 0,
     persistedRevision: 0,
+  };
+}
+
+export function restoreWorkspaceTabCollection(
+  state: WorkspaceTabCollection,
+  restore: WorkspaceTabCollectionRestore,
+): WorkspaceTabCollection {
+  if (
+    state.orderedTabIds.length > 0 ||
+    state.tabsById.size > 0 ||
+    state.pathIndex.size > 0 ||
+    state.recentlyClosed.length > 0
+  ) {
+    throw new Error("Workspace tabs can only be restored into an empty collection");
+  }
+  const orderedTabIds: WorkspaceTabId[] = [];
+  const tabsById = new Map<WorkspaceTabId, WorkspaceTabDescriptor>();
+  const pathIndex = new Map<WorkspaceTabPathIdentity, WorkspaceTabId>();
+  let nextIncarnation = state.nextIncarnation;
+  for (const request of restore.tabs) {
+    if (request.workspaceId !== state.workspaceId) {
+      throw new Error("Cannot restore a tab from another workspace");
+    }
+    if (
+      tabsById.has(request.tabId) ||
+      pathIndex.has(request.path.identity)
+    ) {
+      throw new Error("Restored tab identity must be unique");
+    }
+    const tab = createWorkspaceTabDescriptor(request, nextIncarnation++);
+    orderedTabIds.push(tab.tabId);
+    tabsById.set(tab.tabId, tab);
+    pathIndex.set(tab.pathIdentity, tab.tabId);
+  }
+
+  const recentIdentities = new Set<WorkspaceTabPathIdentity>();
+  const recentlyClosed = restore.recentlyClosed.flatMap((recent) => {
+    if (
+      recent.workspaceId !== state.workspaceId ||
+      pathIndex.has(recent.pathIdentity) ||
+      recentIdentities.has(recent.pathIdentity) ||
+      !isValidWorkspaceTabPath({
+        relativePath: recent.relativePath,
+        identity: recent.pathIdentity,
+      }) ||
+      !hasExpectedPathPresentation(recent)
+    ) {
+      return [];
+    }
+    recentIdentities.add(recent.pathIdentity);
+    return [recent];
+  }).slice(0, RECENTLY_CLOSED_TAB_LIMIT);
+  const activeTabId =
+    (restore.activePathIdentity
+      ? pathIndex.get(restore.activePathIdentity)
+      : null) ??
+    orderedTabIds[0] ??
+    null;
+  const revision = state.revision + 1;
+  return {
+    ...state,
+    orderedTabIds,
+    activeTabId,
+    tabsById,
+    pathIndex,
+    recentlyClosed,
+    nextIncarnation,
+    revision,
+    persistedRevision: restore.repositoryMatches
+      ? revision
+      : state.persistedRevision,
   };
 }
 

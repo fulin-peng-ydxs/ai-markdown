@@ -31,6 +31,7 @@ import type {
   WorkspaceSelectionOutcome,
   WorkspaceSelectionProposal,
   WindowSettlementIntent,
+  WindowTabSessionPathIssue,
   WorkbenchMenuAction,
 } from "../../services/desktop/contracts";
 import { desktopErrorMessage, normalizeDesktopError } from "../../services/desktop/errors";
@@ -199,6 +200,9 @@ export function WorkspaceWorkbench({
   const settlementCancelRef = useRef<(() => Promise<void>) | null>(null);
   const windowSettlementIntentRef = useRef<string | null>(null);
   const [pageError, setPageError] = useState<DesktopError | null>(null);
+  const [tabRestoreIssues, setTabRestoreIssues] = useState<
+    WindowTabSessionPathIssue[]
+  >([]);
   const [operation, setOperation] = useState<PendingOperation | null>(null);
   const [operationError, setOperationError] = useState<DesktopError | null>(null);
   const [operationInspecting, setOperationInspecting] = useState(false);
@@ -441,6 +445,7 @@ export function WorkspaceWorkbench({
     setSelectedPath(null);
     setDocumentMetrics(null);
     setSavedCopyEvidence(null);
+    setTabRestoreIssues([]);
     closingTabIdsRef.current.clear();
     setClosingTabIds(new Set());
     tabManagerSubscriptionRef.current?.();
@@ -484,7 +489,6 @@ export function WorkspaceWorkbench({
       setDocumentState(nextDocument);
       saveControllerRef.current = manager.activeSaveController();
     });
-    void persistence.initialize();
     setPageError(null);
     void gateway.setTitle(null).catch((reason) => {
       if (mountedRef.current && generation === generationRef.current) {
@@ -493,9 +497,46 @@ export function WorkspaceWorkbench({
     });
     void scanDirectory(nextWorkspace, null, false, generation);
     void startWatchLoop(nextWorkspace, generation);
-    if (nextWorkspace.initialFile) {
-      void openMarkdown(nextWorkspace.initialFile, nextWorkspace, generation);
-    }
+    void (async () => {
+      const status = await persistence.initialize();
+      if (!mountedRef.current || generation !== generationRef.current) return;
+      if (status === "deferred_existing_session") {
+        const stored = persistence.pendingRestore();
+        if (stored) {
+          try {
+            await manager.restoreSession(
+              stored,
+              (relativePath) =>
+                nextWorkspace.writable &&
+                (treeRef.current.entries[relativePath]?.writable ?? true),
+            );
+            if (
+              !mountedRef.current ||
+              generation !== generationRef.current
+            ) {
+              return;
+            }
+            setTabRestoreIssues([...stored.issues]);
+            persistence.resumeAfterRestore(manager.snapshot());
+            syncActiveTabChrome(
+              manager.snapshot().activeTab?.relativePath ?? null,
+              generation,
+            );
+          } catch (reason) {
+            setPageError(
+              normalizeDesktopError(reason, "window_session_read_failed"),
+            );
+          }
+        }
+      }
+      if (nextWorkspace.initialFile) {
+        await openMarkdown(
+          nextWorkspace.initialFile,
+          nextWorkspace,
+          generation,
+        );
+      }
+    })();
   // openMarkdown deliberately uses only stable gateway/state setters; workspace loading owns reset.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commitDocument, gateway, scanDirectory, startWatchLoop]);
@@ -754,8 +795,51 @@ export function WorkspaceWorkbench({
 
   function activateWorkspaceTab(tabId: WorkspaceTabId) {
     const manager = tabManagerRef.current;
-    if (!manager?.activate(tabId)) return;
+    const tab = manager?.snapshot().collection.tabsById.get(tabId);
+    if (
+      !manager ||
+      !tab ||
+      !manager.activate(
+        tabId,
+        workspace.writable &&
+          (treeRef.current.entries[tab.relativePath]?.writable ?? true),
+      )
+    ) {
+      return;
+    }
     syncActiveTabChrome(manager.snapshot().activeTab?.relativePath ?? null);
+  }
+
+  async function retryTabRestoreIssues() {
+    const manager = tabManagerRef.current;
+    if (!manager || tabRestoreIssues.length === 0) return;
+    const remaining: WindowTabSessionPathIssue[] = [];
+    for (const issue of tabRestoreIssues) {
+      const result = await manager.open(issue.relativePath, {
+        writable:
+          workspace.writable &&
+          (treeRef.current.entries[issue.relativePath]?.writable ?? true),
+      });
+      if (result.status === "failed") {
+        remaining.push({ ...issue, error: result.error });
+        continue;
+      }
+      const tab = manager.snapshot().collection.tabsById.get(result.tabId);
+      if (
+        tab?.loadState.kind === "error" ||
+        tab?.loadState.kind === "missing" ||
+        tab?.loadState.kind === "permission_denied"
+      ) {
+        remaining.push({ ...issue, error: tab.loadState.error });
+      }
+    }
+    setTabRestoreIssues(remaining);
+    syncActiveTabChrome(manager.snapshot().activeTab?.relativePath ?? null);
+    setLifecycleNotice(
+      remaining.length === 0
+        ? "此前未恢复的页签现已重新打开。"
+        : `仍有 ${remaining.length} 个页签无法恢复；其他页签继续可用。`,
+    );
   }
 
   async function closeWorkspaceTab(tabId: WorkspaceTabId) {
@@ -2036,6 +2120,54 @@ export function WorkspaceWorkbench({
           className="workbench__document"
           id="workspace-document-panel"
         >
+          {tabRestoreIssues.length > 0 ? (
+            <div className="workbench__document-warning">
+              <AsyncStatePanel
+                actions={
+                  <>
+                    <button
+                      className="plainroot-button"
+                      onClick={() => setTabRestoreIssues([])}
+                      type="button"
+                    >
+                      跳过
+                    </button>
+                    <button
+                      className="plainroot-button"
+                      onClick={() => void retryTabRestoreIssues()}
+                      type="button"
+                    >
+                      重新核对
+                    </button>
+                  </>
+                }
+                compact
+                description={`${tabRestoreIssues
+                  .slice(0, 3)
+                  .map(
+                    (issue) =>
+                      `${issue.relativePath}：${desktopErrorMessage(issue.error)}`,
+                  )
+                  .join("；")}${
+                  tabRestoreIssues.length > 3
+                    ? `；另有 ${tabRestoreIssues.length - 3} 项`
+                    : ""
+                }。这些失败没有修改任何 Markdown 文件。`}
+                state={
+                  tabRestoreIssues.some(
+                    (issue) => issue.error.code === "permission_denied",
+                  )
+                    ? "permission_denied"
+                    : tabRestoreIssues.some(
+                          (issue) => issue.error.code === "path_not_found",
+                        )
+                      ? "missing"
+                      : "error"
+                }
+                title={`有 ${tabRestoreIssues.length} 个页签未恢复`}
+              />
+            </div>
+          ) : null}
           {documentState.status === "ready" &&
           documentState.saveState.kind === "save_failed" &&
           documentState.saveState.error.code === "path_not_found" ? (
@@ -2316,6 +2448,18 @@ function DocumentView({
   onSaveCopy(): void;
   onSessionChange(session: ReadyDocumentSession): void;
 }) {
+  if (
+    activeTab?.loadState.kind === "idle" &&
+    state.status === "empty"
+  ) {
+    return (
+      <AsyncStatePanel
+        description={activeTab.relativePath}
+        state="unloaded"
+        title="等待载入文档"
+      />
+    );
+  }
   if (state.status === "empty") {
     return <div className="workbench__document-empty"><span aria-hidden="true">M↓</span><h1>选择一份 Markdown 文档</h1><p>文档会在当前窗口的新页签中打开；也可以从“所有页签”重新打开最近关闭的文档。</p></div>;
   }

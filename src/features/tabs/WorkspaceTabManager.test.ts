@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   FileRevision,
   MarkdownReadResult,
+  WindowTabSession,
   WorkspaceRelativePath,
 } from "../../services/desktop/contracts";
 import {
@@ -203,7 +204,130 @@ function editSession(
   return edited.session;
 }
 
+function restoredSession(
+  activeRelativePath: WorkspaceRelativePath = "two.md",
+): WindowTabSession {
+  const restoredView = {
+    mode: "source" as const,
+    selection: { kind: "source" as const, anchor: 2, head: 2 },
+    anchor: { kind: "source" as const, offset: 2, scrollTop: 24 },
+  };
+  return {
+    schemaVersion: 1,
+    workspaceId: "workspace-a",
+    windowStateRef: "window-session-a",
+    revision: 3,
+    tabs: [
+      {
+        path: {
+          relativePath: "one.md",
+          identity: "native:one.md",
+        },
+        view: restoredView,
+        lastActivatedAt: 1,
+      },
+      {
+        path: {
+          relativePath: "two.md",
+          identity: "native:two.md",
+        },
+        view: restoredView,
+        lastActivatedAt: 2,
+      },
+      {
+        path: {
+          relativePath: "three.md",
+          identity: "native:three.md",
+        },
+        view: restoredView,
+        lastActivatedAt: 3,
+      },
+    ],
+    activeRelativePath,
+    recentlyClosed: [],
+    updatedAt: 4,
+    issues: [],
+  };
+}
+
 describe("WorkspaceTabManager", () => {
+  it("restores only the active runtime and lazily loads an inactive tab on activation", async () => {
+    const { manager, gateway } = managerFixture();
+    const result = await manager.restoreSession(
+      restoredSession(),
+      () => true,
+    );
+
+    expect(result).toMatchObject({
+      restoredTabCount: 3,
+      isolatedIssueCount: 0,
+    });
+    expect(manager.snapshot().activeTab?.relativePath).toBe("two.md");
+    expect(gateway.read).toHaveBeenCalledTimes(1);
+    expect(manager.snapshot().collection.orderedTabIds).toHaveLength(3);
+    const one = [...manager.snapshot().collection.tabsById.values()].find(
+      (tab) => tab.relativePath === "one.md",
+    );
+    const three = [...manager.snapshot().collection.tabsById.values()].find(
+      (tab) => tab.relativePath === "three.md",
+    );
+    expect(one?.loadState.kind).toBe("idle");
+    expect(three?.loadState.kind).toBe("idle");
+
+    expect(manager.activate(one!.tabId, true)).toBe(true);
+    await vi.waitFor(() =>
+      expect(
+        manager.snapshot().runtimes.get(one!.tabId)?.session.status,
+      ).toBe("ready"),
+    );
+    expect(gateway.read).toHaveBeenCalledTimes(2);
+    expect(manager.snapshot().activeRuntime?.session).toMatchObject({
+      status: "ready",
+      mode: "source",
+      selection: { kind: "source", anchor: 2, head: 2 },
+    });
+  });
+
+  it("isolates a failed preferred tab and activates the next readable session", async () => {
+    const { manager, gateway } = managerFixture();
+    vi.mocked(gateway.read).mockImplementation(
+      async (_workspaceId, relativePath) =>
+        relativePath === "one.md"
+          ? {
+              relativePath,
+              status: "ready",
+              content: "# fallback",
+              revision,
+            }
+          : relativePath === "two.md"
+            ? {
+                relativePath,
+                status: "unsupported_encoding",
+                content: null,
+                revision,
+              }
+            : {
+                relativePath,
+                status: "ready",
+                content: "# third",
+                revision,
+              },
+    );
+
+    await manager.restoreSession(restoredSession("two.md"), () => true);
+
+    expect(manager.snapshot().activeTab?.relativePath).toBe("one.md");
+    const failed = [...manager.snapshot().collection.tabsById.values()].find(
+      (tab) => tab.relativePath === "two.md",
+    );
+    const untouched = [...manager.snapshot().collection.tabsById.values()].find(
+      (tab) => tab.relativePath === "three.md",
+    );
+    expect(failed?.loadState.kind).toBe("error");
+    expect(untouched?.loadState.kind).toBe("idle");
+    expect(gateway.read).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps independent content, history and view state for three tabs", async () => {
     const { manager } = managerFixture();
     const first = await openReady(manager, "one.md");

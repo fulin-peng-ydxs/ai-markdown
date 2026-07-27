@@ -44,9 +44,9 @@ export type WorkspaceTabPersistenceStatus =
   | "disposed";
 
 /**
- * Persists only content-free tab metadata. A non-empty repository found before
- * T42 restore is deliberately frozen: current empty UI state must never erase a
- * recoverable previous session.
+ * Persists only content-free tab metadata. An existing repository remains
+ * frozen until its resolved session has been consumed by the tab manager; this
+ * prevents an empty startup collection from erasing recoverable metadata.
  */
 export class WorkspaceTabSessionPersistence {
   private readonly options: WorkspaceTabSessionPersistenceOptions;
@@ -56,6 +56,7 @@ export class WorkspaceTabSessionPersistence {
   private inFlight = false;
   private windowStateRef: string | null = null;
   private repositoryRevision = 0;
+  private deferredSession: WindowTabSession | null = null;
   private status: WorkspaceTabPersistenceStatus = "initializing";
 
   constructor(options: WorkspaceTabSessionPersistenceOptions) {
@@ -65,6 +66,12 @@ export class WorkspaceTabSessionPersistence {
 
   currentStatus(): WorkspaceTabPersistenceStatus {
     return this.status;
+  }
+
+  pendingRestore(): WindowTabSession | null {
+    return this.status === "deferred_existing_session"
+      ? this.deferredSession
+      : null;
   }
 
   observe(snapshot: WorkspaceTabManagerSnapshot): void {
@@ -79,10 +86,17 @@ export class WorkspaceTabSessionPersistence {
       if (this.isDisposed()) return this.status;
       this.windowStateRef = stored.windowStateRef;
       this.repositoryRevision = stored.revision;
-      if (stored.tabs.length > 0 || stored.recentlyClosed.length > 0) {
+      if (
+        stored.revision > 0 ||
+        stored.tabs.length > 0 ||
+        stored.recentlyClosed.length > 0 ||
+        stored.issues.length > 0
+      ) {
+        this.deferredSession = stored;
         this.status = "deferred_existing_session";
         return this.status;
       }
+      this.deferredSession = null;
       this.status = "ready";
       this.schedule();
       return this.status;
@@ -91,6 +105,21 @@ export class WorkspaceTabSessionPersistence {
       this.fail(reason, "window_session_read_failed");
       return this.status;
     }
+  }
+
+  resumeAfterRestore(snapshot: WorkspaceTabManagerSnapshot): boolean {
+    if (
+      this.status !== "deferred_existing_session" ||
+      !this.deferredSession ||
+      snapshot.collection.workspaceId !== this.options.workspaceId
+    ) {
+      return false;
+    }
+    this.deferredSession = null;
+    this.latest = snapshot;
+    this.status = "ready";
+    this.schedule();
+    return true;
   }
 
   async flush(): Promise<boolean> {
@@ -137,6 +166,7 @@ export class WorkspaceTabSessionPersistence {
     this.clearTimer();
     this.status = "disposed";
     this.latest = null;
+    this.deferredSession = null;
   }
 
   private schedule(): void {

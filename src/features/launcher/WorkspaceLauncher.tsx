@@ -126,10 +126,13 @@ export function WorkspaceLauncher({
             (candidate) => candidate.session.workspaceId === item.session.workspaceId,
           )
           : undefined;
+        const summaryIssue = item.summary?.issue ?? null;
         return {
           ...item,
-          status: previous?.status ?? "waiting",
-          message: previous?.message,
+          status: previous?.status ?? (summaryIssue ? "failed" : "waiting"),
+          message:
+            previous?.message ??
+            (summaryIssue ? desktopErrorMessage(summaryIssue) : undefined),
         };
       }));
       setRestoreOpen(restorable.length > 0);
@@ -395,7 +398,13 @@ export function WorkspaceLauncher({
         Number(left.session.windowLabel === snapshot.windowLabel);
     });
     for (const item of ordered) {
-      if (!item.recent || item.status === "restored") continue;
+      if (
+        !item.recent ||
+        item.status === "restored" ||
+        item.summary?.issue
+      ) {
+        continue;
+      }
       markRestore(item.session.workspaceId, "restoring");
       try {
         const outcome = await gateway.validateRecent(item.session.workspaceId);
@@ -658,7 +667,7 @@ export function WorkspaceLauncher({
         open={restoreOpen && restoreItems.length > 0}
         actions={<><button className="plainroot-button" onClick={() => setRestoreOpen(false)} type="button">暂不恢复</button><button className="plainroot-button plainroot-button--primary" onClick={() => void restoreAll()} type="button">恢复可用窗口</button></>}
       >
-        <div className="launcher-dialog-text"><p className="launcher__eyebrow">上次会话</p><h2 id="restore-title">恢复工作区窗口</h2><p id="restore-description">逐个核对本地目录；一个项目失败不会阻止其他项目恢复。</p><ul className="launcher__restore-list">{restoreItems.map((item) => <li key={item.session.workspaceId} data-status={item.status}><span><strong>{item.recent?.displayName ?? "未知工作区"}</strong><small>{item.message ?? item.recent?.canonicalRoot ?? "最近记录已移除"}</small></span><div className="launcher__restore-actions"><em>{restoreStatusLabel(item.status)}</em>{item.status === "failed" || item.status === "needs_confirmation" ? item.recent ? <button className="plainroot-button" onClick={() => void openRecent(item.recent!, item)} type="button">重试</button> : <button className="plainroot-button" onClick={() => void removeRestoreItem(item)} type="button">移除失效会话</button> : null}{item.status === "waiting" ? <button className="plainroot-button" onClick={() => markRestore(item.session.workspaceId, "failed", "本次已跳过")} type="button">跳过</button> : null}</div></li>)}</ul></div>
+        <div className="launcher-dialog-text"><p className="launcher__eyebrow">上次会话</p><h2 id="restore-title">恢复工作区窗口</h2><p id="restore-description">逐个核对本地目录与页签摘要；一个项目失败不会阻止其他项目恢复。</p><ul className="launcher__restore-list">{restoreItems.map((item) => <li key={item.session.workspaceId} data-status={item.status}><span><strong>{item.recent?.displayName ?? "未知工作区"}</strong><small>{item.message ?? item.recent?.canonicalRoot ?? "最近记录已移除"}</small><small>{item.summary ? `${item.summary.tabCount} 个页签 · 会话版本 ${item.summary.revision}` : "仅恢复工作区窗口，没有页签摘要"}</small></span><div className="launcher__restore-actions"><em>{restoreStatusLabel(item.status)}</em>{item.status === "failed" || item.status === "needs_confirmation" ? item.recent ? <button className="plainroot-button" onClick={() => void openRecent(item.recent!, item)} type="button">重试</button> : <button className="plainroot-button" onClick={() => void removeRestoreItem(item)} type="button">移除失效会话</button> : null}{item.status === "waiting" ? <button className="plainroot-button" onClick={() => markRestore(item.session.workspaceId, "failed", "本次已跳过")} type="button">跳过</button> : null}</div></li>)}</ul></div>
       </AppDialog>
 
       <RecoveryDialog

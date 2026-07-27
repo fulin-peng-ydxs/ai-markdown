@@ -250,14 +250,38 @@ describe("WorkspaceLauncher", () => {
       {
         workspaceId: "workspace-a",
         windowLabel: "plainroot-window-1",
-        windowStateRef: null,
+        windowStateRef: "session-a",
         lastActiveAt: 2,
       },
       {
         workspaceId: "workspace-b",
         windowLabel: "plainroot-window-2",
-        windowStateRef: null,
+        windowStateRef: "session-b",
         lastActiveAt: 1,
+      },
+    ];
+    restoringSnapshot.windowSessionSummaries = [
+      {
+        workspaceId: "workspace-a",
+        windowStateRef: "session-a",
+        revision: 3,
+        tabCount: 2,
+        updatedAt: 2,
+        issue: null,
+      },
+      {
+        workspaceId: "workspace-b",
+        windowStateRef: "session-b",
+        revision: 4,
+        tabCount: 5,
+        updatedAt: 1,
+        issue: {
+          code: "window_session_read_failed",
+          messageKey: "error.desktop.window_session_read_failed",
+          pathHint: null,
+          contentSafe: true,
+          retryable: true,
+        },
       },
     ];
     const api = gateway({
@@ -275,10 +299,13 @@ describe("WorkspaceLauncher", () => {
     });
     const user = userEvent.setup();
     render(<WorkspaceLauncher gateway={api} />);
+    expect(await screen.findByText("2 个页签 · 会话版本 3")).toBeTruthy();
+    expect(screen.getByText("5 个页签 · 会话版本 4")).toBeTruthy();
     await user.click(await screen.findByRole("button", { name: "恢复可用窗口" }));
-    await waitFor(() => expect(api.open).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.open).toHaveBeenCalledTimes(1));
     expect(api.snapshot).toHaveBeenCalledTimes(2);
-    expect(screen.getAllByText("已恢复")).toHaveLength(2);
+    expect(screen.getAllByText("已恢复")).toHaveLength(1);
+    expect(screen.getAllByText("失败")).toHaveLength(1);
   });
 
   it.each([

@@ -46,6 +46,12 @@ const secondNote: FsEntry = {
   name: "second.md",
 };
 
+const restoredView = {
+  mode: "source" as const,
+  selection: { kind: "source" as const, anchor: 2, head: 2 },
+  anchor: { kind: "source" as const, offset: 2, scrollTop: 18 },
+};
+
 function gateway(overrides: Partial<WorkspaceWorkbenchGateway> = {}): WorkspaceWorkbenchGateway {
   const completeScan: WorkspaceScanBatch = {
     scanId: "scan-1",
@@ -184,6 +190,235 @@ function gateway(overrides: Partial<WorkspaceWorkbenchGateway> = {}): WorkspaceW
 }
 
 describe("WorkspaceWorkbench", () => {
+  it("restores the active tab first and lazily loads the other recovered tab", async () => {
+    const api = gateway({
+      getTabSession: vi.fn().mockResolvedValue({
+        schemaVersion: 1,
+        workspaceId: "workspace-a",
+        windowStateRef: "window-session-a",
+        revision: 3,
+        tabs: [
+          {
+            path: {
+              relativePath: "note.md",
+              identity: "native:note.md",
+            },
+            view: restoredView,
+            lastActivatedAt: 1,
+          },
+          {
+            path: {
+              relativePath: "second.md",
+              identity: "native:second.md",
+            },
+            view: restoredView,
+            lastActivatedAt: 2,
+          },
+        ],
+        activeRelativePath: "second.md",
+        recentlyClosed: [],
+        updatedAt: 3,
+        issues: [],
+      }),
+      pollScan: vi.fn().mockResolvedValue({
+        scanId: "scan-1",
+        processed: 2,
+        entries: [note, secondNote],
+        issues: [],
+        complete: true,
+        cancelled: false,
+      }),
+      read: vi.fn().mockImplementation(async (_workspaceId, relativePath) => ({
+        relativePath,
+        status: "ready",
+        content: `# ${relativePath}`,
+        revision: {
+          modifiedAt: 1,
+          size: 16,
+          contentHash: `hash:${relativePath}`,
+          encoding: "utf8",
+          lineEnding: "lf",
+        },
+      })),
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    const restoredActiveTab = await screen.findByRole("tab", {
+      name: /second\.md/,
+    });
+    await waitFor(() =>
+      expect(restoredActiveTab.getAttribute("aria-selected")).toBe("true"),
+    );
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    expect(api.read).toHaveBeenCalledTimes(1);
+    expect(api.read).toHaveBeenCalledWith("workspace-a", "second.md");
+
+    await user.click(screen.getByRole("tab", { name: /note\.md/ }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: /note\.md/ }).getAttribute("title"),
+      ).toContain("已就绪"),
+    );
+    expect(api.read).toHaveBeenCalledTimes(2);
+    expect(api.read).toHaveBeenLastCalledWith("workspace-a", "note.md");
+  });
+
+  it("isolates invalid recovered paths and keeps a retry or skip action", async () => {
+    const missingError = {
+      code: "path_not_found" as const,
+      messageKey: "error.desktop.path_not_found",
+      pathHint: "missing.md",
+      contentSafe: true,
+      retryable: true,
+    };
+    const api = gateway({
+      getTabSession: vi.fn().mockResolvedValue({
+        schemaVersion: 1,
+        workspaceId: "workspace-a",
+        windowStateRef: "window-session-a",
+        revision: 3,
+        tabs: [
+          {
+            path: {
+              relativePath: "second.md",
+              identity: "native:second.md",
+            },
+            view: restoredView,
+            lastActivatedAt: 2,
+          },
+        ],
+        activeRelativePath: "missing.md",
+        recentlyClosed: [],
+        updatedAt: 3,
+        issues: [{ relativePath: "missing.md", error: missingError }],
+      }),
+      pollScan: vi.fn().mockResolvedValue({
+        scanId: "scan-1",
+        processed: 1,
+        entries: [secondNote],
+        issues: [],
+        complete: true,
+        cancelled: false,
+      }),
+      resolveTabPath: vi.fn().mockImplementation(
+        async (_workspaceId, relativePath) => {
+          if (relativePath === "missing.md") throw missingError;
+          return {
+            relativePath,
+            identity: `native:${relativePath}`,
+          };
+        },
+      ),
+      read: vi.fn().mockResolvedValue({
+        relativePath: "second.md",
+        status: "ready",
+        content: "# second.md",
+        revision: {
+          modifiedAt: 1,
+          size: 16,
+          contentHash: "hash:second",
+          encoding: "utf8",
+          lineEnding: "lf",
+        },
+      }),
+    });
+    const user = userEvent.setup();
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+
+    await screen.findByRole("tab", { name: /second\.md/ });
+    expect(
+      await screen.findByRole("heading", { name: "有 1 个页签未恢复" }),
+    ).toBeTruthy();
+    expect(screen.getByText(/missing\.md/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "重新核对" }));
+    expect(
+      await screen.findByRole("heading", { name: "有 1 个页签未恢复" }),
+    ).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "跳过" }));
+    expect(
+      screen.queryByRole("heading", { name: "有 1 个页签未恢复" }),
+    ).toBeNull();
+  });
+
+  it("keeps restored content closable after takeover metadata persistence fails", async () => {
+    let settlementListener:
+      | ((intent: WindowSettlementIntent) => void)
+      | undefined;
+    const resolveSettlement = vi
+      .fn()
+      .mockResolvedValue({ status: "closed", windowLabel: "plainroot-window-1" });
+    const api = gateway({
+      getTabSession: vi.fn().mockResolvedValue({
+        schemaVersion: 1,
+        workspaceId: "workspace-a",
+        windowStateRef: "window-session-a",
+        revision: 3,
+        tabs: [
+          {
+            path: {
+              relativePath: "note.md",
+              identity: "native:note.md",
+            },
+            view: restoredView,
+            lastActivatedAt: 1,
+          },
+        ],
+        activeRelativePath: "note.md",
+        recentlyClosed: [],
+        updatedAt: 3,
+        issues: [],
+      }),
+      saveTabSession: vi
+        .fn()
+        .mockRejectedValue(new Error("injected restored-session failure")),
+      listenSettlement: vi.fn().mockImplementation(async (
+        listener: (intent: WindowSettlementIntent) => void,
+      ) => {
+        settlementListener = listener;
+        return () => undefined;
+      }),
+      resolveSettlement,
+    });
+    render(
+      <WorkspaceWorkbench
+        gateway={api}
+        initialWorkspace={workspace}
+        onWorkspaceChanged={() => undefined}
+      />,
+    );
+    await screen.findByRole("tab", { name: /note\.md/ });
+    await waitFor(() => expect(api.saveTabSession).toHaveBeenCalled());
+    await waitFor(() => expect(settlementListener).toBeDefined());
+
+    await act(async () => {
+      settlementListener?.({
+        intentId: "restored-session-close",
+        kind: "close_window",
+        windowLabel: "plainroot-window-1",
+      });
+    });
+
+    await waitFor(() =>
+      expect(resolveSettlement).toHaveBeenCalledWith(
+        "restored-session-close",
+        true,
+      ),
+    );
+  });
+
   it("resolves a native close intent only after the current document is safe", async () => {
     let settlementListener:
       | ((intent: WindowSettlementIntent) => void)

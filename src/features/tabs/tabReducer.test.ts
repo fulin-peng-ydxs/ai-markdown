@@ -15,6 +15,7 @@ import {
   createWorkspaceTabCollection,
   RECENTLY_CLOSED_TAB_LIMIT,
   reduceWorkspaceTabs,
+  restoreWorkspaceTabCollection,
   selectActiveWorkspaceTabProjection,
   toWorkspaceTabRecoveryDescriptors,
   validateWorkspaceTabCollection,
@@ -166,6 +167,57 @@ describe("workspace tab path contract", () => {
 });
 
 describe("workspace tab reducer", () => {
+  it("restores ordered unloaded tabs and recent metadata as one persisted baseline", () => {
+    const firstPath = tabPath("one.md");
+    const secondPath = tabPath("folder/two.md");
+    const recentPath = tabPath("closed.md");
+    const state = restoreWorkspaceTabCollection(
+      createWorkspaceTabCollection("workspace-a"),
+      {
+        tabs: [
+          { ...request(1, firstPath), restoredView: view },
+          request(2, secondPath),
+        ],
+        activePathIdentity: secondPath.identity,
+        recentlyClosed: [
+          {
+            workspaceId: "workspace-a",
+            relativePath: recentPath.relativePath,
+            pathIdentity: recentPath.identity,
+            displayName: "closed.md",
+            parentHint: null,
+            view,
+            closedAt: 10,
+          },
+        ],
+        repositoryMatches: true,
+      },
+    );
+
+    expect(state.orderedTabIds).toEqual(["tab-1", "tab-2"]);
+    expect(state.activeTabId).toBe("tab-2");
+    expect(state.tabsById.get("tab-1")?.loadState.kind).toBe("idle");
+    expect(state.tabsById.get("tab-1")?.restoredView).toEqual(view);
+    expect(state.recentlyClosed).toHaveLength(1);
+    expect(state.persistedRevision).toBe(state.revision);
+    expect(validateWorkspaceTabCollection(state)).toEqual([]);
+  });
+
+  it("keeps an isolated restore result dirty so invalid metadata is cleaned later", () => {
+    const restored = restoreWorkspaceTabCollection(
+      createWorkspaceTabCollection("workspace-a"),
+      {
+        tabs: [request(1)],
+        activePathIdentity: null,
+        recentlyClosed: [],
+        repositoryMatches: false,
+      },
+    );
+
+    expect(workspaceTabsNeedPersistence(restored)).toBe(true);
+    expect(restored.activeTabId).toBe("tab-1");
+  });
+
   it("keeps the complete settlement reason contract explicit", () => {
     expect(WORKSPACE_TAB_SETTLEMENT_REASONS).toEqual([
       "close_current",
