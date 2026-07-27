@@ -863,6 +863,17 @@ pub fn document_title(workspace_name: &str, file_name: Option<&str>) -> String {
     }
 }
 
+fn workbench_window_title(workspace_name: &str, file_name: Option<&str>) -> String {
+    #[cfg(feature = "e2e")]
+    if std::env::var_os("PLAINROOT_E2E_FIXED_WINDOW_TITLE").is_some() {
+        // WDIO selects a WebView2 renderer through its native title. The
+        // shortcut-only E2E process freezes that unrelated title boundary so
+        // it can still inspect the real Tauri menu and dispatch native input.
+        return document_title(workspace_name, None);
+    }
+    document_title(workspace_name, file_name)
+}
+
 #[tauri::command]
 pub fn set_workbench_window_title<R: Runtime>(
     window: WebviewWindow<R>,
@@ -885,7 +896,7 @@ pub fn set_workbench_window_title<R: Runtime>(
                 .map(str::to_owned)
         });
     window
-        .set_title(&document_title(
+        .set_title(&workbench_window_title(
             workspace.display_name(),
             file_name.as_deref(),
         ))

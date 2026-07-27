@@ -70,7 +70,12 @@ try {
     exitCode = await runDesktopSpec(
       "tests/e2e/specs/native-tab-shortcuts.e2e.mjs",
       shortcutDataDirectory,
-      { PLAINROOT_E2E_WORKSPACE_ROOT: shortcutFixture.root },
+      {
+        ...(process.platform === "win32"
+          ? { PLAINROOT_E2E_FIXED_WINDOW_TITLE: "1" }
+          : {}),
+        PLAINROOT_E2E_WORKSPACE_ROOT: shortcutFixture.root,
+      },
     );
   }
   if (exitCode === 0) {

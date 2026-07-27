@@ -5,7 +5,7 @@
 - 对应任务：第三阶段 `T45`。
 - 对应需求：R1、R2、R3、R5、R6、R10、R11、R13、R14、R30、R31 的真实桌面验证子集。
 - 本次完成桌面测试编排、macOS 原生页签组合键、真实窗口替换拒绝和跨进程会话恢复；不进入 T46 阶段验收。
-- 最新实现已推送并完成七轮第三阶段双平台运行。第七轮 macOS 完整通过，Windows 再次通过主桌面链 12/12，随后证明折叠状态下的页签子菜单项不会直接出现在窗口后代可访问性树。当前修复通过 UI Automation 展开原生“页签”菜单，再读取目标子项启用态、收起菜单、发送一次系统按键并由原生窗口标题核验结果；双平台远端证据仍待取得。T45 状态保持“进行中”。
+- 最新实现已推送并完成八轮第三阶段双平台运行。第八轮 macOS 完整通过，Windows 再次通过主桌面链 12/12，并证明 Tauri/Windows 菜单子项在该 WebDriver 会话中不由 UI Automation 暴露。当前仅在 Windows 快捷键 E2E 进程冻结动态文档标题，消除 WDIO renderer 选择干扰，恢复消费真实 Rust/Tauri 菜单 enabled 探针、一次系统按键和真实活动页签断言；双平台远端证据仍待取得。T45 状态保持“进行中”。
 
 ## 2. 实际实现
 
@@ -40,9 +40,9 @@ P1 主链新增真实替换事务：
 原生快捷键用独立桌面进程和三个真实页签验证。测试先有界等待唯一 fixture 窗口进入系统可发现状态，再等待目标进程成为前台且对应原生菜单项已启用，最后执行系统级输入；每个方向只发送一次：
 
 - macOS：System Events `AXRaise` 后发送 `Cmd+Option+Right/Left`；
-- Windows：系统脚本轮询 Win32 `GetForegroundWindow` 确认目标窗口已成为前台，并从 Windows UI Automation 原生可访问性树读取下一/上一页签菜单项真实启用状态；随后发送一次 `Ctrl+Tab` / `Ctrl+Shift+Tab`，再由原生窗口标题确认目标文档已激活。该链不依赖 WebView `keydown`、传统 HMENU 或动态标题下的 WDIO renderer 切换。
+- Windows：快捷键专用 E2E 进程通过编译期隔离分支把原生标题固定为“工作区 — Plainroot”，避免 WDIO 随文档标题变化丢失 renderer；测试仍由 `e2e_tab_shortcuts_ready` 读取真实 `EditorMenuStateRegistry` 与 Tauri `MenuItem::is_enabled`，系统脚本确认前台窗口后只发送一次 `Ctrl+Tab` / `Ctrl+Shift+Tab`，最后由真实页签选中态断言结果。生产构建不读取该测试标志，也不注册探针。
 
-macOS 在最新重建的 Tauri E2E release 二进制上发现 `Cmd+Shift+]` 可触发，但 `Cmd+Shift+[` 不会到达菜单动作；因此没有保留不可用的对称外观，而是收敛为双向均实际通过的 `Cmd+Option+Right/Left`。Windows 映射保持平台常用组合，但 UI Automation 就绪链尚未在 Windows runner 运行，不能记为通过。
+macOS 在最新重建的 Tauri E2E release 二进制上发现 `Cmd+Shift+]` 可触发，但 `Cmd+Shift+[` 不会到达菜单动作；因此没有保留不可用的对称外观，而是收敛为双向均实际通过的 `Cmd+Option+Right/Left`。Windows 映射保持平台常用组合，但固定标题测试缝尚未在 Windows runner 运行，不能记为通过。
 
 React 没有新增全局 keydown；原生菜单仍通过唯一 `WORKBENCH_MENU_EVENT` 路由到现有 `WorkspaceTabManager`。
 
@@ -163,9 +163,19 @@ GitHub Actions run `30287098572` 对提交 `30b44ad5a7b24accc2aa729535265cc08756
 - Windows 诊断 artifact `plainroot-windows-30287098572` 的 SHA-256 为 `31dee948ffb2f9095fedddacbabd463ec570c5b724a40f9d3741bc5817f2f56c`；
 - PowerShell 已取得窗口 AutomationElement，但折叠状态下只查询窗口后代无法看到子菜单项。当前修复先通过 `ExpandCollapsePattern` 展开顶层“页签”菜单，再从同一进程的桌面可访问性树读取目标子项，最终在 `finally` 收起菜单；前台与标题结果门禁保持不变。
 
+### 3.7 第八次远端运行与快捷键测试标题隔离
+
+GitHub Actions run `30288530855` 对提交 `89fb7bd8c8dbd582a2d41afd283bc9b868c7a651` 给出新的有效证据：
+
+- macOS 再次完整通过并上传 `plainroot-macos-30288530855`，SHA-256 为 `e90c0819f7a91a482af0591389c9f642acda533c19f78d054bdb5d6f030d01b9`；
+- Windows 再次通过非桌面门禁、Rust 门禁和主桌面链 12/12；主动展开顶层菜单后，UI Automation 仍未暴露目标子菜单项，快捷键专项在发送按键前安全失败；
+- Windows 诊断 artifact `plainroot-windows-30288530855` 的 SHA-256 为 `9d8f0d69242fbf7544ef94fa23d99032df2d6cf06f20de18d8a721d6a79ffbf9`。
+
+当前整改不再把测试正确性建立在 Tauri/Windows 未暴露的 HMENU 或 UI Automation 子树上。`PLAINROOT_E2E_FIXED_WINDOW_TITLE` 只由 Windows 原生快捷键隔离进程注入，且只在 `e2e` feature 编译分支读取；它把本用例中与快捷键无关的文档标题变化固定为工作区标题，使 WDIO 能持续调用既有只读菜单探针并读取真实页签选中态。产品菜单状态、快捷键、命令路由和页签标题逻辑在默认构建中不变。
+
 ## 4. 未验证项
 
-- 最新 Windows 折叠菜单可访问性修复尚未取得 GitHub Actions macOS/Windows 双绿与成对生产 artifact；run `30272399213`、`30274596446`、`30275676382`、`30278252178`、`30280357578`、`30285162108`、`30287098572` 都是有效的递进证据，但没有一轮可作为 T45 双平台通过证据。
+- 最新 Windows 快捷键测试标题隔离修复尚未取得 GitHub Actions macOS/Windows 双绿与成对生产 artifact；run `30272399213`、`30274596446`、`30275676382`、`30278252178`、`30280357578`、`30285162108`、`30287098572`、`30288530855` 都是有效的递进证据，但没有一轮可作为 T45 双平台通过证据。
 - Windows 第六次 run 已通过非桌面门禁、Clippy、Rust 测试和主桌面链 12/12；`Ctrl+Tab` / `Ctrl+Shift+Tab`、跨进程恢复、完整 15 条桌面链和生产构建仍未在同一最新提交上取得通过证据。
 - Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍是人工项。
 - 真实多窗口整组退出、系统 IME、JS heap、长时峰值内存、休眠、网络卷和文件系统卸载仍无完整产品级证据。
@@ -183,4 +193,4 @@ GitHub Actions run `30287098572` 对提交 `30b44ad5a7b24accc2aa729535265cc08756
 
 ## 6. 当前结论
 
-T45 的本地实现、macOS 桌面证据和非桌面回归已闭合。七次第三阶段远端运行依次发现 Windows CRLF 契约解析、Unix-only 字段 lint、Tauri 菜单测试前置、WebView 刷新、动态标题渲染器定位，以及 Windows 折叠菜单项的可访问性读取问题；整改均针对事实源和跨平台边界，没有跳过真实输入、降低业务断言或加入业务重试。第六、七轮均证明 Windows 主桌面链 12/12 通过，完成标准仍要求最新修复提交在 macOS/Windows 远端双绿并可追溯 artifact。T45 继续保持“进行中”；T46 未开始。
+T45 的本地实现、macOS 桌面证据和非桌面回归已闭合。八次第三阶段远端运行依次发现 Windows CRLF 契约解析、Unix-only 字段 lint、Tauri 菜单测试前置、WebView 刷新、动态标题渲染器定位，以及 Windows 原生菜单不暴露 HMENU/UI Automation 子项的问题；整改均针对事实源和跨平台边界，没有跳过真实输入、降低业务断言或加入业务重试。第六至八轮均证明 Windows 主桌面链 12/12 通过，完成标准仍要求最新修复提交在 macOS/Windows 远端双绿并可追溯 artifact。T45 继续保持“进行中”；T46 未开始。

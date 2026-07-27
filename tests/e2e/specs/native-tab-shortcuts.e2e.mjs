@@ -106,7 +106,7 @@ throw "Plainroot shortcut window did not become foreground"
   throw new Error(`native tab shortcut is not supported on ${process.platform}`);
 }
 
-async function sendNativeTabShortcut(direction, expectedDocumentName) {
+async function sendNativeTabShortcut(direction) {
   if (process.platform === "darwin") {
     const keyCode = direction === "next" ? 124 : 123;
     const menuItemTitle = direction === "next" ? "下一个页签" : "上一个页签";
@@ -159,14 +159,8 @@ async function sendNativeTabShortcut(direction, expectedDocumentName) {
 
   if (process.platform === "win32") {
     const keys = direction === "next" ? "^{TAB}" : "^+{TAB}";
-    const menuItemTitle = direction === "next" ? "下一个页签" : "上一个页签";
-    // WebView2 document titles change while the test runs, so WDIO cannot
-    // reliably select the active renderer here. Keep this native-only slice
-    // observable through Windows UI Automation and the native window title.
     const script = `
 Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName UIAutomationClient
-Add-Type -AssemblyName UIAutomationTypes
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
@@ -179,87 +173,7 @@ public static class PlainrootNativeInput {
 }
 "@
 
-function Test-PlainrootMenuItemEnabled {
-  param(
-    [IntPtr]$WindowHandle,
-    [string]$ItemTitle
-  )
-  $expandPattern = $null
-  try {
-    $window = [System.Windows.Automation.AutomationElement]::FromHandle(
-      $WindowHandle
-    )
-    if ($null -eq $window) { return $false }
-
-    $windowItems = $window.FindAll(
-      [System.Windows.Automation.TreeScope]::Descendants,
-      [System.Windows.Automation.Condition]::TrueCondition
-    )
-    $tabMenu = $null
-    foreach ($candidate in $windowItems) {
-      if (
-        $candidate.Current.ControlType -eq
-          [System.Windows.Automation.ControlType]::MenuItem -and
-        $candidate.Current.Name -like "*页签*"
-      ) {
-        $tabMenu = $candidate
-        break
-      }
-    }
-
-    if (
-      $null -eq $tabMenu -or
-      -not $tabMenu.TryGetCurrentPattern(
-        [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
-        [ref]$expandPattern
-      )
-    ) {
-      return $false
-    }
-
-    $expandPattern.Expand()
-    Start-Sleep -Milliseconds 50
-
-    $processCondition = [System.Windows.Automation.PropertyCondition]::new(
-      [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
-      $window.Current.ProcessId
-    )
-    $menuItemCondition = [System.Windows.Automation.PropertyCondition]::new(
-      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-      [System.Windows.Automation.ControlType]::MenuItem
-    )
-    $menuItems = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
-      [System.Windows.Automation.TreeScope]::Descendants,
-      [System.Windows.Automation.AndCondition]::new(
-        $processCondition,
-        $menuItemCondition
-      )
-    )
-    foreach ($candidate in $menuItems) {
-      if (
-        $candidate.Current.Name -like "*$ItemTitle*" -and
-        $candidate.Current.IsEnabled
-      ) {
-        return $true
-      }
-    }
-  } catch {
-    return $false
-  } finally {
-    if ($null -ne $expandPattern) {
-      try {
-        $expandPattern.Collapse()
-      } catch {
-        # The menu may already have collapsed after a foreground transition.
-      }
-    }
-  }
-  return $false
-}
-
 $expectedTitle = [IO.Path]::GetFileName($env:PLAINROOT_E2E_WORKSPACE_ROOT)
-$expectedMenuItem = "${menuItemTitle}"
-$expectedDocument = "${expectedDocumentName}"
 $process = $null
 $discoveryDeadline = [DateTime]::UtcNow.AddSeconds(5)
 do {
@@ -271,16 +185,12 @@ do {
 if ($null -eq $process) { throw "Plainroot native window was not found" }
 
 $ready = $false
-$deadline = [DateTime]::UtcNow.AddSeconds(10)
+$deadline = [DateTime]::UtcNow.AddSeconds(5)
 do {
-  $process.Refresh()
   if ([PlainrootNativeInput]::GetForegroundWindow() -ne $process.MainWindowHandle) {
     [void][PlainrootNativeInput]::SetForegroundWindow($process.MainWindowHandle)
   }
-  if (
-    [PlainrootNativeInput]::GetForegroundWindow() -eq $process.MainWindowHandle -and
-    (Test-PlainrootMenuItemEnabled -WindowHandle $process.MainWindowHandle -ItemTitle $expectedMenuItem)
-  ) {
+  if ([PlainrootNativeInput]::GetForegroundWindow() -eq $process.MainWindowHandle) {
     $ready = $true
     break
   }
@@ -288,19 +198,9 @@ do {
 } while ([DateTime]::UtcNow -lt $deadline)
 
 if (-not $ready) {
-  throw "Plainroot shortcut menu item did not become enabled"
+  throw "Plainroot shortcut window did not become foreground"
 }
 [System.Windows.Forms.SendKeys]::SendWait("${keys}")
-
-$transitionDeadline = [DateTime]::UtcNow.AddSeconds(10)
-do {
-  $process.Refresh()
-  if ($process.MainWindowTitle -like "*$expectedDocument*") {
-    exit 0
-  }
-  Start-Sleep -Milliseconds 100
-} while ([DateTime]::UtcNow -lt $transitionDeadline)
-throw "Plainroot shortcut did not activate the expected document"
 `;
     await execFileAsync("powershell.exe", [
       "-NoLogo",
@@ -316,9 +216,6 @@ throw "Plainroot shortcut did not activate the expected document"
 }
 
 async function waitForNativeTabShortcutReadiness() {
-  if (process.platform === "win32") {
-    return;
-  }
   await browser.waitUntil(
     async () => invoke("e2e_tab_shortcuts_ready"),
     {
@@ -372,35 +269,31 @@ describe("Plainroot native tab shortcuts", () => {
     // Each host OS key event below must still succeed on its first attempt.
     await focusNativeTabShortcutWindow();
     await waitForNativeTabShortcutReadiness();
-    await sendNativeTabShortcut("next", "tab-two.md");
-    if (process.platform !== "win32") {
-      await browser.waitUntil(
-        async () =>
-          (await tabList
-            .$('[role="tab"][aria-selected="true"] strong')
-            .getText()) === "tab-two.md",
-        {
-          timeout: 10_000,
-          timeoutMsg:
-            "the platform-native next-tab accelerator did not activate the next tab",
-        },
-      );
-    }
+    await sendNativeTabShortcut("next");
+    await browser.waitUntil(
+      async () =>
+        (await tabList
+          .$('[role="tab"][aria-selected="true"] strong')
+          .getText()) === "tab-two.md",
+      {
+        timeout: 10_000,
+        timeoutMsg:
+          "the platform-native next-tab accelerator did not activate the next tab",
+      },
+    );
     await focusNativeTabShortcutWindow();
     await waitForNativeTabShortcutReadiness();
-    await sendNativeTabShortcut("previous", "note.md");
-    if (process.platform !== "win32") {
-      await browser.waitUntil(
-        async () =>
-          (await tabList
-            .$('[role="tab"][aria-selected="true"] strong')
-            .getText()) === "note.md",
-        {
-          timeout: 10_000,
-          timeoutMsg:
-            "the platform-native previous-tab accelerator did not activate the previous tab",
-        },
-      );
-    }
+    await sendNativeTabShortcut("previous");
+    await browser.waitUntil(
+      async () =>
+        (await tabList
+          .$('[role="tab"][aria-selected="true"] strong')
+          .getText()) === "note.md",
+      {
+        timeout: 10_000,
+        timeoutMsg:
+          "the platform-native previous-tab accelerator did not activate the previous tab",
+      },
+    );
   });
 });
