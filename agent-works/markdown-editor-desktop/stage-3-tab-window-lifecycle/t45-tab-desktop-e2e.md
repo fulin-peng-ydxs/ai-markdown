@@ -42,6 +42,7 @@ P1 主链新增真实替换事务：
 - macOS：System Events `AXRaise` 后发送 `Cmd+Option+Right/Left`；
 - Windows：全部 E2E 隔离进程通过编译期隔离分支把原生标题固定为“工作区 — Plainroot”，避免 WDIO 随文档标题变化丢失 renderer；快捷键测试仍由 `e2e_tab_shortcuts_ready` 读取真实 `EditorMenuStateRegistry` 与 Tauri `MenuItem::is_enabled`，系统脚本确认前台窗口后只发送一次平台映射，最后由真实页签选中态断言结果。run `30293567676` 已证明策略与菜单启用态均可达，但 `Ctrl+Tab` 未触发 Windows/Tauri 原生菜单，故当前映射改为待验证的 `Ctrl+PageDown/PageUp`。生产构建不读取测试标志，也不注册探针。
 - run `30295225359` 继续证明策略与菜单启用态均可达，Windows Forms `SendKeys` 发送替代键后仍未切换页签。当前改用 Win32 `SendInput` 向已核验的前台窗口提交 Ctrl 与扩展 Page 键的四个按下/抬起事件，并检查系统实际接收数量；该路径仍是一次真实系统输入，不调用 WebView keydown、不直接触发业务命令、不增加重试。
+- run `30296713912` 证明 Win32 `SendInput` 已完整提交四个输入事件；macOS 再次完整通过，Windows 非桌面门禁、主桌面链 12/12、页签策略与原生菜单启用态均通过。Windows 失败 artifact（SHA-256 `c0da994f7cea3b05348920f5e80cc80ce7aa439937601453ecf162536d75f613`）显示专项用例从开始即持续出现 WDIO 按动态原生标题重定位 renderer 的告警，失败截图则是会话清理时出现的结算弹层，并不是按键后的三页签状态。根因收敛为结果断言复用了会触发原生窗口重定位的旧元素句柄，无法据此证明产品快捷键无效；当前改为在同一 renderer 内执行只读 DOM 查询，不改变真实菜单、系统输入或期望页签结果。
 
 macOS 在最新重建的 Tauri E2E release 二进制上发现 `Cmd+Shift+]` 可触发，但 `Cmd+Shift+[` 不会到达菜单动作；因此没有保留不可用的对称外观，而是收敛为双向均实际通过的 `Cmd+Option+Right/Left`。Windows 映射保持平台常用组合，但固定标题测试缝尚未在 Windows runner 运行，不能记为通过。
 
@@ -196,8 +197,8 @@ GitHub Actions run `30291901180` 对提交 `a25af90f271cfe92347de7040b1b0a2effe3
 
 ## 4. 未验证项
 
-- 最新 Windows 单窗口菜单同步修复尚未取得 GitHub Actions macOS/Windows 双绿与成对生产 artifact；run `30272399213`、`30274596446`、`30275676382`、`30278252178`、`30280357578`、`30285162108`、`30287098572`、`30288530855`、`30290219296`、`30291901180` 都是有效的递进证据，但没有一轮可作为 T45 双平台通过证据。
-- Windows 第六次 run 已通过非桌面门禁、Clippy、Rust 测试和主桌面链 12/12；`Ctrl+Tab` / `Ctrl+Shift+Tab`、跨进程恢复、完整 15 条桌面链和生产构建仍未在同一最新提交上取得通过证据。
+- 最新 Windows 结果观察修复尚未取得 GitHub Actions macOS/Windows 双绿与成对生产 artifact；既有失败 run 都是有效递进证据，但没有一轮可作为 T45 双平台通过证据。
+- Windows run `30296713912` 已通过非桌面门禁、Clippy、Rust 测试和主桌面链 12/12，并证明 `Ctrl+PageDown/PageUp` 输入可由系统完整接收；真实页签切换、跨进程恢复、完整 15 条桌面链和生产构建仍未在同一最新提交上取得通过证据。
 - Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍是人工项。
 - 真实多窗口整组退出、系统 IME、JS heap、长时峰值内存、休眠、网络卷和文件系统卸载仍无完整产品级证据。
 - macOS 本轮验证了替换 intent 的拒绝分支；多窗口整组退出与允许替换的完整系统级人工链仍留待 T46 汇总或后续平台验收。

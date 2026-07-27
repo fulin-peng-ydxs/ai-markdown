@@ -302,6 +302,15 @@ async function waitForNativeTabShortcutReadiness() {
   );
 }
 
+async function activeTabName() {
+  return browser.execute(() => {
+    const activeTab = document.querySelector(
+      '[role="tablist"][aria-label="打开的文档"] [role="tab"][aria-selected="true"] strong',
+    );
+    return activeTab?.textContent?.trim() ?? null;
+  });
+}
+
 describe("Plainroot native tab shortcuts", () => {
   it("routes platform-native next and previous accelerators to the focused window", async () => {
     assert.ok(workspaceRoot, "shortcut fixture root is required");
@@ -333,10 +342,7 @@ describe("Plainroot native tab shortcuts", () => {
       .$('button[role="tab"][title^="note.md ·"]')
       .click();
     await browser.waitUntil(
-      async () =>
-        (await tabList
-          .$('[role="tab"][aria-selected="true"] strong')
-          .getText()) === "note.md",
+      async () => (await activeTabName()) === "note.md",
       { timeout: 10_000 },
     );
 
@@ -346,10 +352,7 @@ describe("Plainroot native tab shortcuts", () => {
     await waitForNativeTabShortcutReadiness();
     await sendNativeTabShortcut("next");
     await browser.waitUntil(
-      async () =>
-        (await tabList
-          .$('[role="tab"][aria-selected="true"] strong')
-          .getText()) === "tab-two.md",
+      async () => (await activeTabName()) === "tab-two.md",
       {
         timeout: 10_000,
         timeoutMsg:
@@ -360,10 +363,7 @@ describe("Plainroot native tab shortcuts", () => {
     await waitForNativeTabShortcutReadiness();
     await sendNativeTabShortcut("previous");
     await browser.waitUntil(
-      async () =>
-        (await tabList
-          .$('[role="tab"][aria-selected="true"] strong')
-          .getText()) === "note.md",
+      async () => (await activeTabName()) === "note.md",
       {
         timeout: 10_000,
         timeoutMsg:
