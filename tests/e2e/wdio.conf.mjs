@@ -5,10 +5,13 @@ const appBinary = resolve(
   "src-tauri/target/release",
   process.platform === "win32" ? "plainroot.exe" : "plainroot",
 );
+const selectedSpec =
+  process.env.PLAINROOT_E2E_SPEC ??
+  "tests/e2e/specs/desktop-shell.e2e.mjs";
 
 export const config = {
   runner: "local",
-  specs: [resolve("tests/e2e/specs/**/*.e2e.mjs")],
+  specs: [resolve(selectedSpec)],
   maxInstances: 1,
   capabilities: [
     {

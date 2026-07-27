@@ -88,7 +88,7 @@ flowchart LR
 - T38 的 `WorkspaceTabBar` 直接消费 manager 快照，提供真实 tablist、同名父路径、公共主状态、单页签关闭、当前窗口拖动/键盘排序和全部页签溢出；`TabOverflowMenu` 与 `TabContextMenu` 共同消费 `TabMenu` 的方向键、Esc 和焦点返回。T40 已启用关闭其他、关闭右侧和关闭全部，T43 又把关闭/重开/切换/批量关闭/所有页签接入原生菜单；全部动作仍委托同一 manager、共享菜单与结算批次，不复制保存判断或命令总线。
 - T39 让溢出菜单列出最近关闭项；重开必须重新经过 Rust 路径身份解析，失败项保留真实错误并可只移除元数据。`tabSessionProjection` 与 `WorkspaceTabSessionPersistence` 将当前顺序、活动项、视图和最近项以防抖/CAS 写入既有仓储；T42 已让既有会话在恢复消费前冻结，消费后以原 repository revision 接管后续写入。
 - `tabPathImpact` 在 rename/move/delete 调用磁盘前纯计算受影响页签、目标路径和所有已加载文档的内联图片链接改写预案。命中打开页签时先走统一结算；Rust 磁盘操作失败时保留原路径和全部页签，成功后 `WorkspaceTabManager` 才以一次 collection revision 提交路径/identity/runtime 或页签移除。目录移动后再按新路径重新计算全部受影响已加载页签的内联图片链接；manager 生成的链接改写直接结算已提交 runtime，不重新采集 React 尚未更新的活动 adapter 旧投影。若其中某次安全写失败，目录移动事实保持、对应页签保持 dirty 并给出真实提示，不伪装为整批磁盘回滚。
-- 真实 Tauri/WebKit 门禁使用三个文档、36 次可见页签切换，逐次断言页面只有一个 `.ProseMirror` 或 `.cm-editor`，并以测试 feature 的进程 RSS 采样执行增量 ≤128 MiB 的可失败门禁；另验证溢出菜单 Esc 焦点返回及 1100/820/740 px 不产生根级横向溢出。当前 WebKit 未暴露 JS heap，因此只以单 adapter 与 RSS 作为已取得证据；JS heap 由 T45 在可观测平台补证，不能宣称已通过或取得双平台内存证据。
+- 真实 Tauri/WebKit 门禁使用三个文档、36 次可见页签切换，逐次断言页面只有一个 `.ProseMirror` 或 `.cm-editor`，并以测试 feature 的进程 RSS 采样执行增量 ≤128 MiB 的可失败门禁；另验证溢出菜单 Esc 焦点返回及 1100/1050/820/760/740 px 不产生根级横向溢出。当前 macOS WebKit 未暴露 JS heap，因此只以单 adapter 与 RSS 作为已取得证据；JS heap 与双平台内存证据仍未取得，不能因 T45 macOS 桌面链通过而外推。
 - T42 启动时先恢复 Rust 已解析的有序轻量 descriptor、活动路径、模式、选择/锚点和最近关闭，只读取首选活动页签；活动项失败时按顺序选择下一可用项，其他页签保持 `unloaded` 并在首次激活时读盘。Rust 或前端纵深校验隔离的问题项由 P1 以 `AsyncStatePanel` 呈现并支持跳过/重试，不阻断其他页签或修改 Markdown；致命恢复异常也会解除持久化冻结，允许后续真实打开覆盖旧元数据。
 
 ## 4. 保存、恢复和冲突
@@ -181,8 +181,8 @@ UTF-8 BOM 与单一 LF/CRLF/CR 优先沿用原文件；mixed 或不支持编码�
 - `pnpm test:tabs` 覆盖页签状态机、状态投影、恢复边界、manager 独立 session/controller、慢读取隔离和活动 runtime 唯一性；`pnpm test:tabs:performance` 仍只输出 100 个轻量描述的打开、索引和切换基线。
 - `pnpm test:roundtrip` 使用生产 adapter 验证 CommonMark/GFM、图片、受支持 HTML 与 source-only 语料。
 - Rust 契约测试登记所有 TypeScript 导出 interface 和字符串枚举/tag，防止 Rust↔TypeScript 字段漂移。
-- `pnpm test:e2e` 使用独立 identifier、临时状态目录和每套件复制的临时工作区，当前本地 11 条真桌面用例除既有 P1/P2、两种模式、图片、保存重开、外部修改、恢复和目录图片移动风险外，还覆盖三文档可见页签切换、溢出菜单焦点返回、1100/820/740 px 页签布局、单 adapter/RSS 门禁，以及关闭右侧和打开页签的真实改名、移动、图片链接写回、删除。
-- 远端 GitHub Actions run `30082725332` 已在提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 上完成 macOS/Windows 双绿；该矩阵仍只覆盖第二阶段 9/9 桌面 E2E。T43 当前本地为 267 项 Vitest、203 个 Rust 通过且 1 项手动探针忽略、70/70 页签专项；当前代码 11/11 macOS 桌面回归通过，原生走查另确认“页签”菜单、点击切换、`Cmd+W` 关闭和 `Cmd+Shift+T` 重开。第三阶段尚未推送，`Ctrl+Tab` 真实系统输入、重启/多窗口组合用例和 Windows 仍未验证，不能沿用旧运行宣称双平台通过；完整桌面矩阵由 T45 补齐。
+- `pnpm test:e2e` 当前本地 macOS 以四个隔离桌面进程通过 15 条真桌面用例，覆盖既有 P1/P2、编辑、保存、图片、恢复、目录风险和单 adapter/RSS 门禁，并新增窗口替换拒绝、系统原生 `Cmd+Option+Right/Left` 页签切换，以及跨真实进程的会话恢复与缺失项隔离。页面宽度矩阵为 1100/1050/820/760/740 px。
+- 远端 GitHub Actions run `30082725332` 仍只证明第二阶段提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 的 9/9 桌面 E2E。T45 当前本地为 267 项 Vitest、205 个 Rust 通过且 1 项手动探针忽略、15/15 macOS 桌面回归；第三阶段尚未推送，Windows `Ctrl+Tab` / `Ctrl+Shift+Tab`、远端双绿和 artifact 未验证，不能沿用旧运行宣称双平台通过。
 
 ## 9. 已知边界
 
@@ -193,4 +193,4 @@ UTF-8 BOM 与单一 LF/CRLF/CR 优先沿用原文件；mixed 或不支持编码�
 - 当前文档移动后的自动改写只覆盖内联图片语法；引用式图片定义不在改写范围。
 - JPEG/WebP 签名校验采用保守完整信封，少数带尾随数据的合法文件可能被拒绝；前后端 WebP 预检严格度仍应继续保持一致。
 - 强制终止发生在“资源已落盘、Markdown 尚未确认插入”之间时可能留下孤立资源；缺少持久证据时不猜测删除用户文件。
-- T43 已由 P1 消费页签 runtime、可见页签、最近关闭、当前会话元数据写入、完整页签结算、磁盘成功后的批量重映射/关闭、窗口替换/关闭/退出 intent、已有会话启动恢复和原生页签命令；真实重启/多窗口桌面 E2E、`Ctrl+Tab` 的真实系统输入及双平台证据仍未完成，当前不能把这些子集写成完整 R13/R14/R30 或第三阶段完成。大纲、工作区搜索、分页阅读、主题预设和完整响应式布局仍属于后续阶段。
+- T45 已在 macOS 真实验证跨进程恢复、窗口替换拒绝和平台原生页签组合键；Windows、远端 artifact、真实多窗口整组退出和阶段验收仍未完成，当前不能把这些子集写成完整 R13/R14/R30 或第三阶段完成。大纲、工作区搜索、分页阅读、主题预设和完整响应式布局仍属于后续阶段。

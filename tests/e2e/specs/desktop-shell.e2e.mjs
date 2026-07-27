@@ -17,6 +17,8 @@ const VISUAL_EVIDENCE = "T31-visual-";
 const SOURCE_EVIDENCE = "T31-source-";
 const EXTERNAL_MARKER = "T31-external-conflict";
 const LOCAL_CONFLICT_MARKER = "T31-local-conflict";
+const WINDOW_INTENT_DIRTY_MARKER = "T45-window-intent-dirty";
+const WINDOW_INTENT_EXTERNAL_MARKER = "T45-window-intent-external";
 const PNG_BYTES = [
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
   0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
@@ -407,7 +409,7 @@ describe("Plainroot desktop shell", () => {
       "Escape must restore focus to the overflow trigger",
     );
 
-    for (const width of [1100, 820, 740]) {
+    for (const width of [1100, 1050, 820, 760, 740]) {
       await resizeApp(width, 720);
       const tabLayout = await browser.execute(() => {
         const bar = document.querySelector(".workspace-tab-bar");
@@ -995,5 +997,69 @@ describe("Plainroot desktop shell", () => {
       ),
       true,
     );
+  });
+
+  it("keeps the current workspace when a real replacement settlement is rejected", async () => {
+    const replacementFixture = await createWorkspaceFixture();
+    try {
+      const selection = await invoke("prepare_e2e_workspace", {
+        root: replacementFixture.root,
+      });
+      assert.equal(selection.status, "ready");
+      const replacementWorkspace = await invoke(
+        "authorize_workspace_selection",
+        {
+          selectionId: selection.proposal.selectionId,
+          confirmed: true,
+        },
+      );
+      await appendEditorText(
+        '[aria-label="Markdown 源码编辑区"]',
+        `\n\n${WINDOW_INTENT_DIRTY_MARKER}`,
+      );
+      await browser.waitUntil(
+        async () =>
+          (await $('[aria-label^="保存状态："]').getText()) === "未保存",
+        {
+          timeout: 500,
+          timeoutMsg:
+            "the editor did not expose a dirty state before the replacement intent",
+        },
+      );
+      const externalBaseline = await readFile(
+        join(fixture.root, "note.md"),
+        "utf8",
+      );
+      const externalLineEnding = lineEndingFromMarkdown(externalBaseline);
+      await writeFile(
+        join(fixture.root, "note.md"),
+        `${externalBaseline}${externalLineEnding}${externalLineEnding}${WINDOW_INTENT_EXTERNAL_MARKER}${externalLineEnding}`,
+        "utf8",
+      );
+      const replacement = await invoke("coordinate_workspace_open", {
+        workspaceId: replacementWorkspace.id,
+        disposition: "current_window",
+      });
+      assert.equal(replacement.status, "settlement_required");
+
+      const replaceButton = await $("button=安全替换当前窗口");
+      await replaceButton.waitForDisplayed({ timeout: 10_000 });
+      const cancellation = await invoke("resolve_window_settlement", {
+        intentId: replacement.intentId,
+        allow: false,
+      });
+      assert.equal(cancellation.status, "cancelled");
+      const retained = await invoke("get_workspace_workbench_snapshot");
+      assert.equal(retained.workspace.id, workspaceId);
+      assert.equal(
+        (await editorText('[aria-label="Markdown 源码编辑区"]')).includes(
+          WINDOW_INTENT_DIRTY_MARKER,
+        ),
+        true,
+        "cancelling replacement must preserve the active in-memory content",
+      );
+    } finally {
+      await replacementFixture.cleanup();
+    }
   });
 });

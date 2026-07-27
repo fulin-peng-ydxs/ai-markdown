@@ -40,6 +40,14 @@ pub const HELP_ID: &str = "help.plainroot";
 pub const LAUNCHER_MENU_EVENT: &str = "plainroot://launcher-menu";
 pub const WORKBENCH_MENU_EVENT: &str = "plainroot://workbench-menu";
 const CLOSE_WINDOW_ACCELERATOR: &str = "CmdOrCtrl+Shift+W";
+#[cfg(target_os = "macos")]
+const NEXT_TAB_ACCELERATOR: &str = "CmdOrCtrl+Alt+Right";
+#[cfg(not(target_os = "macos"))]
+const NEXT_TAB_ACCELERATOR: &str = "Ctrl+Tab";
+#[cfg(target_os = "macos")]
+const PREVIOUS_TAB_ACCELERATOR: &str = "CmdOrCtrl+Alt+Left";
+#[cfg(not(target_os = "macos"))]
+const PREVIOUS_TAB_ACCELERATOR: &str = "Ctrl+Shift+Tab";
 
 const WORKBENCH_ACTION_IDS: &[&str] = &[
     SAVE_ID,
@@ -243,13 +251,13 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
             app,
             NEXT_TAB_ID,
             "下一个页签",
-            Some("Ctrl+Tab"),
+            Some(NEXT_TAB_ACCELERATOR),
         )?)
         .item(&custom_item(
             app,
             PREVIOUS_TAB_ID,
             "上一个页签",
-            Some("Ctrl+Shift+Tab"),
+            Some(PREVIOUS_TAB_ACCELERATOR),
         )?)
         .separator()
         .item(&custom_item(
@@ -787,5 +795,19 @@ mod tests {
             crate::contract_test::typescript_string_constant_values("WORKBENCH_MENU_ACTIONS"),
             super::WORKBENCH_ACTION_IDS
         );
+    }
+
+    #[test]
+    fn tab_accelerators_follow_the_platform_contract() {
+        #[cfg(target_os = "macos")]
+        {
+            assert_eq!(super::NEXT_TAB_ACCELERATOR, "CmdOrCtrl+Alt+Right");
+            assert_eq!(super::PREVIOUS_TAB_ACCELERATOR, "CmdOrCtrl+Alt+Left");
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            assert_eq!(super::NEXT_TAB_ACCELERATOR, "Ctrl+Tab");
+            assert_eq!(super::PREVIOUS_TAB_ACCELERATOR, "Ctrl+Shift+Tab");
+        }
     }
 }
