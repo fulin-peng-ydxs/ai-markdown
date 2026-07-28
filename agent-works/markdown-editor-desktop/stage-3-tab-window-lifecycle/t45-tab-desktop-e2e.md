@@ -5,7 +5,7 @@
 - 对应任务：第三阶段 `T45`。
 - 对应需求：R1、R2、R3、R5、R6、R10、R11、R13、R14、R30、R31 的真实桌面验证子集。
 - 本次完成桌面测试编排、macOS 原生页签组合键、真实窗口替换拒绝和跨进程会话恢复；不进入 T46 阶段验收。
-- 已完成十四轮第三阶段双平台运行。第十四轮让 macOS 完整通过、Windows 通过非桌面门禁和主桌面链 12/12，并实证系统完整投递 `Ctrl+PageDown/PageUp` 后 Tauri 原生菜单仍未路由页签动作。当前 Windows 改由聚焦 WebView 平台适配消费组合键并委托唯一命令处理器，本地非桌面门禁与 macOS 15/15 已通过；最新双平台远端证据仍待取得。T45 状态保持“进行中”。
+- 已完成十五轮第三阶段双平台运行。第十五轮 run `30322298422` 已在提交 `9ba28d1` 上让 macOS/Windows 同时通过非桌面门禁、四段 15/15 真实桌面链、未签名生产构建和 artifact 上传；Windows 聚焦 WebView 平台适配已以真实系统 `Ctrl+PageDown/PageUp` 证明双向切换。T45 状态为“已完成”，不进入 T46。
 
 ## 2. 实际实现
 
@@ -195,18 +195,24 @@ GitHub Actions run `30291901180` 对提交 `a25af90f271cfe92347de7040b1b0a2effe3
 
 第十轮直接证据只能证明探针最终未同时观察到 policy 与原生菜单就绪，旧实现又只在 `window.is_focused()` 为真时把 registry 状态应用到菜单；它没有输出足够信息区分 registry 尚忙与原生菜单陈旧。当前按最窄可复验假设处理：单窗口无论暂时是否聚焦都持续应用自身状态，只有同时存在多个窗口时才继续严格按聚焦窗口路由。纯函数门禁覆盖单窗口后台、多窗口聚焦和多窗口后台三种情况；E2E 探针同时新增脱敏的 registry/menu 诊断，若下一轮仍失败即可直接区分两类状态，不再靠推测。
 
+### 3.10 第十五次远端运行与双平台完成证据
+
+GitHub Actions run `30322298422` 对提交 `9ba28d1bd077b950059b6b474e7da77cf173ea63` 给出 T45 完成证据：
+
+- macOS 与 Windows 两个作业均正式 `success`，完整执行统一非桌面门禁、四段 15/15 真实桌面链和未签名生产构建；
+- Windows 首次以真实系统 `Ctrl+PageDown/PageUp` 通过下一/上一页签切换，同时保留 12/12 主链、跨进程会话种子和恢复/缺失项隔离；
+- `plainroot-macos-30322298422` artifact SHA-256 为 `15541ac7491602e740d5d93518ab1d58c258ee3c0da442c7ee0d82a346a9bb95`；
+- `plainroot-windows-30322298422` artifact SHA-256 为 `4da211e9404884e3119b0854034ebf094bd42f4218adf62b10bcd7a500e5e23e`。
+
 ## 4. 未验证项
 
-- 最新 Windows 结果观察修复尚未取得 GitHub Actions macOS/Windows 双绿与成对生产 artifact；既有失败 run 都是有效递进证据，但没有一轮可作为 T45 双平台通过证据。
-- Windows run `30296713912` 已通过非桌面门禁、Clippy、Rust 测试和主桌面链 12/12，并证明 `Ctrl+PageDown/PageUp` 输入可由系统完整接收；真实页签切换、跨进程恢复、完整 15 条桌面链和生产构建仍未在同一最新提交上取得通过证据。
-- Windows run `30298464781` 在改用当前 renderer DOM 观察后仍未切换活动页签，证明此前并非旧元素句柄假阴性，而是 Windows/Tauri 原生菜单没有消费已投递的组合键。当前按键改由 Windows WebView 平台适配消费并复用唯一页签 action handler；组件测试已覆盖首次 `Ctrl+PageDown/PageUp` 双向切换，最新远端结果待补。
 - Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍是人工项。
 - 真实多窗口整组退出、系统 IME、JS heap、长时峰值内存、休眠、网络卷和文件系统卸载仍无完整产品级证据。
 - macOS 本轮验证了替换 intent 的拒绝分支；多窗口整组退出与允许替换的完整系统级人工链仍留待 T46 汇总或后续平台验收。
 
 ## 5. 文档与约束同步
 
-- `plan.md`：T45 标记为进行中，并分别记录本地实现/macOS 验证已完成与远端双平台待验证，同步需求映射、验证基线和实际落地。
+- `plan.md`：T45 标记为已完成，并记录本地与远端双平台验证、artifact 和剩余人工边界。
 - `../requirement.md`：只更新阶段 3 的真实开发/验证状态；R 编号、范围、建议项处理和验收标准未改变。
 - `README.md`：更新四段 E2E 入口、当前 macOS 证据和 T45 留痕入口。
 - `../architecture/desktop-foundation.md`、`../architecture/markdown-document-editing.md`：同步测试拓扑、平台快捷键和真实恢复边界；没有创建新的产品架构模块。
@@ -216,4 +222,4 @@ GitHub Actions run `30291901180` 对提交 `a25af90f271cfe92347de7040b1b0a2effe3
 
 ## 6. 当前结论
 
-T45 的当前本地实现、macOS 15/15 桌面证据和非桌面回归已闭合。十四轮第三阶段远端运行依次暴露并验证了 Windows CRLF 契约解析、平台 lint、测试前置、WebView/renderer 定位和原生菜单组合键路由等真实跨平台边界；整改没有跳过真实输入、降低业务断言或加入业务重试。第十四轮已重新证明 Windows 主桌面链 12/12 通过，并将剩余问题收敛为 Tauri 原生菜单未路由已投递的页签组合键；当前实现改由 Windows 聚焦 WebView 委托同一命令处理器。完成标准仍要求该实现提交在 macOS/Windows 远端双绿并可追溯 artifact。T45 继续保持“进行中”；T46 未开始。
+T45 已完成。十五轮第三阶段远端运行依次暴露并验证了 Windows CRLF 契约解析、平台 lint、测试前置、WebView/renderer 定位和原生菜单组合键路由等真实跨平台边界；整改没有跳过真实输入、降低业务断言或加入业务重试。最终 run `30322298422` 已在同一提交上取得 macOS/Windows 双绿、四段 15/15 桌面链与可追溯成对 artifact。Windows 原生系统 UI 人工项、长时性能边界和真实多窗口整组退出继续如实保留；T46 未开始。

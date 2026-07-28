@@ -14,8 +14,8 @@
 - Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器，核心体验是目录工作区、多文档页签、所见即所得与源码无损切换、长文阅读和可编辑颜色预设。
 - T1 已建立并验证技术基线：Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以当前清单和锁文件为准。
 - Markdown 内容事实源始终是用户授权目录中的真实 `.md` 文件；首版不建立云端账号、在线协作、插件市场或私有内容数据库。
-- 第一阶段 T1～T17 已建立桌面底座，第二阶段 T18～T34 已建立单文档编辑、保存、恢复、冲突和图片链。第三阶段分支 `codex/plainroot-stage-3` 的 T35～T44 已建立页签集合、窗口页签会话仓储、平台路径身份、每页签独立 session/history/save controller、活动 editor 单挂载、可见页签、最近关闭、全页签结算、磁盘成功后的多 runtime 提交、窗口生命周期保护、打开偏好、既有会话恢复、原生页签命令和统一非桌面门禁。T45 当前实现与 macOS 验证已完成；远端 run `30298464781` 已让 macOS 完整通过、Windows 通过非桌面门禁和主桌面链 12/12，并将剩余问题收敛为 Windows/Tauri 原生菜单未路由页签组合键。当前已改为 Windows 聚焦 WebView 平台适配，最新双平台结果待复验；T46 未实施。当前计划见 `agent-works/markdown-editor-desktop/stage-3-tab-window-lifecycle/plan.md`。
-- 第二阶段基线提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 的 9/9 隔离桌面 E2E 已在 macOS/Windows runner 通过。T45 当前本地 macOS 以四个隔离进程通过 15/15 桌面用例，包含真实系统 `Cmd+Option+Right/Left` 页签切换、窗口替换拒绝和跨进程恢复/单项失败隔离；远端 run `30298464781` 的 macOS 再次全绿，Windows 已通过非桌面门禁、主桌面链 12/12、页签策略与系统输入投递，但也实证 Tauri 原生菜单没有把 `Ctrl+PageDown/PageUp` 路由到页签 manager。当前 Windows 改由聚焦 WebView 平台适配消费组合键并委托唯一命令处理器，原生菜单不重复注册 accelerator；最新双平台 CI 与成对 artifact 尚待复验。系统 IME、JS heap、长时峰值内存、真实多窗口整组退出，以及 Windows 选择器、回收站、Explorer、菜单和辅助技术仍无完整证据；当前不得表述为完整 R13/R14/R30 或第三阶段完成。
+- 第一阶段 T1～T17 已建立桌面底座，第二阶段 T18～T34 已建立单文档编辑、保存、恢复、冲突和图片链。第三阶段分支 `codex/plainroot-stage-3` 的 T35～T45 已建立并验证页签集合、窗口页签会话仓储、平台路径身份、每页签独立 session/history/save controller、活动 editor 单挂载、可见页签、最近关闭、全页签结算、磁盘成功后的多 runtime 提交、窗口生命周期保护、打开偏好、既有会话恢复、原生页签命令、统一非桌面门禁和双平台真实桌面链；T46 未实施。当前计划见 `agent-works/markdown-editor-desktop/stage-3-tab-window-lifecycle/plan.md`。
+- 第二阶段基线提交 `914ad8413b30569ab1c704dc1a55f15d3ed78c59` 的 9/9 隔离桌面 E2E 已在 macOS/Windows runner 通过。T45 提交 `9ba28d1bd077b950059b6b474e7da77cf173ea63` 的 GitHub Actions run `30322298422` 已让 macOS/Windows 同时通过非桌面门禁、四段 15/15 桌面链、未签名生产构建和 artifact 上传；macOS 由原生菜单消费 `Cmd+Option+Right/Left`，Windows 由聚焦 WebView 平台适配消费 `Ctrl+PageDown/PageUp`，两者均委托同一页签命令处理器。系统 IME、JS heap、长时峰值内存、真实多窗口整组退出，以及 Windows 选择器、回收站、Explorer、菜单和辅助技术仍无完整证据；T46 阶段验收未实施，当前不得表述为完整 R13/R14/R30 或第三阶段完成。
 
 ## 当前与目标代码边界
 
@@ -70,13 +70,13 @@
 - 2026-07-28 已在 macOS arm64 实际验证 T45 当前本地基线：207 个 Rust 测试通过（另 1 项手动性能探针忽略）、269 个 Vitest、30 个 Node 独立回归、类型检查、前端生产构建、Rust fmt、全 feature Clippy/测试和许可证 727/511/0。`test:stage-3:contracts` 与逐变体 tagged-union parity 继续作为非桌面守卫；解析器对 LF/CRLF 等价，但字段错置与不规范类型别名继续 fail-loud。`verify:non-desktop` 是统一提交门禁。T35 的轻量 benchmark 仍只作为本机报告。
 - `pnpm test:e2e` 每次构建隔离测试产物，并按主链、原生快捷键、重启种子、重启恢复四段启动独立桌面进程；当前 macOS Tauri/WebKit 15/15 通过。布局覆盖 1100/1050/820/760/740 px；原生组合键读取当前窗口 registry 与 Tauri 菜单项真实 enabled 状态，再由系统事件首发验证，不通过 WebView keydown、传统 HMENU/UI Automation 菜单假设或业务重试伪装。Windows E2E 隔离进程固定与业务无关的动态文档标题，默认生产前端产物和 release 二进制不读取该测试标志、不注册 E2E 命令。跨进程恢复在两次真实启动之间删除 fixture 文件并确认逐项隔离。WebKit 未暴露 JS heap，不能外推为 heap 证据。T17 的生产 `.app` 原生多窗口、Finder、系统废纸篓、监听和第二实例人工证据仍有效；macOS 证据不替代 Windows。
 - 本机具备 Xcode Command Line Tools，未安装完整 Xcode；桌面构建已通过，移动端不在当前范围。T16 已在 GitHub `windows-latest` 上验证锁定的 Node/Rust 工具链、Windows 编译、测试、WebView2 E2E 和未签名生产构建；原生系统交互仍保留人工未验证状态。
-- 当前自动化测试共 207 个 Rust 测试通过（另 1 项手动性能探针忽略）、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、269 个 React UI/状态/编辑器/页签测试、1 个 fixture 测试、4 个许可证策略测试和 15 个本地 macOS 桌面 E2E。`pnpm test` 统一执行 Node、Vitest 与无桌面 feature 的 Rust 服务门禁；`verify:non-desktop` 执行全部非桌面提交门禁；`test:tabs:performance` 仅输出本机 benchmark。GitHub Actions run `30298464781` 证明上一提交在 macOS 完整通过、Windows 非桌面门禁与主链 12/12 通过，并实证 Windows 原生菜单未消费页签组合键；当前 WebView 平台适配尚待最新双平台 run 复验。许可证扫描最近一次为 727/511/0；Windows 原生系统 UI 仍未人工验证。
+- 当前自动化测试共 207 个 Rust 测试通过（另 1 项手动性能探针忽略）、3 个工作区路径测试、18 个前端树状态测试、4 个永久删除反馈测试、269 个 React UI/状态/编辑器/页签测试、1 个 fixture 测试、4 个许可证策略测试和每平台 15 条桌面 E2E。`pnpm test` 统一执行 Node、Vitest 与无桌面 feature 的 Rust 服务门禁；`verify:non-desktop` 执行全部非桌面提交门禁；`test:tabs:performance` 仅输出本机 benchmark。GitHub Actions run `30322298422` 已在提交 `9ba28d1` 上让 macOS/Windows 双绿并上传成对 artifact；许可证扫描为 727/511/0。Windows 原生系统 UI 仍未人工验证。
 
 ## 文档、协作与 Git
 
 - 除命令、代码、日志和原文外，面向用户使用简体中文。
 - 需求、计划、开发留痕、业务核查、测试证据和 SQL（若未来确有）放入 `agent-works/{feature-slug}/`；同一功能复用同一语义目录，不在根目录堆零散 Markdown。
 - 已确认任务在既有功能目录内的常规开发留痕，随代码、计划状态和验证证据直接同步，不再单独请求确认；只有功能目录、范围拆分或归档边界存在真实歧义时才确认。
-- 修改代码或文档前检查最近一次远端同步时间；超过 2 小时先同步并解决冲突。最近一次远端同步：2026-07-28 10:07 CST（本地 `codex/plainroot-stage-3` 已与同名远端分支同步；run `30298464781` 的双平台结果已核对，Windows WebView 页签快捷键平台适配将由当前推送继续复验）。
+- 修改代码或文档前检查最近一次远端同步时间；超过 2 小时先同步并解决冲突。最近一次远端同步：2026-07-28 10:30 CST（本地 `codex/plainroot-stage-3` 已与同名远端分支同步；run `30322298422` 的 macOS/Windows 双绿和成对 artifact 已核对）。
 - 工作区可能包含用户未提交改动；先读 `git status`，保留无关改动，不覆盖、不清理、不顺手格式化。
 - 未经用户要求不创建提交或推送。需要提交时按用户确认范围处理，提交信息使用中文语义化描述。
