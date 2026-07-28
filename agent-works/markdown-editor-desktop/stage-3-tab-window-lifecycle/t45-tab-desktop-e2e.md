@@ -5,7 +5,7 @@
 - 对应任务：第三阶段 `T45`。
 - 对应需求：R1、R2、R3、R5、R6、R10、R11、R13、R14、R30、R31 的真实桌面验证子集。
 - 本次完成桌面测试编排、macOS 原生页签组合键、真实窗口替换拒绝和跨进程会话恢复；不进入 T46 阶段验收。
-- 已完成十五轮第三阶段双平台运行。第十五轮 run `30322298422` 已在提交 `9ba28d1` 上让 macOS/Windows 同时通过非桌面门禁、四段 15/15 真实桌面链、未签名生产构建和 artifact 上传；Windows 聚焦 WebView 平台适配已以真实系统 `Ctrl+PageDown/PageUp` 证明双向切换。T45 状态为“已完成”，不进入 T46。
+- 已完成十六轮第三阶段双平台运行。第十五轮 run `30322298422` 已在代码提交 `9ba28d1` 上让 macOS/Windows 同时通过非桌面门禁、四段 15/15 真实桌面链、未签名生产构建和 artifact 上传；第十六轮 run `30323620642` 又在其上的首轮收口文档提交 `a0268eb` 重复取得双绿与成对 artifact。Windows 聚焦 WebView 平台适配已以真实系统 `Ctrl+PageDown/PageUp` 证明双向切换。T45 状态为“已完成”，不进入 T46。
 
 ## 2. 实际实现
 
@@ -44,9 +44,9 @@ P1 主链新增真实替换事务：
 - run `30295225359` 继续证明策略与菜单启用态均可达，Windows Forms `SendKeys` 发送替代键后仍未切换页签。当前改用 Win32 `SendInput` 向已核验的前台窗口提交 Ctrl 与扩展 Page 键的四个按下/抬起事件，并检查系统实际接收数量；该路径仍是一次真实系统输入，不调用 WebView keydown、不直接触发业务命令、不增加重试。
 - run `30296713912` 证明 Win32 `SendInput` 已完整提交四个输入事件；macOS 再次完整通过，Windows 非桌面门禁、主桌面链 12/12、页签策略与原生菜单启用态均通过。Windows 失败 artifact（SHA-256 `c0da994f7cea3b05348920f5e80cc80ce7aa439937601453ecf162536d75f613`）显示专项用例从开始即持续出现 WDIO 按动态原生标题重定位 renderer 的告警，失败截图则是会话清理时出现的结算弹层，并不是按键后的三页签状态。根因收敛为结果断言复用了会触发原生窗口重定位的旧元素句柄，无法据此证明产品快捷键无效；当前改为在同一 renderer 内执行只读 DOM 查询，不改变真实菜单、系统输入或期望页签结果。
 
-macOS 在最新重建的 Tauri E2E release 二进制上发现 `Cmd+Shift+]` 可触发，但 `Cmd+Shift+[` 不会到达菜单动作；因此没有保留不可用的对称外观，而是收敛为双向均实际通过的 `Cmd+Option+Right/Left`。Windows 映射保持平台常用组合，但固定标题测试缝尚未在 Windows runner 运行，不能记为通过。
+macOS 在最新重建的 Tauri E2E release 二进制上发现 `Cmd+Shift+]` 可触发，但 `Cmd+Shift+[` 不会到达菜单动作；因此没有保留不可用的对称外观，而是收敛为双向均实际通过的 `Cmd+Option+Right/Left`。Windows 已在 run `30322298422` 以真实系统输入通过 `Ctrl+PageDown/PageUp` 双向切换；其固定标题测试缝仅稳定 WDIO 与真实 renderer 的连接，不进入默认生产构建。
 
-React 没有新增全局 keydown；原生菜单仍通过唯一 `WORKBENCH_MENU_EVENT` 路由到现有 `WorkspaceTabManager`。
+Windows 新增唯一 document 级 `keydown` 平台适配，但只识别无 Alt/Meta/Shift 的 `Ctrl+PageDown/PageUp`，先消费现有菜单 policy 再委托同一个 `workbenchMenuHandlerRef` 与 `WorkspaceTabManager`；Windows Rust 菜单把这两个 accelerator 置空，避免双分发。macOS 原生菜单仍通过唯一 `WORKBENCH_MENU_EVENT` 路由。T45 的 Windows 硬化还包含 CRLF 契约解析、平台条件编译、固定 E2E 标题、就绪探针与 renderer 观察修复；并非只抽取平台识别工具。
 
 ### 2.4 重启恢复与页面矩阵
 
@@ -204,9 +204,19 @@ GitHub Actions run `30322298422` 对提交 `9ba28d1bd077b950059b6b474e7da77cf173
 - `plainroot-macos-30322298422` artifact SHA-256 为 `15541ac7491602e740d5d93518ab1d58c258ee3c0da442c7ee0d82a346a9bb95`；
 - `plainroot-windows-30322298422` artifact SHA-256 为 `4da211e9404884e3119b0854034ebf094bd42f4218adf62b10bcd7a500e5e23e`。
 
+### 3.11 第十六次远端运行与收口文档证据
+
+GitHub Actions run `30323620642` 对纯文档提交 `a0268eb2482face230bb6458f085a68afcfaeaed` 再次给出 macOS/Windows 双绿、四段 15/15 桌面链与成对 artifact：
+
+- `plainroot-macos-30323620642` artifact SHA-256 为 `d16334981a0f6a6c7be01734b80a67da1acaf21f72a237d4be5a44d28aeaba07`；
+- `plainroot-windows-30323620642` artifact SHA-256 为 `482ca21af722bf0b66980c59844a87408921a2a798d2d2de9bf923d468315ced`。
+
+第十五次 run 是覆盖全部 T45 代码的完成证据；第十六次 run 是证明首轮收口文档提交仍双绿的补充证据。二者不可互换提交归属。
+
 ## 4. 未验证项
 
 - Windows 原生选择器、回收站、Explorer、菜单和辅助技术仍是人工项。
+- Windows E2E 为避免 WDIO/WebView2 renderer 漂移而固定原生窗口标题，因此没有覆盖生产“标题随活动文档变化”的 Windows 路径；macOS 主链与前端标题契约仍覆盖该行为。
 - 真实多窗口整组退出、系统 IME、JS heap、长时峰值内存、休眠、网络卷和文件系统卸载仍无完整产品级证据。
 - macOS 本轮验证了替换 intent 的拒绝分支；多窗口整组退出与允许替换的完整系统级人工链仍留待 T46 汇总或后续平台验收。
 
@@ -222,4 +232,4 @@ GitHub Actions run `30322298422` 对提交 `9ba28d1bd077b950059b6b474e7da77cf173
 
 ## 6. 当前结论
 
-T45 已完成。十五轮第三阶段远端运行依次暴露并验证了 Windows CRLF 契约解析、平台 lint、测试前置、WebView/renderer 定位和原生菜单组合键路由等真实跨平台边界；整改没有跳过真实输入、降低业务断言或加入业务重试。最终 run `30322298422` 已在同一提交上取得 macOS/Windows 双绿、四段 15/15 桌面链与可追溯成对 artifact。Windows 原生系统 UI 人工项、长时性能边界和真实多窗口整组退出继续如实保留；T46 未开始。
+T45 已完成。十六轮第三阶段远端运行依次暴露并验证了 Windows CRLF 契约解析、平台 lint、测试前置、WebView/renderer 定位和原生菜单组合键路由等真实跨平台边界；整改没有跳过真实输入、降低业务断言或加入业务重试。代码 run `30322298422` 覆盖提交 `9ba28d1` 的全部 T45 实现，收口文档 run `30323620642` 覆盖其上的纯文档提交 `a0268eb`；两次均取得 macOS/Windows 双绿、四段 15/15 桌面链与可追溯成对 artifact。Windows 原生标题更新、系统 UI 人工项、长时性能边界和真实多窗口整组退出继续如实保留；T46 未开始。
