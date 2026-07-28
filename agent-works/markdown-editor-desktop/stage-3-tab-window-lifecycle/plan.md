@@ -6,7 +6,7 @@
 >
 > 当前阶段：阶段 3——多文档页签状态机、窗口会话恢复与全页签生命周期保护
 >
-> 计划状态：执行中（T35～T44 已完成；T45 本地实现与 macOS 验证已完成，第五次远端已再次取得 macOS 完整绿灯，并让 Windows 进入主桌面链后暴露动态窗口标题导致 WebView2 点击错渲染器的问题；当前已按真实渲染器状态修复并待最新双平台复验；T46 未实施）
+> 计划状态：执行中（T35～T44 已完成；T45 当前本地实现、非桌面门禁和 macOS 15/15 已通过；远端 run `30298464781` 已将 Windows 剩余问题收敛为原生菜单未路由页签组合键，当前 WebView 平台适配待最新双平台 CI/artifact 复验；T46 未实施）
 >
 > 需求编号规则：完全沿用 `requirement.md` 的 R1～R34，不新增、重排或改变 R 编号含义。
 
@@ -46,7 +46,7 @@
 ### 2.1 工程与验证基线
 
 - 当前技术基线为 Node 24.11.1、pnpm 11.5.1、Rust 1.97.1、Tauri 2.11.5、React 19.2.7、TypeScript 6.0.2 与 Vite 8.1.4；精确版本以清单和锁文件为准。
-- 2026-07-27 已在 T45 当前本地状态以 `pnpm verify:non-desktop` 从头执行统一门禁：Node 独立回归 30/30、Vitest 32 个文件 267/267、Rust no-default/all-features 均 205 项通过且 1 项手动性能探针忽略、类型检查、生产构建、Rust fmt、全 target/all-features Clippy 和许可证 727/511/0 通过。macOS Tauri/WebKit 现由四个隔离桌面进程完成 15/15：既有主链扩为 12 条，另有 1 条真实系统页签组合键、1 条重启前会话种子和 1 条重启后逐项失败隔离。macOS 下一/上一页签使用实际可触发的 `Cmd+Option+Right/Left`；Windows run `30293567676` 已证明页签策略与菜单启用态可达，但 `Ctrl+Tab` / `Ctrl+Shift+Tab` 不触发 Windows/Tauri 原生菜单，现已收敛为待验证的 `Ctrl+PageDown/PageUp`。各任务留痕中的测试数字只是当时的历史快照；最新双平台成功证据仍为 GitHub Actions run `30082725332` 在 macOS/Windows 通过第二阶段 9 条套件，尚未覆盖第三阶段当前提交。
+- 2026-07-28 已在 T45 当前本地状态以 `pnpm verify:non-desktop` 从头执行统一门禁：Node 独立回归 30/30、Vitest 33 个文件 269/269、Rust no-default/all-features 均 207 项通过且 1 项手动性能探针忽略、类型检查、生产构建、Rust fmt、全 target/all-features Clippy 和许可证 727/511/0 通过。macOS Tauri/WebKit 由四个隔离桌面进程完成 15/15：12 条主链、1 条真实系统页签组合键、1 条重启前会话种子和 1 条重启后逐项失败隔离。macOS 下一/上一页签使用原生菜单 `Cmd+Option+Right/Left`；Windows `Ctrl+PageDown/PageUp` 由聚焦 WebView 平台适配消费并委托唯一命令处理器。各任务留痕中的测试数字只是当时的历史快照；第三阶段当前提交尚待最新双平台成功证据。
 - 第三阶段不得删除、降低或用重试掩盖上述基线。新增页签测试必须加入统一 `pnpm test`、真实桌面 E2E 和双平台 CI。
 - 当前产品依赖已能实现页签状态、拖动、菜单和持久化；T37 只为真实桌面内存门禁在 `e2e` feature 增加可选 `sysinfo`，默认产品构建不注册对应命令。若后续确认必须引入拖拽或状态库，先补许可证、包体、复用理由和回滚方案，再修改清单。
 
@@ -60,7 +60,7 @@
 - `plainroot-state-v1.json` 的 `WorkspaceSessionRoot.windowStateRef` 已由 T36 接到独立窗口页签会话仓储；根状态仍不承载高频页签元数据或正文。
 - `plainroot-preferences-v1.json` 已保存工作区资源目录。R14 的全局打开偏好可在向后兼容的可选字段中扩展，默认继续为“每次询问”。
 - `AppDialog`、`AsyncStatePanel`、`focusContainment`、`plainroot-button` 和语义 token 是弹层、菜单和状态反馈的复用事实源。
-- 原生菜单已将 `Cmd/Ctrl+Shift+W` 用于关闭窗口，并由 T43 启用 `Cmd/Ctrl+W` 关闭当前页签、`Cmd/Ctrl+Shift+T` 重开最近关闭及批量页签命令；T45 按真实平台输入把 macOS 页签切换收敛为 `Cmd+Option+Right/Left`，Windows 因 `Ctrl+Tab` / `Ctrl+Shift+Tab` 无法触发 Tauri 原生菜单而收敛为 `Ctrl+PageDown/PageUp`。React 不注册会与原生加速键双触发的全局 keydown。
+- 原生菜单已将 `Cmd/Ctrl+Shift+W` 用于关闭窗口，并由 T43 启用 `Cmd/Ctrl+W` 关闭当前页签、`Cmd/Ctrl+Shift+T` 重开最近关闭及批量页签命令；T45 按真实平台输入把 macOS 页签切换收敛为 `Cmd+Option+Right/Left` 原生菜单加速键。Windows/Tauri 原生菜单无法稳定消费页签组合键，因此只在 Windows 聚焦 WebView 注册 `Ctrl+PageDown/PageUp` 平台适配，并委托既有 `workbenchMenuHandlerRef`；Windows 菜单不再同时注册对应 accelerator，避免双触发。
 - `Cmd/Ctrl+W` 关闭最后一个页签时保留已绑定工作区的空窗口；这是与 `Cmd/Ctrl+Shift+W` 关闭原生窗口相互独立的已确认产品行为。
 
 ### 2.3 原型与页面事实
@@ -573,7 +573,7 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
 
 ### 6.11 任务 T45：真实桌面 E2E、双平台 CI 与页面验收
 
-- 状态：进行中（本地实现与 macOS 验证完成；第十次远端 macOS 完整通过，Windows 已通过非桌面门禁和 12/12 主桌面链，随后原生快捷键专项只证明 policy 或原生菜单至少一项未就绪；当前让单窗口持续应用自身菜单状态、多窗口仍按聚焦窗口隔离，并增加诊断区分两类原因，最新双平台 CI/artifact 待再次核验）。
+- 状态：进行中（当前本地实现、非桌面门禁和 macOS 15/15 已通过；第十四次远端已让 macOS 完整通过、Windows 通过非桌面门禁和 12/12 主桌面链，并实证 Windows/Tauri 原生菜单未路由页签组合键；当前 WebView 平台适配待最新双平台 CI/artifact 核验）。
 - 依赖：T44。
 - 涉及文件/模块：`tests/e2e/`、fixtures、WDIO、`.github/workflows/ci.yml`、P1/P2、页面验收留痕。
 - 目标：用真实 Tauri IPC 在 macOS/Windows 验证页签、结算、窗口替换和恢复，而不是只依赖 jsdom/mock。
@@ -588,7 +588,7 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
   - 主链新增真实窗口替换 intent：先制造本地 dirty 与磁盘外部变化，再通过 Rust `coordinate_workspace_open` 取得 `settlement_required`，确认安全替换弹层出现，并用真实 `resolve_window_settlement(allow=false)` 拒绝事务；原工作区绑定与内存内容保持不变。React 取消按钮接线仍由既有组件测试覆盖，本用例不把直接 IPC 拒绝冒充按钮点击证据。
   - 两个平台的原生输入都先有界发现目标窗口并将进程置于前台，再等待对应原生菜单项启用，最后只发送一次系统键盘事件，不做业务重试。macOS 通过 `osascript`/System Events 与只读 Rust/Tauri 菜单探针验证，并使用已实测双向有效的 `Cmd+Option+Right/Left`。全部 Windows E2E 隔离进程通过 `e2e` feature 固定与业务无关的动态文档标题，使 WDIO 可持续读取同一真实 renderer；快捷键专项仍读取真实 Rust/Tauri 菜单探针与页签 DOM。远端 run `30293567676` 已证明菜单策略和启用态可达，但单次 `Ctrl+Tab` 未触发原生菜单，故 Windows 改为只发送一次 `Ctrl+PageDown/PageUp`，等待后续 run 验证。默认生产构建不读取该标志、不注册探针。
   - 页面矩阵在真实 P1/P2 中覆盖 1100/1050/820/760/740 px，不产生根级横向溢出；主命令、状态路径、页签条与其滚动归属保持可见。确定性流程不配置测试重试；每段失败立即停止后续阶段。
-  - 最新整改后，本地 macOS 已重新从头运行四个隔离桌面进程并通过 15/15：12 条主链、1 条真实原生页签组合键、1 条重启种子和 1 条跨进程恢复；此前 CRLF 修复后的 `pnpm verify:non-desktop` 从头通过 30/30 Node、267/267 Vitest、206 项 no-default Rust 与 206 项 all-features Rust（均另 1 项手动探针忽略）、fmt、Clippy、typecheck、生产构建和许可证 727/511/0。完整证据与未验证项见 `t45-tab-desktop-e2e.md`。
+  - 最新整改后，本地 macOS 已重新从头运行四个隔离桌面进程并通过 15/15：12 条主链、1 条真实原生页签组合键、1 条重启种子和 1 条跨进程恢复；`pnpm verify:non-desktop` 从头通过 30/30 Node、269/269 Vitest、207 项 no-default Rust 与 207 项 all-features Rust（均另 1 项手动探针忽略）、fmt、Clippy、typecheck、生产构建和许可证 727/511/0。完整证据与未验证项见 `t45-tab-desktop-e2e.md`。
   - 首次第三阶段远端 run `30272399213` 中 macOS 作业通过完整门禁、15 条桌面 E2E、生产构建与 artifact；Windows 在非桌面契约反向测试提前失败，根因为逐变体解析器只识别 LF、未兼容 checkout 的 CRLF。解析器现先归一行尾并新增 Windows 行尾回归，原字段错置 fail-loud 断言继续保留。修复提交尚待重新推送取得双平台结果，因此 T45 仍为进行中，不开始 T46。
   - 第二次远端 run `30274596446` 的 macOS 作业再次完整通过，Windows 也已通过此前失败的非桌面契约门禁，随后在全 target Clippy 阶段发现 `WindowSessionStore.root` 仅由 Unix 权限分支读取、Windows 结构体保留后触发 `dead_code`。实现改为只在 Unix 编译该字段，不用 `allow`/`expect` 绕过门禁；第三次双平台复验前仍不开始 T46。
   - 第四次远端 run `30278252178` 已上传 macOS/Windows 诊断 artifact：`plainroot-macos-30278252178`（SHA-256 `e9758037104c586f904074326f186e6abceaa61ee84f53a74a74858f626ab70c`）与 `plainroot-windows-30278252178`（SHA-256 `26cff25d996b95ad52afcbeb6774f1dc61f0ef0aa0fc20028e4aeb82dff45f93`）。macOS 主链在保存后的 `browser.refresh()` 场景失败；本机完整复现表明，动态窗口标题变化后刷新 WebView 会使 WDIO Tauri service 持续寻找旧标题并级联影响后续用例。Windows 已通过非桌面门禁和 12/12 主链，进入原生页签快捷键用例后，因只读菜单探针在系统脚本建立前台窗口条件之前执行而持续返回未启用；当次没有发送按键。用例现以真实页签关闭/重开替代非应用重启的 WebView 刷新，并在读取菜单状态前先建立目标窗口前台条件；本机原生快捷键专项已以真实系统输入通过。整改没有增加业务重试或放宽内容断言，仍须由下一轮双平台远端执行验证。
@@ -597,6 +597,7 @@ P1 既有原型没有覆盖多页签混合阻塞态。T40 生产组件编码前�
   - 第七次远端 run `30287098572` 对提交 `30b44ad5a7b24accc2aa729535265cc087566ff2` 再次证明 macOS 完整通过、Windows 非桌面门禁与主桌面链 12/12 通过。Windows 在原生快捷键专项发送按键前安全失败：折叠状态下目标子菜单项不在窗口后代 AutomationElement 集合内。macOS artifact SHA-256 为 `5682950a5080c55c570dcbab9e7b29224fedd7d1880b7a92fd92177a99324e66`，Windows 诊断 artifact 为 `31dee948ffb2f9095fedddacbabd463ec570c5b724a40f9d3741bc5817f2f56c`。当前实现先展开顶层“页签”菜单，从同进程桌面可访问性树读取目标子项 enabled，再收起菜单并发送一次按键；仍待下一轮 Windows runner 验证。
   - 第十二次远端 run `30295225359` 再次证明 macOS 完整通过，以及 Windows 非桌面门禁、主桌面链、页签策略与原生菜单启用态通过；Windows Forms `SendKeys` 发送 `Ctrl+PageDown` 后未切换页签。官方 `muda` 解析表确认 `PageDown/PageUp` 是合法加速键，故当前不再通过 Forms 消息封装发送，而改用 Win32 `SendInput` 向已核验的前台窗口提交 Ctrl 与扩展 Page 键的完整按下/抬起序列，并校验系统接收数量；产品键位、菜单路由和结果断言不放宽，仍待下一轮 Windows runner 验证。
   - 第十三次远端 run `30296713912` 再次证明 macOS 完整通过，以及 Windows 非桌面门禁、主桌面链 12/12、页签策略与原生菜单启用态通过；Win32 `SendInput` 未报部分投递，证明四个按下/抬起事件均交给系统。失败后的 Windows artifact（SHA-256 `c0da994f7cea3b05348920f5e80cc80ce7aa439937601453ecf162536d75f613`）显示专项从开始即持续出现 WDIO 按动态原生标题重定位 renderer 的告警，失败截图属于会话清理期的结算弹层，不能作为“页签未切换”的产品证据。当前结果观察不再复用会触发原生窗口重定位的元素句柄，而是在当前 renderer 内通过只读 DOM 查询活动页签；真实菜单状态、系统输入和业务结果断言均保留，仍待下一轮双平台 runner 验证。
+  - 第十四次远端 run `30298464781` 已证明同一 renderer 的只读 DOM 观察仍得到 `note.md`，排除了旧元素句柄导致的假阴性；Windows `SendInput` 已交给系统，但 Tauri 原生菜单没有把 `Ctrl+PageDown/PageUp` 路由到页签 manager。当前实现改为 Windows 聚焦 WebView 的平台按键适配，并直接复用既有菜单 action handler；macOS 仍由原生菜单处理，Windows 原生菜单 accelerator 被移除以避免双触发。共享平台识别工具同时由 P1 与 P2 消费，组件测试覆盖 Windows 首次按键双向切换；最新双平台远端结果仍是 T45 完成前置。
   - 第八次远端 run `30288530855` 对提交 `89fb7bd8c8dbd582a2d41afd283bc9b868c7a651` 再次证明 macOS 完整通过、Windows 非桌面门禁与主桌面链 12/12 通过；主动展开菜单后，Tauri/Windows 仍未通过 UI Automation 暴露目标子项，按键未发送。macOS artifact SHA-256 为 `e90c0819f7a91a482af0591389c9f642acda533c19f78d054bdb5d6f030d01b9`，Windows 诊断 artifact 为 `9d8f0d69242fbf7544ef94fa23d99032df2d6cf06f20de18d8a721d6a79ffbf9`。当前改用 Windows 快捷键 E2E 专用固定标题测试缝消除 WDIO renderer 漂移，真实菜单状态、系统按键和结果断言保持不变。
   - 第九次远端 run `30290219296` 对提交 `a280f978f38e8eed1ddb82fa69f86eae358097e9` 再次证明 macOS 完整通过；`plainroot-macos-30290219296` 的 SHA-256 为 `c530f11bc23ed3748eba7e635dafec009ec80ee8ded58acf02163eea64307eec`。Windows 非桌面门禁通过，但主桌面链在 10/12 后因动态标题再次令 WDIO 丢失 renderer，手动保存状态与恢复副本源码断言失败，快捷键专项尚未执行；诊断 artifact SHA-256 为 `b1a5d2518672b8659efba8fc7e18a2963d04c8ff10098d4a2d0817facdbb0f99`。当前把同一固定标题测试缝覆盖到全部 Windows E2E 隔离进程，生产窗口标题与业务断言保持不变。
   - 第十次远端 run `30291901180` 对提交 `a25af90f271cfe92347de7040b1b0a2effe317b6` 再次证明 macOS 完整通过，Windows 非桌面门禁与主桌面链 12/12 通过，全流程固定标题真实闭合 renderer 漂移。Windows 随后在原生快捷键专项的只读菜单探针中发现下一/上一项仍未启用，系统按键未发送；`plainroot-macos-30291901180` 的 SHA-256 为 `228473f8411c6e7d64b394e17579cff079a46640751fdf693aede8f341046bee`，Windows 诊断 artifact 为 `dede64c0ccccd205f9a66fe70269e45e254c321964fe66be0e07f1516640e2a9`。当前修复单窗口暂时失焦时不应用最新 registry 状态的问题：单窗口菜单始终可保持当前，多窗口仍只由聚焦窗口事件决定全局菜单。

@@ -37,14 +37,16 @@ async function focusNativeTabShortcutWindow() {
         set expectedTitle to item 1 of argv
         repeat 50 times
           tell application "System Events"
-            repeat with candidate in (application processes whose background only is false)
-              repeat with candidateWindow in windows of candidate
-                if name of candidateWindow contains expectedTitle then
-                  set frontmost of candidate to true
-                  perform action "AXRaise" of candidateWindow
-                  return
-                end if
-              end repeat
+            repeat with candidate in (application processes whose name is "plainroot")
+              try
+                repeat with candidateWindow in windows of candidate
+                  if name of candidateWindow contains expectedTitle then
+                    set frontmost of candidate to true
+                    perform action "AXRaise" of candidateWindow
+                    return
+                  end if
+                end repeat
+              end try
             end repeat
           end tell
           delay 0.1
@@ -118,15 +120,17 @@ async function sendNativeTabShortcut(direction) {
         set targetFound to false
         repeat 50 times
           tell application "System Events"
-            repeat with candidate in (application processes whose background only is false)
-              repeat with candidateWindow in windows of candidate
-                if name of candidateWindow contains expectedTitle then
-                  set frontmost of candidate to true
-                  perform action "AXRaise" of candidateWindow
-                  set targetFound to true
-                  exit repeat
-                end if
-              end repeat
+            repeat with candidate in (application processes whose name is "plainroot")
+              try
+                repeat with candidateWindow in windows of candidate
+                  if name of candidateWindow contains expectedTitle then
+                    set frontmost of candidate to true
+                    perform action "AXRaise" of candidateWindow
+                    set targetFound to true
+                    exit repeat
+                  end if
+                end repeat
+              end try
               if targetFound then exit repeat
             end repeat
           end tell
@@ -136,12 +140,12 @@ async function sendNativeTabShortcut(direction) {
         if not targetFound then error "Plainroot shortcut fixture window was not found"
         tell application "System Events"
           repeat 50 times
-            if frontmost of candidate then
-              try
-                set targetItem to menu item expectedMenuItem of menu "页签" of menu bar item "页签" of menu bar 1 of candidate
-                if enabled of targetItem then exit repeat
-              end try
-            end if
+            if not frontmost of candidate then set frontmost of candidate to true
+            perform action "AXRaise" of candidateWindow
+            try
+              set targetItem to menu item expectedMenuItem of menu "页签" of menu bar item "页签" of menu bar 1 of candidate
+              if frontmost of candidate and enabled of targetItem then exit repeat
+            end try
             delay 0.1
           end repeat
           if not frontmost of candidate then error "Plainroot shortcut fixture process did not become frontmost"

@@ -41,13 +41,19 @@ pub const LAUNCHER_MENU_EVENT: &str = "plainroot://launcher-menu";
 pub const WORKBENCH_MENU_EVENT: &str = "plainroot://workbench-menu";
 const CLOSE_WINDOW_ACCELERATOR: &str = "CmdOrCtrl+Shift+W";
 #[cfg(target_os = "macos")]
-const NEXT_TAB_ACCELERATOR: &str = "CmdOrCtrl+Alt+Right";
-#[cfg(not(target_os = "macos"))]
-const NEXT_TAB_ACCELERATOR: &str = "Ctrl+PageDown";
+const NEXT_TAB_ACCELERATOR: Option<&str> = Some("CmdOrCtrl+Alt+Right");
+// Windows receives Ctrl+PageDown/PageUp in the focused WebView and delegates to the same
+// workbench command handler. Keeping a native accelerator here would risk double dispatch.
+#[cfg(target_os = "windows")]
+const NEXT_TAB_ACCELERATOR: Option<&str> = None;
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+const NEXT_TAB_ACCELERATOR: Option<&str> = Some("Ctrl+PageDown");
 #[cfg(target_os = "macos")]
-const PREVIOUS_TAB_ACCELERATOR: &str = "CmdOrCtrl+Alt+Left";
-#[cfg(not(target_os = "macos"))]
-const PREVIOUS_TAB_ACCELERATOR: &str = "Ctrl+PageUp";
+const PREVIOUS_TAB_ACCELERATOR: Option<&str> = Some("CmdOrCtrl+Alt+Left");
+#[cfg(target_os = "windows")]
+const PREVIOUS_TAB_ACCELERATOR: Option<&str> = None;
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+const PREVIOUS_TAB_ACCELERATOR: Option<&str> = Some("Ctrl+PageUp");
 
 const WORKBENCH_ACTION_IDS: &[&str] = &[
     SAVE_ID,
@@ -251,13 +257,13 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
             app,
             NEXT_TAB_ID,
             "下一个页签",
-            Some(NEXT_TAB_ACCELERATOR),
+            NEXT_TAB_ACCELERATOR,
         )?)
         .item(&custom_item(
             app,
             PREVIOUS_TAB_ID,
             "上一个页签",
-            Some(PREVIOUS_TAB_ACCELERATOR),
+            PREVIOUS_TAB_ACCELERATOR,
         )?)
         .separator()
         .item(&custom_item(
@@ -860,13 +866,18 @@ mod tests {
     fn tab_accelerators_follow_the_platform_contract() {
         #[cfg(target_os = "macos")]
         {
-            assert_eq!(super::NEXT_TAB_ACCELERATOR, "CmdOrCtrl+Alt+Right");
-            assert_eq!(super::PREVIOUS_TAB_ACCELERATOR, "CmdOrCtrl+Alt+Left");
+            assert_eq!(super::NEXT_TAB_ACCELERATOR, Some("CmdOrCtrl+Alt+Right"));
+            assert_eq!(super::PREVIOUS_TAB_ACCELERATOR, Some("CmdOrCtrl+Alt+Left"));
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
         {
-            assert_eq!(super::NEXT_TAB_ACCELERATOR, "Ctrl+PageDown");
-            assert_eq!(super::PREVIOUS_TAB_ACCELERATOR, "Ctrl+PageUp");
+            assert_eq!(super::NEXT_TAB_ACCELERATOR, None);
+            assert_eq!(super::PREVIOUS_TAB_ACCELERATOR, None);
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            assert_eq!(super::NEXT_TAB_ACCELERATOR, Some("Ctrl+PageDown"));
+            assert_eq!(super::PREVIOUS_TAB_ACCELERATOR, Some("Ctrl+PageUp"));
         }
     }
 }

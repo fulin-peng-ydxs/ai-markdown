@@ -951,6 +951,83 @@ describe("WorkspaceWorkbench", () => {
     await waitFor(() => expect(screen.queryAllByRole("tab")).toHaveLength(0));
   });
 
+  it("routes Windows tab keys through the same workbench command handler", async () => {
+    const userAgent = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      );
+    const api = gateway({
+      pollScan: vi.fn().mockResolvedValue({
+        scanId: "scan-1",
+        processed: 2,
+        entries: [note, secondNote],
+        issues: [],
+        complete: true,
+        cancelled: false,
+      }),
+      read: vi.fn().mockImplementation(async (_workspaceId, path) => ({
+        relativePath: path,
+        status: "ready",
+        content: path === "note.md" ? "# First" : "# Second",
+        revision: {
+          modifiedAt: 1,
+          size: 8,
+          contentHash: `hash:${path}`,
+          encoding: "utf8",
+          lineEnding: "lf",
+        },
+      })),
+    });
+    const user = userEvent.setup();
+
+    try {
+      render(
+        <WorkspaceWorkbench
+          gateway={api}
+          initialWorkspace={workspace}
+          onWorkspaceChanged={() => undefined}
+        />,
+      );
+      await user.click(
+        await screen.findByRole("treeitem", { name: /note\.md/ }),
+      );
+      await screen.findByText("First");
+      await user.click(screen.getByRole("treeitem", { name: /second\.md/ }));
+      await screen.findByText("Second");
+
+      const previous = new KeyboardEvent("keydown", {
+        key: "PageUp",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => document.dispatchEvent(previous));
+      expect(previous.defaultPrevented).toBe(true);
+      expect(
+        screen.getByRole("tab", { name: /note\.md/ }).getAttribute(
+          "aria-selected",
+        ),
+      ).toBe("true");
+
+      const next = new KeyboardEvent("keydown", {
+        key: "PageDown",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => document.dispatchEvent(next));
+      expect(next.defaultPrevented).toBe(true);
+      expect(
+        screen.getByRole("tab", { name: /second\.md/ }).getAttribute(
+          "aria-selected",
+        ),
+      ).toBe("true");
+    } finally {
+      userAgent.mockRestore();
+    }
+  });
+
   it("shows mode, save, counts, source format and cursor in the real status bar", async () => {
     const rendered = render(
       <WorkspaceWorkbench

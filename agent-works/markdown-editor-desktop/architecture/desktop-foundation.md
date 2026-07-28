@@ -135,7 +135,7 @@ flowchart LR
 
 - 已启用并有真实消费者：打开文件夹、打开 Markdown 文件、新建/关闭窗口、工作区打开方式设置、保存、另存副本、撤销/重做、当前文档查找、排版/源码模式，以及关闭当前、重开最近、下一/上一、关闭其他/右侧/全部和“所有页签”；关闭/替换/退出事件统一进入全页签结算门禁。
 - Rust `EditorMenuStateRegistry` 按窗口记录文档编辑状态和 `TabMenuState(tabCount/activeTabIndex/recentlyClosedCount)`，仅把聚焦窗口状态应用到平台菜单；窗口聚焦时恢复、销毁时删除，P2 与无文档 P1 主动重置，避免后台窗口或旧页面污染全局菜单。busy、无活动项、无右侧项或无最近关闭项时对应命令禁用。
-- 保存、另存、历史、查找、模式和页签事件只发给聚焦工作台：编辑命令进入 `DocumentEditorShell`/`DocumentSaveController`，页签命令委托唯一 `WorkspaceTabManager`、共享 `TabMenu` 和全页签结算。剪切、复制、粘贴和全选使用平台原生角色，不注册第二套 React 全局快捷键；工作区搜索、侧栏、阅读和主题等后续命令保持禁用。
+- 保存、另存、历史、查找、模式和页签事件只发给聚焦工作台：编辑命令进入 `DocumentEditorShell`/`DocumentSaveController`，页签命令委托唯一 `WorkspaceTabManager`、共享 `TabMenu` 和全页签结算。macOS 页签切换由原生菜单加速键进入该通道；Windows 的 `Ctrl+PageDown/PageUp` 由聚焦 WebView 平台适配进入同一 handler，系统菜单不重复绑定。剪切、复制、粘贴和全选使用平台原生角色；工作区搜索、侧栏、阅读和主题等后续命令保持禁用。
 - Finder/Explorer 定位、系统回收站与永久删除都通过 Rust 受控命令执行；回收站失败不会自动降级为永久删除。
 - 单实例插件仅在 macOS/Windows 注册，第二实例只转交有界启动参数并聚焦现有进程，不直接据参数授权路径。
 

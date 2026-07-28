@@ -35,6 +35,7 @@ import type {
   WorkbenchMenuAction,
 } from "../../services/desktop/contracts";
 import { desktopErrorMessage, normalizeDesktopError } from "../../services/desktop/errors";
+import { desktopPlatform } from "../../services/desktopPlatform";
 import {
   applyDocumentEdit,
   completeDocumentConflictOverwrite,
@@ -305,6 +306,8 @@ export function WorkspaceWorkbench({
     mutationProcessing,
     tabSnapshot,
   ]);
+  const editorMenuStateRef = useRef(editorMenuState);
+  editorMenuStateRef.current = editorMenuState;
 
   const commitDocument = useCallback((next: DocumentSessionState) => {
     if (tabManagerRef.current?.updateActiveSession(next)) return;
@@ -730,6 +733,39 @@ export function WorkspaceWorkbench({
     }).catch(() => undefined);
     return () => unlisten?.();
   }, [gateway]);
+
+  useEffect(() => {
+    if (
+      desktopPlatform(
+        typeof navigator === "undefined" ? "" : navigator.userAgent,
+      ) !== "windows"
+    ) {
+      return;
+    }
+
+    const handleWindowsTabShortcut = (event: KeyboardEvent) => {
+      if (
+        !event.ctrlKey ||
+        event.altKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        (event.key !== "PageDown" && event.key !== "PageUp")
+      ) {
+        return;
+      }
+      const action: WorkbenchMenuAction =
+        event.key === "PageDown" ? "tab.next" : "tab.previous";
+      if (!workbenchMenuActionAvailable(editorMenuStateRef.current, action)) {
+        return;
+      }
+      event.preventDefault();
+      workbenchMenuHandlerRef.current(action);
+    };
+
+    document.addEventListener("keydown", handleWindowsTabShortcut);
+    return () =>
+      document.removeEventListener("keydown", handleWindowsTabShortcut);
+  }, []);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;

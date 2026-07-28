@@ -19,6 +19,7 @@ import {
   desktopErrorMessage,
   normalizeDesktopError,
 } from "../../services/desktop/errors";
+import { desktopPlatform } from "../../services/desktopPlatform";
 import {
   desktopWorkspaceLauncherGateway,
   type WorkspaceLauncherGateway,
@@ -688,8 +689,7 @@ export function WorkspaceLauncher({
 }
 
 function launcherShortcutLabels(userAgent: string) {
-  const isMac = /Macintosh|Mac OS X/i.test(userAgent);
-  return isMac
+  return desktopPlatform(userAgent) === "macos"
     ? { folder: "⌘ O", markdown: "⇧ ⌘ O" }
     : { folder: "Ctrl O", markdown: "Ctrl Shift O" };
 }

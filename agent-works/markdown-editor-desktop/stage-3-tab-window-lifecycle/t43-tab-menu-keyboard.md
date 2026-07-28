@@ -15,11 +15,11 @@
 
 - 关闭当前页签：`Cmd/Ctrl+W`；
 - 重新打开最近关闭的页签：`Cmd/Ctrl+Shift+T`；
-- 下一/上一页签：`Ctrl+Tab` / `Ctrl+Shift+Tab`；
+- 下一/上一页签：macOS 使用 `Cmd+Option+Right/Left` 原生菜单加速键；Windows 使用聚焦 WebView 的 `Ctrl+PageDown/PageUp` 平台适配；
 - 关闭其他、关闭右侧、关闭全部；
 - 所有页签。
 
-关闭窗口继续使用 `Cmd/Ctrl+Shift+W`。所有页签命令继续通过既有 `WORKBENCH_MENU_EVENT` 发送；React 没有注册同组合键的全局 `keydown`，因此不存在第二条命令分发链或双触发路径。
+关闭窗口继续使用 `Cmd/Ctrl+Shift+W`。菜单点击与 macOS 原生加速键继续通过既有 `WORKBENCH_MENU_EVENT` 发送；Windows 只在该平台监听 `Ctrl+PageDown/PageUp`，并委托同一个 `workbenchMenuHandlerRef` 与 `WorkspaceTabManager`。Windows 菜单不再同时注册这两个原生 accelerator，因此不存在双触发或第二套业务分发。
 
 ### 2.2 聚焦窗口状态
 
@@ -73,7 +73,7 @@ Rust/TypeScript `EditorMenuState` 同步增加 `TabMenuState`：
 - `Cmd+W` 关闭当前页签但不关闭窗口；
 - `Cmd+Shift+T` 重新打开刚关闭的页签并恢复为活动项。
 
-WebDriver 的按键注入只到达 WebView，不能验证系统菜单 accelerator。一次尝试性断言因此失败并已移除，没有通过弱化业务断言或重试掩盖。Computer Use 对 `Ctrl+Tab` 的注入也未触发原生菜单，所以本次只把该菜单项和 accelerator 构建、策略与事件路由记为已验证，不把该组合键的真实系统输入写成通过。
+WebDriver 的按键注入只到达 WebView，不能验证系统菜单 accelerator。T45 的真实平台输入表明 macOS 可由原生菜单稳定消费 `Cmd+Option+Right/Left`，Windows/Tauri 原生菜单不能稳定消费 `Ctrl+Tab` 或 `Ctrl+PageDown/PageUp`。Windows 因而采用聚焦 WebView 平台适配，但仍复用唯一页签命令处理器；真实 Windows 系统输入结果继续以 T45 双平台远端证据为准。
 
 ## 4. 未验证与后续承接
 

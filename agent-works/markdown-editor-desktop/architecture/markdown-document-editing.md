@@ -156,7 +156,7 @@ UTF-8 BOM 与单一 LF/CRLF/CR 优先沿用原文件；mixed 或不支持编码�
 
 - P1 的 `DocumentEditorShell`、工具栏、持续状态栏和恢复类弹层全部消费当前活动 runtime 的 `DocumentSession`。
 - 工具栏和原生菜单经同一命令总线执行保存、另存、撤销/重做、当前文档查找、排版/源码切换；菜单启用状态来自聚焦窗口的 `hasDocument/readOnly/busy/canUndo/canRedo/mode`。
-- P2 没有文档时重置编辑与页签菜单；T43 的 `TabMenuState` 只把聚焦窗口的页签数量、活动位置、最近关闭数量和 busy 状态投影到系统菜单，原生动作继续通过既有工作台事件委托唯一 manager。工作区搜索、阅读和主题等没有真实消费者的入口继续禁用或隐藏。
+- P2 没有文档时重置编辑与页签菜单；T43 的 `TabMenuState` 只把聚焦窗口的页签数量、活动位置、最近关闭数量和 busy 状态投影到系统菜单。菜单动作与 macOS 原生页签加速键继续通过既有工作台事件委托唯一 manager；Windows 的 `Ctrl+PageDown/PageUp` 由聚焦 WebView 的平台适配转交同一 handler，且系统菜单不再注册同组合键 accelerator，避免双触发。工作区搜索、阅读和主题等没有真实消费者的入口继续禁用或隐藏。
 - 单页签、关闭其他、关闭右侧、关闭全部和命中打开页签的 rename/move/delete 统一创建不可变结算批次。前端逐项复用 `DocumentSaveController.settle()`、冲突处理和另存副本；dirty/save_failed/readonly/conflict 等状态未解决前最终动作禁用，全部安全后才一次性提交页签集合变化。
 - 系统关闭、菜单关闭、当前窗口根替换和应用退出的一次性 Rust intent 已接入同一全页签结算。取消显式拒绝 intent；全部正文安全后尽力持久化内容无关页签会话，再允许 Rust 提交窗口事务。元数据仍在初始化或写失败时显示非阻断提示并继续，旧有效会话仍可使下次启动退回较早页签状态；最终窗口提交失败保留原页签和可重试批次。
 - P1/P2 共用当前窗口/新窗口/取消决策与 `ask/current_window/new_window` 打开偏好；偏好只改变打开位置，不能跳过授权、同目录聚焦或全页签结算。既有非空会话在 P1 完成恢复投影前冻结元数据覆盖，恢复后显式接管。
