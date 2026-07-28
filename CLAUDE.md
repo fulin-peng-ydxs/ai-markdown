@@ -6,7 +6,7 @@
 
 - 仓库级规则以 [AGENTS.md](AGENTS.md) 为准，本文件不复制完整约束。
 - 产品范围与验收见 [`requirement.md`](agent-works/markdown-editor-desktop/requirement.md)，当前阶段见对应阶段目录的 `plan.md`。
-- 当前实现架构见 [`desktop-foundation.md`](agent-works/markdown-editor-desktop/architecture/desktop-foundation.md) 与 [`markdown-document-editing.md`](agent-works/markdown-editor-desktop/architecture/markdown-document-editing.md)；代码、清单和测试仍是最终技术事实源。
+- 当前实现架构见 [`desktop-foundation.md`](agent-works/markdown-editor-desktop/architecture/desktop-foundation.md)、[`markdown-document-editing.md`](agent-works/markdown-editor-desktop/architecture/markdown-document-editing.md) 与 [`tab-window-lifecycle.md`](agent-works/markdown-editor-desktop/architecture/tab-window-lifecycle.md)；代码、清单和测试仍是最终技术事实源。
 - 前端设计规范见 [DESIGN.md](DESIGN.md)，页面开发按 [`page-development-workflow.md`](agent-works/markdown-editor-desktop/page-development-workflow.md) 执行。
 - HTML 原型位于 `agent-works/markdown-editor-desktop/prototypes/`，只作为交互与视觉证据，不作为生产代码复制。
 

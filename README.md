@@ -1,6 +1,6 @@
 # Plainroot
 
-Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成桌面底座验收；第二阶段 T18～T34 已完成单文档编辑阶段验收及目录图片移动风险、编辑工作台信息层级补强。第三阶段 T35～T45 已建立并验证页签模型、内容无关窗口会话仓储、Rust 平台路径身份、P1 多 session runtime、可见页签、最近关闭、全页签结算、窗口生命周期保护、打开偏好、已有会话恢复、聚焦窗口页签命令和统一非桌面门禁。代码 run `30322298422` 已在提交 `9ba28d1` 上让 macOS/Windows 同时通过四段 15/15 桌面链、生产构建和成对 artifact；收口文档 run `30323620642` 又在纯文档提交 `a0268eb` 上重复双绿。T46 阶段验收未实施，因此 R13/R14/R30 和第三阶段仍不能表述为完整验收完成。
+Plainroot 是面向 Windows 与 macOS 的本地优先 Markdown 桌面编辑器。第一阶段 T1～T17 已完成桌面底座验收；第二阶段 T18～T34 已完成单文档编辑阶段验收及目录图片移动风险、编辑工作台信息层级补强；第三阶段 T35～T46 已完成页签与窗口生命周期阶段验收。当前已具备真实多文档页签、内容无关窗口会话仓储、Rust 平台路径身份、P1 多 session runtime、可见页签、最近关闭、全页签结算、窗口生命周期保护、打开偏好、已有会话恢复、聚焦窗口页签命令和统一非桌面门禁。代码 run `30322298422` 已在提交 `9ba28d1` 上让 macOS/Windows 同时通过四段 15/15 桌面链、生产构建和成对 artifact；收口文档 run `30323620642` 又在纯文档提交 `a0268eb` 上重复双绿。第三阶段完成不等于完整产品验收；R14 的窗口位置/尺寸/三栏布局、R30 的搜索/阅读/布局命令和 R31 的完整无障碍矩阵仍属后续阶段。
 
 ## 工具链
 
@@ -73,8 +73,10 @@ pnpm tauri dev
 - T43 原生页签菜单与快捷键证据：`agent-works/markdown-editor-desktop/stage-3-tab-window-lifecycle/t43-tab-menu-keyboard.md`
 - T44 契约与非桌面门禁证据：`agent-works/markdown-editor-desktop/stage-3-tab-window-lifecycle/t44-tab-contract-tests.md`
 - T45 桌面 E2E 本地证据：`agent-works/markdown-editor-desktop/stage-3-tab-window-lifecycle/t45-tab-desktop-e2e.md`
+- 第三阶段验收：`agent-works/markdown-editor-desktop/stage-3-tab-window-lifecycle/t46-stage-acceptance.md`
 - 当前桌面底座架构：`agent-works/markdown-editor-desktop/architecture/desktop-foundation.md`
 - Markdown 文档编辑架构：`agent-works/markdown-editor-desktop/architecture/markdown-document-editing.md`
+- 页签与窗口生命周期架构：`agent-works/markdown-editor-desktop/architecture/tab-window-lifecycle.md`
 - 视觉与交互规范：`DESIGN.md`
 
-阶段验收只代表对应计划里程碑完成，不等于完整 R1/R2/R5/R11/R14/R30/R31 或完整产品完成。Windows 原生选择器、回收站、Explorer、菜单与辅助技术仍缺人工实机证据。
+阶段验收只代表对应计划里程碑完成，不等于完整 R1/R2/R5/R11/R14/R30/R31 或完整产品完成。Windows 原生选择器、回收站、Explorer、菜单可见性与辅助技术仍缺人工实机证据。
